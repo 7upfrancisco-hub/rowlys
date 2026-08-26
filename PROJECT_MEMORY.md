@@ -172,6 +172,54 @@ Captura del form completo: Nombre, Descripción, SKU, Categoría, **Disponible e
 
 **Impacto en el schema (pendiente de aplicar cuando arranque la Fase 2, no aplicado todavía):** `Order` necesita `customerEmail` (opcional); separar `customerName` en `customerFirstName`/`customerLastName` (o mantener un solo campo, decidir al implementar — el checkout de referencia los pide separados); agregar `changeFor` (monto con el que paga en efectivo, opcional) en `Payment` o `Order`; agregar `BANK_TRANSFER` al enum `PaymentProvider`.
 
+## Fase 1: CRUD admin (completa, 2026-08-26)
+
+Implementado y probado end-to-end contra Neon (creación, edición y borrado real vía curl con
+una sesión válida, no solo compilación):
+
+- **Fix de seguridad**: `GET /api/orders` no estaba cubierto por `middleware.ts` y devolvía PII
+  de clientes sin autenticación. Se amplió el matcher a `/api/admin/:path*` y
+  `/api/orders/:path*`; dentro de `middleware()` se dejó pasar sin chequeo solo
+  `POST /api/orders` (checkout público futuro) — cualquier otro método, incluido GET, exige
+  cookie válida. Las rutas de API bajo `/api/` devuelven 401 JSON en vez de redirect cuando la
+  sesión es inválida (un redirect rompería un `fetch()`).
+- **Admin shell**: `src/app/admin/layout.tsx` + `src/components/AdminNav.tsx` (nav con
+  `usePathname`), `src/app/admin/page.tsx` pasó de placeholder a dashboard con tarjetas a las 5
+  secciones.
+- **Categorías** (`/admin/categorias`): CRUD completo. Borrado con manejo de la restricción FK
+  real (no `P2003` de Prisma — al no usar `relationMode = "prisma"`, Postgres aplica la
+  restricción directo y el error llega como `PrismaClientUnknownRequestError`; se agregó
+  `isForeignKeyViolation()` en `src/lib/prisma.ts` que detecta esto por el mensaje del error,
+  reusado también en productos) → 409 con mensaje amigable si hay pedidos asociados.
+- **Productos** (`/admin/productos`): CRUD con canal (delivery/pickup), descuento, y asignación
+  de grupos de adicionales (checkboxes, sync vía borrar-y-recrear el join en una transacción).
+  Mismo manejo de FK que categorías en el borrado.
+- **Adicionales** (`/admin/adicionales`): CRUD de `ModifierGroup` + `ModifierOption` anidadas en
+  un solo formulario. El PATCH sincroniza opciones (borra las que faltan del body, actualiza las
+  que traen id, crea las que no) dentro de una transacción — probado a mano: borrar una opción,
+  editar otra y crear una nueva en el mismo submit funcionó correctamente contra Neon.
+- **Pedidos** (`/admin/pedidos`): listado con tabs de estado (con contador), filtro de canal y
+  buscador por nombre/teléfono (100% client-side). Nuevo `PATCH /api/admin/orders/[id]` para
+  cambiar `status` y/o marcar cobrado (`markPaid`, solo válido si el medio es CASH o
+  BANK_TRANSFER — devuelve 400 si se intenta con MP/MODO). Probado: marcar cobrado + pasar a
+  CONFIRMED en la misma llamada funcionó correctamente.
+- **Configuración** (`/admin/configuracion`): formulario único para `Settings` (upsert por
+  `id: "singleton"`).
+- **Helper compartido**: `src/lib/api-client.ts` (`apiFetch`) centraliza manejo de error de red
+  y parseo del mensaje de error JSON, usado por las 5 pantallas nuevas.
+- `npx tsc --noEmit` y `npm run build` pasan limpio. Verificación manual completa contra Neon:
+  auth de las nuevas rutas (401 sin cookie, 200 con cookie válida), `POST /api/orders` sigue
+  público, CRUD de categoría/producto/grupo de adicionales, asignación de adicionales a producto
+  y su reflejo en `GET /api/admin/products` (aplanado igual que `/api/menu`), marcar cobrado +
+  cambio de estado de un pedido, y los dos casos de borrado bloqueado (producto y categoría con
+  pedido asociado, ambos devuelven 409 en vez de 500). Todos los datos de prueba fueron borrados
+  después (incluida la configuración, que se restauró a sus valores originales tras un test que
+  la pisó por error).
+- **Pendiente**: no se probó visualmente en navegador (entorno sin browser disponible en esta
+  sesión) — solo se verificó a nivel API/DB. Falta pushear este commit a GitHub (requiere un
+  token nuevo del usuario). Fuera de alcance de esta fase: `/comanda` (panel de cocina), checkout
+  público del cliente, upload de imágenes.
+
 ## Historial de decisiones (log)
 
 - **2026-08-26** — Usuario define el proyecto: copiar funcionalidad de app.restosimple.com (carta + comandas) para su propio local, con intención de venderlo después si sale bien.
@@ -188,3 +236,4 @@ Captura del form completo: Nombre, Descripción, SKU, Categoría, **Disponible e
 - **2026-08-26** — Capturas del form "Editar producto". Usuario definió el alcance de campos extra para v1: SÍ disponibilidad por canal (Delivery/Takeaway) y descuentos; NO alérgenos/especificaciones dietéticas, NO galería de imágenes múltiples, NO destacado/sugeridos por ahora.
 - **2026-08-26** — Capturas del checkout real. Usuario aclaró que "Transferencia" debe ofrecer Mercado Pago (automático) O el alias/CBU real del banco del local (confirmación manual, acepta que no se pueda verificar sola) — se agrega `BANK_TRANSFER` como 4to proveedor de pago. Se revirtió la regla de "ocultar pedido hasta pago confirmado": todos los pedidos entran a "Pendiente" de inmediato (como en RestoSimple) y el local acepta/rechaza a mano; el pago es solo un badge informativo. Efectivo: Takeaway se paga en el local, Delivery se le paga al repartidor.
 - **2026-08-26** — Usuario pidió armar el schema con todo lo relevado hasta el momento. Se escribió el schema v2 completo (ver sección "Schema v2" más arriba), se aplicó contra Neon (`db push` + `db:seed`), se actualizaron `types/index.ts`, `api/menu`, `api/orders`, y se probó a mano contra la base real: validación de adicionales obligatorios/opcionales, cálculo de precios con descuento y opciones, y la restricción de `changeFor` solo para CASH. Todo compila (`tsc`, `next build`) y quedó verificado end-to-end. Falta pushear este cambio a GitHub (requiere un token nuevo si esta conversación pierde contexto) y seguir con la Fase 1 (UI de admin).
+- **2026-08-26** — Fase 1 (CRUD admin) implementada y probada end-to-end contra Neon: categorías, productos (con canal/descuento/adicionales), adicionales (grupos+opciones con sync), pedidos (filtros + marcar cobrado + cambio de estado) y configuración. Se detectó y corrigió en el mismo pase un gap de seguridad real: `GET /api/orders` no tenía autenticación y exponía PII de clientes. Ver sección "Fase 1" más arriba para el detalle completo. Falta: pushear a GitHub (token nuevo), probar visualmente en navegador, y decidir el siguiente paso (Fase 2: checkout público del cliente, o `/comanda`).
