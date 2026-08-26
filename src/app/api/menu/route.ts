@@ -9,9 +9,32 @@ export async function GET() {
     include: {
       products: {
         orderBy: { name: "asc" },
+        include: {
+          modifierGroups: {
+            orderBy: { order: "asc" },
+            include: {
+              group: {
+                include: {
+                  options: { orderBy: { title: "asc" } },
+                },
+              },
+            },
+          },
+        },
       },
     },
   });
 
-  return NextResponse.json(categories);
+  const result = categories.map((category) => ({
+    ...category,
+    products: category.products.map((product) => {
+      const { modifierGroups, ...rest } = product;
+      return {
+        ...rest,
+        modifierGroups: modifierGroups.map((pmg) => pmg.group),
+      };
+    }),
+  }));
+
+  return NextResponse.json(result);
 }

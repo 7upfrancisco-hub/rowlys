@@ -3,8 +3,12 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.orderItemOption.deleteMany();
   await prisma.orderItem.deleteMany();
+  await prisma.payment.deleteMany();
   await prisma.order.deleteMany();
+  await prisma.modifierOption.deleteMany();
+  await prisma.modifierGroup.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
 
@@ -36,21 +40,9 @@ async function main() {
         categoryId: entradas.id,
       },
       {
-        name: "Milanesa napolitana",
-        description: "Con papas fritas o puré",
-        price: 12500,
-        categoryId: principales.id,
-      },
-      {
         name: "Bife de chorizo",
         description: "350g, con guarnición a elección",
         price: 16800,
-        categoryId: principales.id,
-      },
-      {
-        name: "Pastel de papa",
-        description: "Con carne, cebolla y aceitunas",
-        price: 10200,
         categoryId: principales.id,
       },
       {
@@ -82,10 +74,74 @@ async function main() {
     ],
   });
 
+  // Productos creados por separado (no createMany) para poder colgarles
+  // grupos de adicionales, que necesitan el id del producto.
+  const milanesa = await prisma.product.create({
+    data: {
+      name: "Milanesa napolitana",
+      description: "Con papas fritas o puré",
+      price: 12500,
+      categoryId: principales.id,
+    },
+  });
+
+  await prisma.product.create({
+    data: {
+      name: "Pastel de papa",
+      description: "Con carne, cebolla y aceitunas",
+      price: 10200,
+      discountPrice: 8900,
+      categoryId: principales.id,
+    },
+  });
+
+  await prisma.modifierGroup.create({
+    data: {
+      name: "Elegí tu guarnición",
+      type: "SINGLE",
+      min: 1,
+      max: 1,
+      options: {
+        create: [
+          { title: "Papas fritas", price: 0 },
+          { title: "Puré", price: 0 },
+          { title: "Ensalada", price: 0 },
+        ],
+      },
+      products: {
+        create: [{ productId: milanesa.id }],
+      },
+    },
+  });
+
+  await prisma.modifierGroup.create({
+    data: {
+      name: "Sin ingredientes",
+      type: "REMOVE",
+      min: 0,
+      max: 3,
+      options: {
+        create: [
+          { title: "Sin cebolla", price: 0 },
+          { title: "Sin queso", price: 0 },
+          { title: "Sin salsa", price: 0 },
+        ],
+      },
+      products: {
+        create: [{ productId: milanesa.id }],
+      },
+    },
+  });
+
   await prisma.settings.upsert({
     where: { id: "singleton" },
     update: {},
-    create: { id: "singleton", deliveryFee: 500, storeName: "Rowlys" },
+    create: {
+      id: "singleton",
+      deliveryFee: 500,
+      storeName: "Rowlys",
+      bankAlias: "rowlys.mp",
+    },
   });
 
   console.log("Seed completo ✅");

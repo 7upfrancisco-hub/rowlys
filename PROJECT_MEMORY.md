@@ -10,11 +10,14 @@ Sistema propio de carta digital + toma de pedidos para el local gastronómico de
 
 - **Modalidad de pedido:** take-away (retiro en el local) **y** delivery (envío a domicilio). No es un sistema de mesas/dine-in — el scaffold original que existía en el repo estaba armado para mesas y hay que pivotarlo.
 - **Multi-tenant:** NO por ahora. Es para un solo local (el del usuario). Se construye simple; si más adelante se decide vender el producto, se migra a multi-tenant en ese momento, no ahora.
-- **Medios de pago** (pensados para poder sumar más a futuro sin rehacer todo):
-  - **Efectivo**: contra entrega/retiro. Sin verificación online; el staff lo marca como cobrado manualmente desde el panel.
+- **Medios de pago** (pensados para poder sumar más a futuro sin rehacer todo). Decisión final (revisada 2026-08-26 tras ver el checkout real de RestoSimple):
+  - **Efectivo**: Takeaway se paga en el local; Delivery se le paga al repartidor. Sin verificación online; el staff lo marca como cobrado manualmente desde el panel.
   - **Mercado Pago**: billetera/tarjetas + el medio "Transferencia" (CVU) del propio Checkout Pro de MP, confirmado automáticamente por webhook.
   - **Modo**: integración de billetera separada, con su propio webhook de confirmación.
-  - **Transferencia bancaria con verificación automática**: el usuario pidió que se confirme sola, sin comprobante ni revisión manual. **Restricción técnica real**: no existe forma confiable de verificar automáticamente una transferencia a un alias/CBU cualquiera desde cualquier banco sin un agregador. La solución práctica es que "transferencia" viva **dentro** del checkout de Mercado Pago (medio de pago CVU/transferencia de MP), reusando el mismo webhook de MP — no un módulo aparte de transferencia manual.
+  - **"Transferencia" como opción del cliente ofrece DOS sub-caminos** (el checkout real de RestoSimple tiene un botón "Transferencia" separado de "Efectivo", y el usuario aclaró qué debe hacer):
+    1. **Pagar vía Mercado Pago** (redirige al checkout de MP, incluye el CVU de MP — confirmación automática por webhook, es la misma integración de arriba).
+    2. **Transferencia a la cuenta bancaria real del local** (banco tradicional, no MP): se le muestra el alias/CBU al cliente. **No hay forma de verificar esto automáticamente** (restricción técnica confirmada, sin agregador no se puede) — el usuario aceptó explícitamente que esta vía sea de **confirmación manual** por el local (mismo mecanismo que "marcar como pago" de efectivo), a diferencia de MP que sí es automático. Esto agrega un 4to proveedor de pago: `BANK_TRANSFER` (manual) en el enum `PaymentProvider`, junto a `CASH`/`MP`/`MODO`.
+  - **Regla de visibilidad revisada**: se abandona la idea original de "ocultar el pedido en comanda hasta que el pago esté confirmado". Las capturas reales de RestoSimple muestran que **todos** los pedidos aparecen de inmediato en la columna "Pendiente" del kanban, sin importar el medio de pago — el estado de pago es solo un badge informativo en la tarjeta ("TRANSFERENCIA • PENDIENTE", "MERCADO PAGO • PAGADO"). El local decide aceptar (✓) o rechazar (✗) cada pedido a mano en ese paso, y ahí es donde en la práctica se filtra el spam/no-pago, no ocultando el pedido. Ver también la sección "Referencia visual de RestoSimple" más abajo sobre el estado `CONFIRMED` nuevo.
 - **Admin y panel de cocina (comanda):** necesitan login simple (un solo usuario dueño del local), no pueden quedar públicos.
 
 ## Estado del scaffold existente (al 2026-08-26)
@@ -61,7 +64,113 @@ Next.js 14 (App Router) + Prisma + SQLite + Tailwind. Ya existía antes de esta 
 
 Archivos críticos a tocar: `prisma/schema.prisma`, `src/app/api/orders/route.ts`, `src/types/index.ts`, `src/lib/prisma.ts`, `src/app/page.tsx` (se simplifica: sin input de mesa, botón directo a `/menu`).
 
-**Pendiente:** revisar este plan con el usuario y confirmar antes de empezar a escribir código (fase 0).
+**Estado: Fase 0 completa, probada localmente Y contra la base real de Neon, y pusheada a GitHub (2026-08-26).**
+
+## Infra / despliegue
+
+- **Hosting:** Vercel (todavía no conectado al repo — falta que el usuario haga "Import Project" desde el dashboard de Vercel apuntando a este repo de GitHub; eso no requiere que yo tenga credenciales de Vercel). Importante: Vercel es serverless con filesystem efímero, por eso el datasource de Prisma pasó de SQLite a Postgres desde esta fase.
+- **Base de datos:** Neon (Postgres), proyecto ya creado por el usuario, región sa-east-1. `DATABASE_URL` ya está en el `.env` local (gitignored) y el schema ya está sincronizado (`prisma db push`) + sembrado (`db:seed`) contra la base real. Verificado end-to-end contra Neon: `GET /api/menu` devuelve el seed real, `POST /api/orders` crea un pedido CASH con total calculado en servidor, y `GET /api/orders` lo muestra (regla de visibilidad de efectivo funcionando); pedido de prueba borrado después.
+- **Repo:** `https://github.com/7upfrancisco-hub/rowlys`, rama `main`. **Es público** — si se prefiere privado, hay que cambiarlo desde GitHub (Settings → Danger Zone) antes de que haya lógica de negocio sensible; quedó pendiente de que el usuario decida. Push inicial (Fase 0) ya hecho con un Personal Access Token fine-grained que el usuario generó, acotado solo a este repo, permiso "Contents: Read and write", expiración corta. El token se usó de forma transitoria (incrustado en la URL del remoto solo durante el `git push`, después se removió de `git remote -v` por higiene) y no se guardó en ningún archivo del repo ni fuera de él. **Para el próximo push, si esta conversación se resume/pierde contexto, hay que pedirle al usuario un token nuevo** (no quedó persistido en disco a propósito). No hay SSH key ni `gh` CLI configurados en esta máquina.
+- **Mercado Pago:** el usuario no tiene cuenta de developer todavía — hay que crearla (Fase 3, no bloquea ahora).
+- **Modo:** el usuario es monotributista clase B, sin cuenta de comercio Modo todavía — confirmado por la propia web de Modo que soportan integración en tienda online (no solo POS físico), pero sin detalle técnico público; hay que iniciar el alta directo con ellos (Fase 4, no bloquea ahora). Mientras tanto se usa modo mock (`MODO_MOCK=true`).
+
+## Gotcha importante de entorno
+
+Next.js expande variables `$` dentro de los archivos `.env` locales (usa `dotenv-expand`). Como un hash de bcrypt siempre contiene `$` (formato `$2b$10$...`), en el `.env` **local** hay que escaparlo como `\$2b\$10\$...`, si no el hash se corrompe/vacía y el login falla en silencio con 500. **En el dashboard de Vercel esto NO aplica** — ahí se carga el hash tal cual, sin escapar, porque Vercel no pasa las variables por `dotenv-expand`. Si en algún momento el login falla con 500 y el error es "El servidor no tiene configurado el usuario admin", revisar esto primero.
+
+## Schema v2 (2026-08-26) — incorpora todo lo relevado de las capturas
+
+Aplicado contra Neon y verificado end-to-end (no es solo diseño, ya está corriendo):
+
+- `OrderStatus` suma `CONFIRMED` (PENDING → CONFIRMED → IN_PROGRESS → READY → DELIVERED, + CANCELLED). `ORDER_STATUS_FLOW` actualizado.
+- `PaymentProvider` suma `BANK_TRANSFER` (CASH | MP | MODO | BANK_TRANSFER). `Payment` gana `changeFor` (vuelto, solo válido si `provider = CASH`, validado con `.refine` de zod).
+- `Order.customerName` se separó en `customerFirstName` + `customerLastName`, y se agregó `customerEmail` (opcional) — refleja el form real de checkout.
+- `Product` gana `discountPrice` (opcional; si está seteado y es menor a `price`, es el precio con descuento), `availableDelivery` y `availablePickup` (booleans, reemplazan/complementan el `available` general).
+- Nuevos modelos para "Adicionales": `ModifierGroup` (name, type `SINGLE`/`MULTIPLE`/`REMOVE`, min, max, active), `ModifierOption` (title, price, active, pertenece a un grupo), `ProductModifierGroup` (tabla intermedia N:M entre `Product` y `ModifierGroup`, con `order`). Un grupo es reusable entre productos (no pertenece a uno solo).
+- `OrderItem` gana `options: OrderItemOption[]` — snapshot de las opciones elegidas (nombre + precio al momento del pedido, mismo criterio que `productName`/`price`), independiente de si la opción original se borra o cambia de precio después.
+- `Settings` gana `bankAlias` (para mostrar el alias/CBU real cuando el cliente elige transferencia bancaria manual).
+- `POST /api/orders` ahora: valida cada `optionId` elegido contra los grupos reales del producto (rechaza opciones que no correspondan), valida mínimo/máximo por grupo activo (ej. un grupo `SINGLE` con min=1 max=1 obliga a elegir exactamente una opción, si no rechaza con 400), calcula el total sumando `(precio con descuento si aplica + suma de opciones) × cantidad` por ítem + `deliveryFee`, y crea `Order`+`OrderItem`+`OrderItemOption`+`Payment` en una sola operación.
+- `GET /api/orders` ya NO oculta pedidos por estado de pago (se abandonó esa regla, ver sección de checkout más abajo): solo filtra por `status`, default excluye `DELIVERED`/`CANCELLED`.
+- `GET /api/menu` ahora incluye `modifierGroups` (con sus `options`) por producto.
+- `prisma/seed.ts` actualizado: dos grupos de ejemplo en "Milanesa napolitana" (`Elegí tu guarnición` tipo SINGLE obligatorio, `Sin ingredientes` tipo REMOVE opcional), y "Pastel de papa" con `discountPrice` de ejemplo. `Settings` seed incluye `bankAlias` de ejemplo.
+- Probado a mano contra Neon real: `GET /api/menu` devuelve los grupos/opciones correctamente; `POST /api/orders` rechaza un pedido si falta elegir una opción obligatoria, acepta cuando se elige correctamente y calcula bien el total; `changeFor` se rechaza si el método no es `CASH` y se acepta si lo es. Pedidos de prueba borrados después.
+- **Pendiente, todavía no implementado**: nada de la UI de Fase 1/2 (CRUD de adicionales en el admin, selector de adicionales en la carta del cliente, pantalla de "elegir guarnición" antes de agregar al carrito, etc.) — esto fue solo el trabajo de schema + API que el usuario pidió adelantar. `src/app/api/menu` y `orders` están al día con el schema nuevo; falta el resto de la Fase 1 (CRUD admin) y Fase 2 (carrito/checkout real, con `customerFirstName`/`customerLastName`/`customerEmail`/`changeFor`/selección de adicionales en la UI).
+
+## Qué se hizo en la Fase 0 (verificado localmente)
+
+- Schema Prisma migrado a Postgres, con `Payment` y `Settings` nuevos, `Order` sin `tableNumber`. `src/types/index.ts` actualizado con los DTOs nuevos (`OrderType`, `PaymentProvider`, `PaymentStatus`, `PaymentDTO`).
+- Auth de un solo usuario: `src/lib/auth.ts` (jose, HS256, cookie httpOnly 7 días), `src/middleware.ts` (¡ojo! tiene que vivir en `src/`, no en la raíz, porque el proyecto usa carpeta `src/` — si se pone en la raíz, Next.js lo ignora sin avisar), `/login` + `/api/auth/login` + `/api/auth/logout`. Probado end-to-end: credencial incorrecta rechazada, login válido setea cookie, `/admin` y `/comanda` protegidos redirigen a `/login` sin cookie y dejan pasar con cookie válida, logout invalida la sesión.
+- `scripts/hash-password.ts` + `npm run hash-password -- "contraseña"` para generar el hash de `ADMIN_PASSWORD_HASH` cuando haga falta.
+- `src/app/api/orders/route.ts` reescrito contra el nuevo schema (zod, cálculo de total en servidor, regla de visibilidad de pago ya aplicada en el GET). `src/app/api/menu/route.ts` y `orders/route.ts` marcados `export const dynamic = "force-dynamic"` — sin esto, `next build` los pre-renderiza como estáticos y rompe (dependen de datos vivos).
+- Corregida una vulnerabilidad crítica preexistente: Next.js estaba pinneado en 14.2.5 (con CVEs críticos conocidos); se subió a 14.2.35 (mismo minor, sin cambios de API). Quedan un puñado de advisories "high" que solo se resuelven saltando a Next 16 (breaking change) — decisión consciente de no hacerlo ahora sin discutirlo.
+- `next build` y `npx tsc --noEmit` pasan limpio. Falta configurar ESLint (el scaffold original nunca lo tuvo; `next lint` pide setup interactivo) — no es parte de esta fase, se deja para más adelante si se pide.
+- `/admin` y `/comanda` son placeholders protegidos (contenido real en Fase 1 y Fase 2 respectivamente).
+- `.gitignore` corregido para excluir `next-env.d.ts` y `*.tsbuildinfo` (generados) además de lo que ya excluía.
+- Repo git inicializado con un primer commit local.
+
+## Referencia visual de RestoSimple (capturas del propio panel del usuario, 2026-08-26)
+
+El usuario tiene una cuenta de prueba en RestoSimple ("Rowly'S") y mandó capturas del panel real (`app.restosimple.com/locations/619/app/orders/active`). Cosas a reusar en nuestro admin/comanda:
+
+- **Tablero kanban de pedidos** con columnas: Pendiente → Confirmado → En preparación → Enviado/Listo. En "Pendiente" hay botones ✓ (aceptar) / ✗ (rechazar) — es un paso de aceptación manual del pedido que **no estaba en nuestro diseño original**: hay que agregar un estado `CONFIRMED` entre `PENDING` e `IN_PROGRESS` en el enum `OrderStatus` y en `ORDER_STATUS_FLOW` antes de construir el panel de comanda (Fase 2).
+- El **medio de pago se muestra como badge en la tarjeta** del pedido (ej. "TRANSFERENCIA • PENDIENTE", "MERCADO PAGO • PAGADO"), separado del estado de cocina — confirma que separar `Order`/`Payment` en el schema fue la decisión correcta.
+- Barra de métricas: caja abierta/cerrada, pedidos totales del día, total acumulado del día.
+- Buscador + filtros + exportar en la lista de pedidos.
+- Menú de acciones "..." por pedido: Copiar link, Copiar datos, Contactar cliente, Enviar WhatsApp (manual, abre chat), Editar nota, Agregar demora, Finalizar pedido, Cancelar. "Marcar como pago" aparece como link aparte bajo el badge de pago (confirmación manual de cobro).
+
+## Nueva funcionalidad: WhatsApp automático (diferencial vs. RestoSimple)
+
+RestoSimple solo tiene un botón manual de "Enviar WhatsApp". El usuario quiere automatizarlo:
+
+- **Disparador:** cuando el pedido pasa a **Confirmado** (el nuevo estado de aceptación mencionado arriba).
+- **Contenido:** mensaje con un **link de seguimiento del pedido** — implica crear una página pública (sin login) de estado del pedido, tipo `/pedido/[id]`, que el cliente pueda abrir para ver en qué estado está.
+- **Proveedor:** API oficial de WhatsApp Business (Meta Cloud API), no librerías no oficiales (el usuario eligió esto explícitamente por estabilidad, aunque tenga costo y requiera verificación de Meta Business + aprobación de plantilla de mensaje — como es un mensaje iniciado por el negocio, sin ventana de conversación abierta previa por WhatsApp, **va a necesitar sí o sí una plantilla de mensaje pre-aprobada por Meta**, no puede ser texto libre).
+- **Pendiente de definir:** cuenta de Meta Business (verificación, puede tardar), número de WhatsApp Business, si se usa la Cloud API directa de Meta o un BSP intermediario (Twilio, 360dialog, etc. — simplifican el setup pero agregan costo/capa extra). No bloquea el trabajo actual; se aborda como fase aparte (después de MP/Modo, o en paralelo si el trámite de Meta arranca ya).
+
+## Nueva funcionalidad: Adicionales / modificadores de producto
+
+Capturas de "Mi menú" en RestoSimple muestran 3 apartados: **Categorías**, **Productos**, **Adicionales**. Los primeros dos ya están cubiertos por nuestro schema (`Category`/`Product`). "Adicionales" es nuevo y hay que sumarlo — es un sistema de grupos de opciones por producto, con 3 tipos confirmados por el usuario:
+
+- **Único**: el cliente elige una sola opción del grupo (ej. tamaño).
+- **Múltiple**: el cliente puede elegir varias, con mínimo/máximo configurable por grupo (ej. "Elegí tu salsa" min 1 max 1; "Arma tu promoción" min 1 max 2). Cada opción puede tener su propio precio (a veces $0, es decir, incluida).
+- **Quitar**: lista de ingredientes que el cliente puede tildar para EXCLUIR del producto base, siempre gratis (ej. "sin cebolla"). Confirmado por el usuario, no es para agregar nada.
+
+Cada opción dentro de un grupo tiene: título, precio, mínimo, máximo (a nivel de grupo), y un toggle de activar/desactivar. Los grupos se asignan a producto(s) específicos (en las capturas, "Elegí tu salsa" aparece repetido para distintos productos — probablemente el grupo se define y se asigna por producto, no es 100% un catálogo global compartido).
+
+**Impacto en el diseño (a incorporar antes/durante Fase 1, todavía no implementado):**
+- Nuevos modelos Prisma: `ModifierGroup` (nombre, tipo SINGLE/MULTIPLE/REMOVE, min, max, activo) + `ModifierOption` (título, precio, activo) relacionados a `Product`.
+- `CartLine` (carrito del cliente) y `OrderItem` necesitan guardar qué opciones se eligieron y a qué precio cada una (mismo criterio que ya se usa con `productName`/`price` congelados al momento del pedido, para que un cambio de precio a futuro no afecte pedidos ya hechos).
+- El cálculo de `total` en `POST /api/orders` (hoy solo `product.price * quantity`) va a tener que sumar el precio de los adicionales elegidos, validado en servidor contra los grupos reales del producto (no confiar en lo que mande el cliente).
+- También vi "Etiquetas" (tags) en la pantalla de Productos — rótulos simples para identificar productos, más cosmético, no bloquea nada, se puede sumar como campo simple más adelante.
+
+## Campo por campo del formulario "Editar producto" de RestoSimple — qué entra en v1 y qué no
+
+Captura del form completo: Nombre, Descripción, SKU, Categoría, **Disponible en (Delivery/Salón/Takeaway)**, Precio, Tiene descuento, Imagen (con galería de miniaturas + "Agregar"), Visibilidad "Mostrar como destacado", Alérgenos (tags fijos), Especificaciones (vegano/picante/etc., tags fijos), y pestañas aparte "Adicionales" (confirma que los grupos de modificadores se asignan por producto) y "Sugeridos" (productos relacionados/upsell).
+
+**Decisión del usuario (2026-08-26) sobre qué entra en la v1 del catálogo, más allá de nombre/descripción/precio/categoría/imagen única/adicionales (que ya estaban confirmados o son baratos de sumar):**
+- ✅ **Disponibilidad por canal** (Delivery/Takeaway — sin "Salón" porque no hay dine-in): se agrega `Product.availableDelivery` / `Product.availablePickup` (o similar), mapea directo con `OrderType`. Barato y útil, entra sí o sí.
+- ✅ **Descuentos**: precio con descuento (tachado + precio final) visible en la carta. Entra en v1. Falta definir en detalle (¿monto fijo o %? ¿con fecha de vigencia o manual on/off?) cuando se implemente Fase 1.
+- ❌ **Alérgenos / especificaciones dietéticas** (tags): NO entra en v1, se descarta explícitamente por ahora.
+- ❌ **Galería de múltiples imágenes**: NO entra en v1, se mantiene `imageUrl` único como ya está en el schema actual.
+- ❌ **Destacado / Sugeridos (upsell)**: NO entra en v1 (no se preguntó explícito pero quedó fuera de las opciones elegidas, tratarlo como descartado por ahora salvo que el usuario lo pida).
+
+## Referencia de la vista del cliente (capturas de rowlys.restosimple.com, 2026-08-26)
+
+- **Layout de la carta pública**: sidebar fijo con nombre del local, dirección, contacto (WhatsApp/Instagram), horarios por día, botones de compartir. Área principal: banner, toggle Delivery/Takeaway (el usuario confirmó que en su caso el menú es el mismo para ambos canales, no hace falta filtrar catálogo por canal en la vista del cliente), tabs de categoría, grilla de productos (imagen + nombre + descripción + precio), sección "Nuestro destacado" (descartada para v1).
+- **"Demora 10 min" + "Pedidos en curso → Consultar estado"**: confirma que el tracking de pedido del lado del cliente es una feature real del producto de referencia, alineado con el link de seguimiento que se va a mandar por WhatsApp.
+- **Detalle de producto**: imagen grande con zoom, nombre, descripción, precio, botones "Compartir" y "Consultar" (WhatsApp), selector de cantidad (-/+) y botón "Agregar ($ subtotal de esa línea)".
+- **Carrito**: mientras se navega el menú aparece una barra flotante inferior "Ver mi carrito ($ subtotal)" sin interrumpir la navegación. Al abrirlo: aviso de "Canal de venta seleccionado: Delivery/Takeaway", líneas editables (cantidad -/+ y tacho para eliminar), resumen "Cantidad de productos" + "Subtotal", botón final "Continuar al pago" (lleva al checkout).
+
+## Referencia del checkout ("Finalizar compra") de RestoSimple
+
+- **Aviso de demora** ("Tenemos un tiempo de demora estimada de 10 minutos") y, si es Takeaway, "Retira tu pedido en" con nombre/dirección del local.
+- **Mis datos**: Nombre* y Apellido* como campos separados (no uno solo), Teléfono móvil* (selector de código de país, +54 por defecto), Email (opcional).
+- **Método de pago**: botones tipo pill (Transferencia / Efectivo / — MP debería aparecer como opción aparte también, no se vio en esta captura puntual). Al elegir Efectivo aparece "¿Con cuánto vas a pagar?" (monto para calcular el vuelto — relevante sobre todo para delivery, el repartidor necesita saber cuánto vuelto llevar).
+- **Código de promoción** + botón "Validar": sistema de cupones de descuento en el checkout. **Fuera de alcance para v1** (no se pidió, no confundir con el descuento a nivel producto que sí entra en v1).
+- **Resumen de compra**: líneas con cantidad/nombre/precio, Subtotal, Total, y un textarea "¿Quieres aclarar algo sobre tu pedido?" (150 caracteres) — esto ya coincide con el campo `notes` que `Order` ya tiene.
+- Botón final dinámico: "Pagar $ {total} ({método elegido})".
+
+**Impacto en el schema (pendiente de aplicar cuando arranque la Fase 2, no aplicado todavía):** `Order` necesita `customerEmail` (opcional); separar `customerName` en `customerFirstName`/`customerLastName` (o mantener un solo campo, decidir al implementar — el checkout de referencia los pide separados); agregar `changeFor` (monto con el que paga en efectivo, opcional) en `Payment` o `Order`; agregar `BANK_TRANSFER` al enum `PaymentProvider`.
 
 ## Historial de decisiones (log)
 
@@ -71,3 +180,11 @@ Archivos críticos a tocar: `prisma/schema.prisma`, `src/app/api/orders/route.ts
 - **2026-08-26** — Usuario define: pedidos take-away + delivery (no mesas); pago con Mercado Pago + Modo + efectivo; transferencia con confirmación automática; single-tenant por ahora.
 - **2026-08-26** — Se lanzó agente Plan para diseño técnico detallado (schema, auth, pagos, fases). Resultado pendiente de revisión.
 - **2026-08-26** — Plan técnico recibido y volcado en la sección "Plan técnico" de este archivo. Se creó memoria persistente global (fuera del repo) con puntero a este archivo y a las decisiones de alcance. Pendiente: aprobación del usuario para empezar a codear la Fase 0.
+- **2026-08-26** — Usuario confirma: Neon (Postgres) para la base, MP a crear desde cero, Modo a iniciar trámite de alta (monotributista clase B). Usuario ofrece dar acceso para automatizar GitHub/Vercel; se acordó un PAT fine-grained acotado solo al repo (no SSH/gh disponibles en la máquina) — pendiente de recibirlo.
+- **2026-08-26** — Fase 0 implementada y probada localmente: schema Postgres (`Payment`, `Settings`, `Order` sin mesa), auth de un solo usuario, API de pedidos reescrita, fix de seguridad (Next 14.2.5→14.2.35), fix de rutas API estáticas, fix de ubicación de `middleware.ts` (debe ir en `src/`), fix del escapado de `$` en `.env` para el hash de bcrypt. Repo git inicializado con primer commit. Pendiente: token de GitHub y connection string de Neon para pushear y probar contra una base real.
+- **2026-08-26** — Usuario pasó el PAT de GitHub y el connection string de Neon. Se identificó el repo automáticamente vía API de GitHub (`7upfrancisco-hub/rowlys`, público, rama `main`). Se corrió `db push` + seed contra Neon real, se probó el flujo completo de pedidos (menú → crear pedido CASH → aparece en comanda) contra la base real, se limpió el pedido de prueba, y se pusheó la Fase 0 a GitHub. Falta: decidir si el repo pasa a privado, conectar Vercel desde su dashboard, y arrancar Fase 1 (CRUD admin).
+- **2026-08-26** — Usuario mandó capturas del panel real de RestoSimple (cuenta propia de prueba). Se detectó que falta un estado `CONFIRMED` en el flujo de pedidos (aceptar/rechazar antes de pasar a preparación). Usuario pidió sumar WhatsApp automático al confirmar el pedido, con link de seguimiento, usando la API oficial de Meta (no librerías no oficiales) — nueva fase a futuro, no bloquea Fase 1.
+- **2026-08-26** — Usuario mandó capturas de "Mi menú" (Categorías/Productos/Adicionales). Se detectó y confirmó el sistema de adicionales/modificadores (Único/Múltiple/Quitar) como requisito nuevo, con impacto directo en el schema (`ModifierGroup`/`ModifierOption`) y en el cálculo de precios de `OrderItem`. Los productos/menú "cambian según el contratista/marca" — el usuario aclaró que el contenido del menú es específico de cada marca contratista, no algo genérico a asumir.
+- **2026-08-26** — Capturas del form "Editar producto". Usuario definió el alcance de campos extra para v1: SÍ disponibilidad por canal (Delivery/Takeaway) y descuentos; NO alérgenos/especificaciones dietéticas, NO galería de imágenes múltiples, NO destacado/sugeridos por ahora.
+- **2026-08-26** — Capturas del checkout real. Usuario aclaró que "Transferencia" debe ofrecer Mercado Pago (automático) O el alias/CBU real del banco del local (confirmación manual, acepta que no se pueda verificar sola) — se agrega `BANK_TRANSFER` como 4to proveedor de pago. Se revirtió la regla de "ocultar pedido hasta pago confirmado": todos los pedidos entran a "Pendiente" de inmediato (como en RestoSimple) y el local acepta/rechaza a mano; el pago es solo un badge informativo. Efectivo: Takeaway se paga en el local, Delivery se le paga al repartidor.
+- **2026-08-26** — Usuario pidió armar el schema con todo lo relevado hasta el momento. Se escribió el schema v2 completo (ver sección "Schema v2" más arriba), se aplicó contra Neon (`db push` + `db:seed`), se actualizaron `types/index.ts`, `api/menu`, `api/orders`, y se probó a mano contra la base real: validación de adicionales obligatorios/opcionales, cálculo de precios con descuento y opciones, y la restricción de `changeFor` solo para CASH. Todo compila (`tsc`, `next build`) y quedó verificado end-to-end. Falta pushear este cambio a GitHub (requiere un token nuevo si esta conversación pierde contexto) y seguir con la Fase 1 (UI de admin).

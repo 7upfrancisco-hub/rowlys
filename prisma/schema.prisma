@@ -17,21 +17,66 @@ model Category {
 }
 
 model Product {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  price       Float
-  imageUrl    String?
-  available   Boolean     @default(true)
-  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  categoryId  String
-  orderItems  OrderItem[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                String                 @id @default(cuid())
+  name              String
+  description       String?
+  price             Float
+  discountPrice     Float?
+  imageUrl          String?
+  available         Boolean                @default(true)
+  availableDelivery Boolean                @default(true)
+  availablePickup   Boolean                @default(true)
+  category          Category               @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId        String
+  modifierGroups    ProductModifierGroup[]
+  orderItems        OrderItem[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}
+
+enum ModifierType {
+  SINGLE
+  MULTIPLE
+  REMOVE
+}
+
+model ModifierGroup {
+  id        String                 @id @default(cuid())
+  name      String
+  type      ModifierType
+  min       Int                    @default(0)
+  max       Int                    @default(1)
+  active    Boolean                @default(true)
+  options   ModifierOption[]
+  products  ProductModifierGroup[]
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+}
+
+model ModifierOption {
+  id        String        @id @default(cuid())
+  group     ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  title     String
+  price     Float         @default(0)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model ProductModifierGroup {
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  group     ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  order     Int           @default(0)
+
+  @@id([productId, groupId])
 }
 
 enum OrderStatus {
   PENDING
+  CONFIRMED
   IN_PROGRESS
   READY
   DELIVERED
@@ -47,6 +92,7 @@ enum PaymentProvider {
   CASH
   MP
   MODO
+  BANK_TRANSFER
 }
 
 enum PaymentStatus {
@@ -56,33 +102,44 @@ enum PaymentStatus {
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  orderType       OrderType
-  customerName    String
-  customerPhone   String
-  deliveryAddress String?
-  deliveryFee     Float       @default(0)
-  total           Float
-  status          OrderStatus @default(PENDING)
-  notes           String?
-  items           OrderItem[]
-  payment         Payment?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                String      @id @default(cuid())
+  orderType         OrderType
+  customerFirstName String
+  customerLastName  String
+  customerPhone     String
+  customerEmail     String?
+  deliveryAddress   String?
+  deliveryFee       Float       @default(0)
+  total             Float
+  status            OrderStatus @default(PENDING)
+  notes             String?
+  items             OrderItem[]
+  payment           Payment?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   @@index([status])
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id          String            @id @default(cuid())
+  order       Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId     String
-  product     Product @relation(fields: [productId], references: [id])
+  product     Product           @relation(fields: [productId], references: [id])
   productId   String
   productName String
   price       Float
   quantity    Int
   notes       String?
+  options     OrderItemOption[]
+}
+
+model OrderItemOption {
+  id          String    @id @default(cuid())
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItemId String
+  name        String
+  price       Float
 }
 
 model Payment {
@@ -92,6 +149,7 @@ model Payment {
   provider    PaymentProvider
   status      PaymentStatus   @default(PENDING)
   amount      Float
+  changeFor   Float?
   providerRef String?
   rawPayload  String?
   createdAt   DateTime        @default(now())
@@ -104,5 +162,6 @@ model Settings {
   storeName    String   @default("Rowlys")
   storePhone   String?
   storeAddress String?
+  bankAlias    String?
   updatedAt    DateTime @updatedAt
 }
