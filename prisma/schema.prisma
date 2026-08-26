@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  order     Int       @default(0)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  available   Boolean     @default(true)
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId  String
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum OrderType {
+  PICKUP
+  DELIVERY
+}
+
+enum PaymentProvider {
+  CASH
+  MP
+  MODO
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderType       OrderType
+  customerName    String
+  customerPhone   String
+  deliveryAddress String?
+  deliveryFee     Float       @default(0)
+  total           Float
+  status          OrderStatus @default(PENDING)
+  notes           String?
+  items           OrderItem[]
+  payment         Payment?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  product     Product @relation(fields: [productId], references: [id])
+  productId   String
+  productName String
+  price       Float
+  quantity    Int
+  notes       String?
+}
+
+model Payment {
+  id          String          @id @default(cuid())
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String          @unique
+  provider    PaymentProvider
+  status      PaymentStatus   @default(PENDING)
+  amount      Float
+  providerRef String?
+  rawPayload  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model Settings {
+  id           String   @id @default("singleton")
+  deliveryFee  Float    @default(0)
+  storeName    String   @default("Rowlys")
+  storePhone   String?
+  storeAddress String?
+  updatedAt    DateTime @updatedAt
+}
