@@ -15,7 +15,13 @@ interface PublicSettings {
   bankAlias: string | null;
 }
 
-type PaymentMethod = "CASH" | "BANK_TRANSFER";
+type PaymentMethod = "CASH" | "BANK_TRANSFER" | "MP";
+
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  CASH: "Efectivo",
+  BANK_TRANSFER: "Transferencia",
+  MP: "Mercado Pago",
+};
 
 export default function CheckoutClient() {
   const router = useRouter();
@@ -81,6 +87,19 @@ export default function CheckoutClient() {
           })),
         }),
       });
+      if (paymentMethod === "MP") {
+        // El pedido ya existe (pendiente). Pedimos el link de pago y mandamos
+        // al cliente a Mercado Pago; si abandona, puede reintentar desde
+        // /pedido/[id]. El webhook confirma el pago despues.
+        const { initPoint } = await apiFetch<{ initPoint: string }>(
+          "/api/payments/mercadopago",
+          { method: "POST", body: JSON.stringify({ orderId: order.id }) }
+        );
+        clear();
+        window.location.href = initPoint;
+        return;
+      }
+
       clear();
       router.push(`/pedido/${order.id}`);
     } catch (err) {
@@ -185,6 +204,18 @@ export default function CheckoutClient() {
             >
               Transferencia
             </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod("MP")}
+              className={
+                "rounded-lg px-4 py-2 text-sm font-medium " +
+                (paymentMethod === "MP"
+                  ? "bg-brand-600 text-white"
+                  : "border border-neutral-300 text-neutral-600")
+              }
+            >
+              Mercado Pago
+            </button>
           </div>
           {paymentMethod === "CASH" && (
             <input
@@ -202,6 +233,13 @@ export default function CheckoutClient() {
                 {settings?.bankAlias ?? "Consultá el alias al confirmar"}
               </p>
             </div>
+          )}
+          {paymentMethod === "MP" && (
+            <p className="rounded-lg bg-neutral-50 p-3 text-sm text-neutral-700">
+              Al confirmar te llevamos a Mercado Pago para pagar con tu
+              billetera, tarjeta o transferencia. El pedido queda registrado
+              apenas confirmás.
+            </p>
           )}
         </section>
 
@@ -256,10 +294,10 @@ export default function CheckoutClient() {
           className="rounded-lg bg-brand-600 px-4 py-4 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
         >
           {submitting
-            ? "Enviando..."
-            : `Pagar ${formatCurrency(total)} (${
-                paymentMethod === "CASH" ? "Efectivo" : "Transferencia"
-              })`}
+            ? paymentMethod === "MP"
+              ? "Redirigiendo a Mercado Pago..."
+              : "Enviando..."
+            : `Pagar ${formatCurrency(total)} (${PAYMENT_METHOD_LABELS[paymentMethod]})`}
         </button>
       </form>
     </main>

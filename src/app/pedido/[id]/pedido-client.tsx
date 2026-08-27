@@ -14,7 +14,24 @@ import {
 export default function PedidoClient({ id }: { id: string }) {
   const [order, setOrder] = useState<OrderDTO | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
+
+  async function payWithMp() {
+    setPaying(true);
+    setPayError(null);
+    try {
+      const { initPoint } = await apiFetch<{ initPoint: string }>(
+        "/api/payments/mercadopago",
+        { method: "POST", body: JSON.stringify({ orderId: id }) }
+      );
+      window.location.href = initPoint;
+    } catch (err) {
+      setPayError((err as ApiError).message);
+      setPaying(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +135,22 @@ export default function PedidoClient({ id }: { id: string }) {
             {PAYMENT_PROVIDER_LABELS[order.payment.provider]} ·{" "}
             {order.payment.status === "CONFIRMED" ? "Pagado" : "Pendiente"}
           </p>
+          {order.payment.provider === "MP" &&
+            order.payment.status !== "CONFIRMED" &&
+            order.status !== "CANCELLED" && (
+              <>
+                <button
+                  onClick={payWithMp}
+                  disabled={paying}
+                  className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {paying ? "Redirigiendo..." : "Pagar con Mercado Pago"}
+                </button>
+                {payError && (
+                  <p className="mt-2 text-sm text-red-600">{payError}</p>
+                )}
+              </>
+            )}
         </section>
       )}
     </main>

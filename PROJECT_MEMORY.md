@@ -323,11 +323,71 @@ Fase 1. Todo el trabajo fue UI cliente.
   CASH (OK) y sobre MP (400 con mensaje), rechazo `PENDING→CANCELLED`, y que DELIVERED/CANCELLED
   desaparecen del listado que el panel consume. Los 2 pedidos de prueba se borraron de la base.
 - `npx tsc --noEmit` y `npm run build` pasan limpio (`/comanda` = ƒ dynamic, ~3.4 kB).
+- **Pusheado a GitHub** (2026-08-27, commit `ede9e1d`, `origin/main` al día; push corrido por
+  el usuario en su terminal, misma mecánica que Fase 2).
 - **Pendiente**: no se probó visualmente en navegador (mismo aviso que las fases anteriores).
-  Falta pushear a GitHub (token nuevo). Fuera de alcance de esta fase: barra de métricas del día
-  (caja/total acumulado — necesitaría otra query, no está), sonido/notificación al entrar un
-  pedido nuevo, y el disparo de WhatsApp al confirmar (su propia fase). Siguiente paso natural:
-  Mercado Pago (Fase 3 del plan original) o el WhatsApp automático.
+  Si el auto-deploy de Vercel sigue conectado, este push ya actualizó producción. Fuera de
+  alcance de esta fase: barra de métricas del día (caja/total acumulado — necesitaría otra
+  query, no está), sonido/notificación al entrar un pedido nuevo, y el disparo de WhatsApp al
+  confirmar (su propia fase). Siguiente paso natural: Mercado Pago (Fase 3 del plan original)
+  o el WhatsApp automático.
+
+## Fase 4: integración Mercado Pago (completa en código + mock, 2026-08-27)
+
+Checkout Pro de MP (billetera + tarjetas + transferencia/CVU, todo el mismo webhook) como
+tercer medio de pago del checkout, junto a Efectivo y Transferencia bancaria manual. **El
+usuario todavía no tiene cuenta de developer de MP**, así que la capa quedó lista con un modo
+mock que permite ver el flujo completo en dev sin cuenta real ni túnel para el webhook. Sin
+cambios de schema — `Payment` ya tenía `provider`/`status`/`providerRef`/`rawPayload`.
+
+- **`src/lib/payments/mercadopago.ts`** (nuevo, server-only): `isMpMock()` (true si
+  `MP_MOCK=true` **o** si no hay `MP_ACCESS_TOKEN`), `createPreference()` (POST a
+  `/checkout/preferences`; en mock devuelve `initPoint = <BASE>/mock/mp/<orderId>` y
+  `id = MOCK-PREF-<orderId>`), `fetchPaymentInfo()` (GET `/v1/payments/{id}`; en mock deriva
+  todo del convenio `data.id = MOCK-<orderId>-<approved|rejected>`), `mapMpStatus()`
+  (approved→CONFIRMED; rejected/cancelled/refunded/charged_back→FAILED; el resto→PENDING),
+  `verifyWebhookSignature()` (HMAC-SHA256 de MP, manifest
+  `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, `data.id` alfanumérico a minúsculas,
+  `timingSafeEqual`; se saltea en mock o sin `MP_WEBHOOK_SECRET`).
+- **`POST /api/payments/mercadopago`** (nuevo, público): body `{ orderId }`. Valida que el
+  pedido exista, que su pago sea `MP` (400 si no) y que no esté ya `CONFIRMED` (409). Toma el
+  monto de la DB (nunca del cliente), crea la preferencia, guarda `providerRef = pref.id`,
+  devuelve `{ initPoint }`. 502 si la API de MP falla (el pedido ya existe, se puede
+  reintentar).
+- **`POST /api/webhooks/mercadopago`** (nuevo, público — no está en el matcher de
+  `middleware.ts`, `runtime = "nodejs"`). Lee `type`/`topic` y `data.id` de body o query.
+  Ignora (200) todo lo que no sea `type=payment`. Valida firma → 401 si falla. `fetchPaymentInfo`
+  → 502 si no se puede consultar (MP reintenta). Matchea el pago por `external_reference`
+  (= order.id). Idempotente: si ya está en el estado destino responde `unchanged`; si ya está
+  `CONFIRMED` y llega algo peor, lo mantiene (`kept`) — no degrada por notificación tardía.
+  `GET` devuelve 200 (health del webhook).
+- **`/mock/mp/[orderId]`** (nuevo, dev-only): simulador del Checkout Pro. `page.tsx` hace
+  `notFound()` si `!isMpMock()`. El client tiene botones "Simular pago aprobado/rechazado" que
+  POSTean al webhook local con `data.id = MOCK-<orderId>-<outcome>` y redirigen a `/pedido/[id]`.
+- **`checkout-client.tsx`**: tercer pill "Mercado Pago". Al confirmar con MP: se crea el pedido
+  (queda `PENDING`), se pide `initPoint` a `/api/payments/mercadopago`, se vacía el carrito y
+  `window.location.href = initPoint`. Si el cliente abandona, el pedido ya existe y puede
+  reintentar.
+- **`pedido-client.tsx`**: botón "Pagar con Mercado Pago" cuando el pago es MP, no está
+  confirmado y el pedido no está cancelado — reintento del pago desde la página de seguimiento.
+- **`.env.example`**: se documentó `MP_MOCK`.
+- Verificado end-to-end contra Neon real (dev server en modo mock automático, sin token, vía
+  curl): crear pedido MP → crear preferencia (`initPoint` correcto, `providerRef` guardado) →
+  webhook aprobado (`PENDING→CONFIRMED`, `rawPayload` guardado) → webhook repetido (`unchanged`)
+  → webhook de rechazo tardío (`kept`, sigue CONFIRMED) → preferencia sobre pedido pagado (409).
+  En otro pedido: webhook rechazado (`PENDING→FAILED`). Casos de error: `type` no-payment
+  ignorado, `orderId` inexistente (404), sin body (400), preferencia sobre pedido en efectivo
+  (400), `GET` webhook (200), render de `/mock/mp/<id>` (200). Test unitario aparte de
+  `verifyWebhookSignature` con `MP_WEBHOOK_SECRET` real: firma válida aceptada, alterada
+  rechazada, ausente rechazada. Todos los pedidos de prueba borrados de la base.
+- `npx tsc --noEmit` y `npm run build` pasan limpio.
+- **Pendiente / para cuando el usuario tenga cuenta de MP**: crear la app en el panel de
+  developers de MP, cargar `MP_ACCESS_TOKEN` (prod y TEST) y `MP_WEBHOOK_SECRET` en Vercel y en
+  el `.env` local, quitar `MP_MOCK` (o dejarlo en `false`), configurar la `notification_url`
+  (`<BASE>/api/webhooks/mercadopago`) en el panel de MP, y probar el flujo real con
+  credenciales de test. Sin túnel, el webhook real no llega en local — usar el sandbox de MP o
+  desplegar a Vercel para esa prueba. No se probó visualmente en navegador (mismo aviso que las
+  fases anteriores). Falta pushear a GitHub.
 
 ## Historial de decisiones (log)
 
@@ -349,4 +409,6 @@ Fase 1. Todo el trabajo fue UI cliente.
 - **2026-08-27** — Fase 1 pusheada a GitHub (con un token nuevo del usuario). Se conectó Vercel al repo y quedó deployado en producción (`https://rowlys.vercel.app`), con troubleshooting real: fix de `framework: null` en la config del proyecto (por API), y carga manual de las 4 variables de entorno vía `vercel env add` en la terminal del usuario (mi acceso directo a la API de Vercel con el token que me pasó quedó bloqueado por seguridad para cualquier escritura, no solo para las que llevan secretos). Ver sección "Infra / despliegue" para el detalle. Sitio verificado funcionando end-to-end: `/api/menu` sirve datos reales, `/admin` y `/api/orders` protegidos correctamente. Pendiente: decidir si seguimos con Fase 2 (checkout público del cliente) o con `/comanda` (panel de cocina).
 - **2026-08-27** — Usuario eligió seguir con Fase 2 (checkout público del cliente). Implementada y probada end-to-end contra Neon: carrito (zustand+persist), `/menu`, `/checkout` (Efectivo/Transferencia, sin MP/Modo todavía), `/pedido/[id]` público con polling, endpoint público de configuración, y un fix real encontrado durante el diseño: `POST /api/orders` no validaba disponibilidad/canal de los productos (nunca importó hasta que hubo un flujo de cliente real). Ver sección "Fase 2" más arriba para el detalle completo. Falta: pushear a GitHub, probar visualmente en navegador, y decidir el siguiente paso (`/comanda`, o arrancar Mercado Pago/Modo).
 - **2026-08-27** — Fase 2 pusheada a GitHub (commit `135a360`, con un token nuevo del usuario; el push lo corrió el usuario en su terminal por el bloqueo del clasificador, con el gotcha de comillas de PowerShell ya documentado en la sección "Fase 2"). Pendiente: verificar auto-deploy en Vercel y elegir el siguiente paso (`/comanda` o Mercado Pago/Modo).
-- **2026-08-27** — Usuario eligió `/comanda` (panel de cocina) como siguiente paso. Implementado como panel kanban de 4 columnas (Pendiente/Confirmado/En preparación/Listo) con polling de 5s, reusando `GET /api/orders` y `PATCH /api/admin/orders/[id]` sin tocar schema ni API. Aceptar/Rechazar en Pendiente, avanzar estado, "Cobrar" para efectivo/transferencia, y salida del tablero al pasar a Entregado. Se sumó "Comanda" al nav del admin. Probado end-to-end contra Neon (flujo completo de estados, markPaid CASH/MP, rechazo), pedidos de prueba borrados. Ver sección "Fase 3: panel de comanda" para el detalle. Falta pushear a GitHub. Siguiente: Mercado Pago o WhatsApp automático.
+- **2026-08-27** — Usuario eligió `/comanda` (panel de cocina) como siguiente paso. Implementado como panel kanban de 4 columnas (Pendiente/Confirmado/En preparación/Listo) con polling de 5s, reusando `GET /api/orders` y `PATCH /api/admin/orders/[id]` sin tocar schema ni API. Aceptar/Rechazar en Pendiente, avanzar estado, "Cobrar" para efectivo/transferencia, y salida del tablero al pasar a Entregado. Se sumó "Comanda" al nav del admin. Probado end-to-end contra Neon (flujo completo de estados, markPaid CASH/MP, rechazo), pedidos de prueba borrados. Ver sección "Fase 3: panel de comanda" para el detalle. Siguiente: Mercado Pago o WhatsApp automático.
+- **2026-08-27** — Fase 3 (panel de comanda) pusheada a GitHub (commit `ede9e1d`, push corrido por el usuario con el mismo token). `origin/main` al día. Pendiente: verificar auto-deploy en Vercel y elegir el siguiente paso (Mercado Pago o WhatsApp automático).
+- **2026-08-27** — Usuario eligió Mercado Pago como Fase 4. Implementada la capa completa de Checkout Pro (crear preferencia + webhook con validación de firma HMAC + mapeo de estados) como tercer medio de pago del checkout, más un modo mock (`MP_MOCK`, o automático sin `MP_ACCESS_TOKEN`) con página simuladora `/mock/mp/[orderId]` para ver el flujo sin cuenta real. Sin cambios de schema. Probado end-to-end contra Neon en modo mock (preferencia, webhook aprobado/rechazado, idempotencia, no-degradado de un pago confirmado, casos de error) + test unitario de la firma con secreto real. Ver sección "Fase 4: integración Mercado Pago" para el detalle. Pendiente: que el usuario cree la cuenta de developer de MP y cargue las credenciales; pushear a GitHub. Modo (Fase 5) y WhatsApp automático quedan como siguientes.
