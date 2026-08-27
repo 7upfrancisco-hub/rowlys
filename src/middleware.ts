@@ -14,9 +14,16 @@ export const config = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // El checkout público crea pedidos sin sesión; todo lo demás (incluido GET
-  // sobre esta misma ruta, que expone datos de clientes) requiere admin.
-  if (request.method === "POST" && pathname === "/api/orders") {
+  // El checkout público crea pedidos sin sesión, y el seguimiento público de
+  // un pedido puntual (GET /api/orders/<id>, id no adivinable) también queda
+  // abierto. El listado GET /api/orders (sin id) sigue protegido: expone PII
+  // de todos los clientes.
+  const isPublicOrderCreate =
+    request.method === "POST" && pathname === "/api/orders";
+  const isPublicOrderLookup =
+    request.method === "GET" && /^\/api\/orders\/[^/]+$/.test(pathname);
+
+  if (isPublicOrderCreate || isPublicOrderLookup) {
     return NextResponse.next();
   }
 

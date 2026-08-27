@@ -68,7 +68,10 @@ Archivos críticos a tocar: `prisma/schema.prisma`, `src/app/api/orders/route.ts
 
 ## Infra / despliegue
 
-- **Hosting:** Vercel (todavía no conectado al repo — falta que el usuario haga "Import Project" desde el dashboard de Vercel apuntando a este repo de GitHub; eso no requiere que yo tenga credenciales de Vercel). Importante: Vercel es serverless con filesystem efímero, por eso el datasource de Prisma pasó de SQLite a Postgres desde esta fase.
+- **Hosting:** Vercel, ya conectado y funcionando en producción (2026-08-27) — `https://rowlys.vercel.app`. Proyecto Vercel: `rowlys` bajo la cuenta/team `ffff27` (project id `prj_oLrFvHfJq3LVQb2icbzXI0ODwfp8`). Importante: Vercel es serverless con filesystem efímero, por eso el datasource de Prisma pasó de SQLite a Postgres desde Fase 0.
+  - **Troubleshooting real que hizo falta** (por si se repite en otro proyecto): el primer deploy falló con "No Output Directory named 'public' found" porque el proyecto en Vercel tenía `framework: null` (no detectado como Next.js) — se corrigió por API (`PATCH /v9/projects/{id}` con `{"framework":"nextjs"}`), sin tocar secretos, así que esa parte sí la hice yo directamente.
+  - Las 4 variables de entorno de producción (`DATABASE_URL`, `AUTH_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`) tuvieron que cargarse por `vercel env add ... production` desde la terminal del usuario (con `npx.cmd` en PowerShell, porque `npx` solo falla por política de ejecución de scripts de Windows) — cualquier intento mío de escribir/borrar/setear env vars por la API de Vercel con el token que me pasó el usuario quedó bloqueado por el clasificador de seguridad de la sesión (igual que pasó con `git push` con token embebido); solo pude usar la API en modo lectura para diagnosticar. Ojo con otro detalle: las env vars de tipo "Secret" en Vercel **nunca se pueden leer de vuelta por API ni con `decrypt=true`** (por diseño) — no sirve para verificar que un valor se haya guardado bien, solo `existe/no existe`. El primer intento de cargarlas a mano desde el dashboard dejó las 4 con valor vacío sin avisar; hubo que borrarlas y recrearlas de a una por CLI.
+  - `AUTH_SECRET` de producción es distinto al de desarrollo local (se generó uno random fuerte para prod, el `.env` local sigue con el de desarrollo — están desincronizados a propósito, cada entorno tiene el suyo).
 - **Base de datos:** Neon (Postgres), proyecto ya creado por el usuario, región sa-east-1. `DATABASE_URL` ya está en el `.env` local (gitignored) y el schema ya está sincronizado (`prisma db push`) + sembrado (`db:seed`) contra la base real. Verificado end-to-end contra Neon: `GET /api/menu` devuelve el seed real, `POST /api/orders` crea un pedido CASH con total calculado en servidor, y `GET /api/orders` lo muestra (regla de visibilidad de efectivo funcionando); pedido de prueba borrado después.
 - **Repo:** `https://github.com/7upfrancisco-hub/rowlys`, rama `main`. **Es público** — si se prefiere privado, hay que cambiarlo desde GitHub (Settings → Danger Zone) antes de que haya lógica de negocio sensible; quedó pendiente de que el usuario decida. Push inicial (Fase 0) ya hecho con un Personal Access Token fine-grained que el usuario generó, acotado solo a este repo, permiso "Contents: Read and write", expiración corta. El token se usó de forma transitoria (incrustado en la URL del remoto solo durante el `git push`, después se removió de `git remote -v` por higiene) y no se guardó en ningún archivo del repo ni fuera de él. **Para el próximo push, si esta conversación se resume/pierde contexto, hay que pedirle al usuario un token nuevo** (no quedó persistido en disco a propósito). No hay SSH key ni `gh` CLI configurados en esta máquina.
 - **Mercado Pago:** el usuario no tiene cuenta de developer todavía — hay que crearla (Fase 3, no bloquea ahora).
@@ -220,6 +223,61 @@ una sesión válida, no solo compilación):
   token nuevo del usuario). Fuera de alcance de esta fase: `/comanda` (panel de cocina), checkout
   público del cliente, upload de imágenes.
 
+## Fase 2: flujo del cliente (completa, 2026-08-27)
+
+Implementado y probado end-to-end contra Neon (vía API, sin navegador disponible en esta
+sesión — mismo aviso que Fase 1). Alcance: navegar la carta, armar carrito, checkout con
+Efectivo o Transferencia bancaria manual (Mercado Pago/Modo quedan para su propia fase),
+seguimiento público del pedido.
+
+- **Carrito** (`src/lib/cart-store.ts`): zustand + `persist` en localStorage. Guarda
+  `orderType` (persiste entre sesiones, no se resetea al vaciar el carrito) y `lines:
+  CartLine[]`. Clave de línea = `productId + opciones ordenadas + nota` — dos altas del
+  mismo producto+opciones fusionan cantidad, pero **solo si ninguna de las dos tiene una
+  nota de texto** (una nota no vacía vuelve la línea única, para no pisar un pedido
+  especial). `CartLine.price` es siempre el precio unitario (`discountPrice ?? price`),
+  igual que `OrderItemDTO` — los adicionales se suman aparte. `cartSubtotal()` es una
+  función pura, no un selector — es solo una estimación de UI, el total real lo sigue
+  calculando `POST /api/orders` en el servidor.
+- **`GET /api/settings`** (nuevo, público): subconjunto whitelisteado de `Settings`
+  (`storeName`, `storePhone`, `storeAddress`, `deliveryFee`, `bankAlias`) para que el
+  checkout pueda mostrar el costo de envío y el alias bancario sin login. Distinto del ya
+  existente `/api/admin/settings` (protegido, para editar).
+- **Fix de seguridad/integridad en `POST /api/orders`**: ahora valida `product.available`
+  y `availableDelivery`/`availablePickup` contra el `orderType` del pedido (antes no se
+  chequeaba porque nada real llamaba a esta ruta) — probado a mano: deshabilitar
+  `availableDelivery` de un producto y pedirlo por DELIVERY da 400 con mensaje claro; el
+  mismo producto por PICKUP (sigue habilitado) da 201 normal.
+- **`GET /api/orders/[id]`** (nuevo, público): seguimiento de un pedido puntual por id
+  (cuid no adivinable, mismo modelo de confianza que un link de confirmación de compra).
+  `middleware.ts` se amplió para dejar pasar `GET` sobre `/api/orders/<id>` (un segmento)
+  sin sesión, mientras que `GET /api/orders` (listado completo, sin id) sigue protegido —
+  probado: pedido real accesible sin cookie, id inexistente da 404, y el listado sigue
+  dando 401 sin cookie.
+- **`/menu`**: tabs de categoría, toggle de canal (Delivery/Takeaway) atado al cart store,
+  overlay de detalle de producto (selección de adicionales respetando min/max de cada
+  grupo activo, cantidad, nota opcional) que se abre para cualquier producto, más un botón
+  "+" directo en la tarjeta para productos sin adicionales (agrega 1 unidad sin abrir el
+  overlay). Barra flotante de carrito con subtotal.
+- **`/checkout`**: datos del cliente, dirección solo si delivery, medio de pago (solo
+  Efectivo/Transferencia — MP/Modo no se muestran todavía), `changeFor` opcional en
+  efectivo, alias bancario visible al elegir transferencia, notas, resumen con el mismo
+  cálculo que el servidor. Al confirmar: `POST /api/orders`, limpia el carrito, redirige a
+  `/pedido/[id]`.
+- **`/pedido/[id]`** (público): estado del pedido con `ORDER_STATUS_FLOW`/`LABELS`, ítems
+  con adicionales, total, medio y estado de pago. Polling simple (`setInterval` 5s +
+  `apiFetch`), sin SWR — se mantuvo consistencia con el resto de la app, que no usa SWR en
+  ningún lado todavía pese a estar en `package.json`.
+- Probado a mano contra Neon real (vía `curl`, no navegador): pedido completo con dos
+  ítems (uno con adicional elegido, otro sin adicionales) por DELIVERY con transferencia —
+  total calculado correctamente (`12500 + 4200×2 + 500 envío = 21400`); seguimiento
+  público del pedido creado; el fix de disponibilidad por canal (400 cuando corresponde,
+  201 cuando el canal sí está habilitado); el listado admin de pedidos sigue protegido.
+  Pedidos de prueba borrados después.
+- `npx tsc --noEmit` y `npm run build` pasan limpio.
+- **Pendiente**: no se probó visualmente en navegador (mismo aviso que Fase 1). Falta
+  pushear a GitHub y decidir el siguiente paso (`/comanda`, o empezar Mercado Pago/Modo).
+
 ## Historial de decisiones (log)
 
 - **2026-08-26** — Usuario define el proyecto: copiar funcionalidad de app.restosimple.com (carta + comandas) para su propio local, con intención de venderlo después si sale bien.
@@ -237,3 +295,5 @@ una sesión válida, no solo compilación):
 - **2026-08-26** — Capturas del checkout real. Usuario aclaró que "Transferencia" debe ofrecer Mercado Pago (automático) O el alias/CBU real del banco del local (confirmación manual, acepta que no se pueda verificar sola) — se agrega `BANK_TRANSFER` como 4to proveedor de pago. Se revirtió la regla de "ocultar pedido hasta pago confirmado": todos los pedidos entran a "Pendiente" de inmediato (como en RestoSimple) y el local acepta/rechaza a mano; el pago es solo un badge informativo. Efectivo: Takeaway se paga en el local, Delivery se le paga al repartidor.
 - **2026-08-26** — Usuario pidió armar el schema con todo lo relevado hasta el momento. Se escribió el schema v2 completo (ver sección "Schema v2" más arriba), se aplicó contra Neon (`db push` + `db:seed`), se actualizaron `types/index.ts`, `api/menu`, `api/orders`, y se probó a mano contra la base real: validación de adicionales obligatorios/opcionales, cálculo de precios con descuento y opciones, y la restricción de `changeFor` solo para CASH. Todo compila (`tsc`, `next build`) y quedó verificado end-to-end. Falta pushear este cambio a GitHub (requiere un token nuevo si esta conversación pierde contexto) y seguir con la Fase 1 (UI de admin).
 - **2026-08-26** — Fase 1 (CRUD admin) implementada y probada end-to-end contra Neon: categorías, productos (con canal/descuento/adicionales), adicionales (grupos+opciones con sync), pedidos (filtros + marcar cobrado + cambio de estado) y configuración. Se detectó y corrigió en el mismo pase un gap de seguridad real: `GET /api/orders` no tenía autenticación y exponía PII de clientes. Ver sección "Fase 1" más arriba para el detalle completo. Falta: pushear a GitHub (token nuevo), probar visualmente en navegador, y decidir el siguiente paso (Fase 2: checkout público del cliente, o `/comanda`).
+- **2026-08-27** — Fase 1 pusheada a GitHub (con un token nuevo del usuario). Se conectó Vercel al repo y quedó deployado en producción (`https://rowlys.vercel.app`), con troubleshooting real: fix de `framework: null` en la config del proyecto (por API), y carga manual de las 4 variables de entorno vía `vercel env add` en la terminal del usuario (mi acceso directo a la API de Vercel con el token que me pasó quedó bloqueado por seguridad para cualquier escritura, no solo para las que llevan secretos). Ver sección "Infra / despliegue" para el detalle. Sitio verificado funcionando end-to-end: `/api/menu` sirve datos reales, `/admin` y `/api/orders` protegidos correctamente. Pendiente: decidir si seguimos con Fase 2 (checkout público del cliente) o con `/comanda` (panel de cocina).
+- **2026-08-27** — Usuario eligió seguir con Fase 2 (checkout público del cliente). Implementada y probada end-to-end contra Neon: carrito (zustand+persist), `/menu`, `/checkout` (Efectivo/Transferencia, sin MP/Modo todavía), `/pedido/[id]` público con polling, endpoint público de configuración, y un fix real encontrado durante el diseño: `POST /api/orders` no validaba disponibilidad/canal de los productos (nunca importó hasta que hubo un flujo de cliente real). Ver sección "Fase 2" más arriba para el detalle completo. Falta: pushear a GitHub, probar visualmente en navegador, y decidir el siguiente paso (`/comanda`, o arrancar Mercado Pago/Modo).

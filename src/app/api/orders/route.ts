@@ -106,6 +106,26 @@ export async function POST(request: Request) {
   // (nunca confiar en precios/selecciones que mande el cliente).
   for (const item of body.items) {
     const product = productMap.get(item.productId)!;
+
+    if (!product.available) {
+      return NextResponse.json(
+        { error: `${product.name} ya no está disponible.` },
+        { status: 400 }
+      );
+    }
+    if (body.orderType === "DELIVERY" && !product.availableDelivery) {
+      return NextResponse.json(
+        { error: `${product.name} no está disponible para envío a domicilio.` },
+        { status: 400 }
+      );
+    }
+    if (body.orderType === "PICKUP" && !product.availablePickup) {
+      return NextResponse.json(
+        { error: `${product.name} no está disponible para retiro en el local.` },
+        { status: 400 }
+      );
+    }
+
     const selectedIds = new Set(item.optionIds ?? []);
     const validOptionIds = new Set(
       product.modifierGroups.flatMap((pmg) => pmg.group.options.map((o) => o.id))
