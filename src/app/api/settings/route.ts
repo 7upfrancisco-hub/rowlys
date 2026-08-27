@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isMpAvailable } from "@/lib/payments/mercadopago";
 
 export const dynamic = "force-dynamic";
 
@@ -26,5 +27,8 @@ export async function GET() {
     storeAddress: safe.storeAddress,
     deliveryFee: safe.deliveryFee,
     bankAlias: safe.bankAlias,
+    // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o
+    // credenciales reales en este entorno.
+    mpEnabled: isMpAvailable(),
   });
 }

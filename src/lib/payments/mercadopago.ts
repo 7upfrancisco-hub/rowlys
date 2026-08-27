@@ -4,15 +4,24 @@ import type { PaymentStatus } from "@/types";
 // Capa del proveedor Mercado Pago (Checkout Pro: billetera + tarjetas +
 // transferencia/CVU, todo con el mismo webhook). Server-only.
 //
-// En modo mock (MP_MOCK=true o sin MP_ACCESS_TOKEN) no se llama a la API real:
-// la preferencia apunta a la pagina /mock/mp/[orderId] y el webhook confia en
-// el convenio de `data.id` (MOCK-<orderId>-<approved|rejected>). Sirve para ver
-// el flujo completo en dev sin cuenta de MP ni tunel para el webhook.
+// En modo mock (MP_MOCK=true, y SOLO asi — no se infiere de la falta de token)
+// no se llama a la API real: la preferencia apunta a la pagina /mock/mp/[orderId]
+// y el webhook confia en el convenio de `data.id`
+// (MOCK-<orderId>-<approved|rejected>). Sirve para ver el flujo completo en dev
+// sin cuenta de MP ni tunel para el webhook. El check es explicito a proposito:
+// en produccion sin `MP_MOCK` seteado, aunque falte el token, NO se entra en
+// mock (si no, un cliente podria marcarse el pedido como pagado desde la pagina
+// simuladora). Sin token real, `createPreference` falla con 502 y listo.
 
 const MP_API = "https://api.mercadopago.com";
 
 export function isMpMock(): boolean {
-  return process.env.MP_MOCK === "true" || !process.env.MP_ACCESS_TOKEN;
+  return process.env.MP_MOCK === "true";
+}
+
+// Si el checkout debe ofrecer Mercado Pago: hay mock activo o hay token real.
+export function isMpAvailable(): boolean {
+  return isMpMock() || !!process.env.MP_ACCESS_TOKEN;
 }
 
 function baseUrl(): string {
@@ -44,6 +53,10 @@ export async function createPreference(
       id: `MOCK-PREF-${input.orderId}`,
       initPoint: `${baseUrl()}/mock/mp/${input.orderId}`,
     };
+  }
+
+  if (!process.env.MP_ACCESS_TOKEN) {
+    throw new Error("Mercado Pago no esta configurado en este entorno.");
   }
 
   const res = await fetch(`${MP_API}/checkout/preferences`, {
@@ -122,7 +135,7 @@ export interface MpPaymentInfo {
 // Resuelve la notificacion del webhook a datos de pago. En mock, deriva todo del
 // convenio de `dataId`. En real, consulta GET /v1/payments/{id}.
 export async function fetchPaymentInfo(dataId: string): Promise<MpPaymentInfo> {
-  if (dataId.startsWith("MOCK-")) {
+  if (isMpMock() && dataId.startsWith("MOCK-")) {
     // MOCK-<orderId>-<approved|rejected>
     const rest = dataId.slice("MOCK-".length);
     const sep = rest.lastIndexOf("-");
@@ -168,7 +181,6 @@ export function verifyWebhookSignature(params: {
 }): boolean {
   const secret = process.env.MP_WEBHOOK_SECRET;
   if (isMpMock() || !secret) return true;
-  if (params.dataId.startsWith("MOCK-")) return true;
   if (!params.signatureHeader) return false;
 
   const parts = Object.fromEntries(

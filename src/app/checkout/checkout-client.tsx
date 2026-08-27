@@ -13,6 +13,7 @@ interface PublicSettings {
   storeAddress: string | null;
   deliveryFee: number;
   bankAlias: string | null;
+  mpEnabled: boolean;
 }
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "MP";
@@ -204,18 +205,20 @@ export default function CheckoutClient() {
             >
               Transferencia
             </button>
-            <button
-              type="button"
-              onClick={() => setPaymentMethod("MP")}
-              className={
-                "rounded-lg px-4 py-2 text-sm font-medium " +
-                (paymentMethod === "MP"
-                  ? "bg-brand-600 text-white"
-                  : "border border-neutral-300 text-neutral-600")
-              }
-            >
-              Mercado Pago
-            </button>
+            {settings?.mpEnabled && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("MP")}
+                className={
+                  "rounded-lg px-4 py-2 text-sm font-medium " +
+                  (paymentMethod === "MP"
+                    ? "bg-brand-600 text-white"
+                    : "border border-neutral-300 text-neutral-600")
+                }
+              >
+                Mercado Pago
+              </button>
+            )}
           </div>
           {paymentMethod === "CASH" && (
             <input

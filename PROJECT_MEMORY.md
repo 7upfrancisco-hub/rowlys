@@ -340,8 +340,10 @@ usuario todavía no tiene cuenta de developer de MP**, así que la capa quedó l
 mock que permite ver el flujo completo en dev sin cuenta real ni túnel para el webhook. Sin
 cambios de schema — `Payment` ya tenía `provider`/`status`/`providerRef`/`rawPayload`.
 
-- **`src/lib/payments/mercadopago.ts`** (nuevo, server-only): `isMpMock()` (true si
-  `MP_MOCK=true` **o** si no hay `MP_ACCESS_TOKEN`), `createPreference()` (POST a
+- **`src/lib/payments/mercadopago.ts`** (nuevo, server-only): `isMpMock()` (true **solo** si
+  `MP_MOCK === "true"` — NO se infiere de la falta de token, ver nota de seguridad abajo),
+  `isMpAvailable()` (mock activo o hay token real → el checkout ofrece MP),
+  `createPreference()` (POST a
   `/checkout/preferences`; en mock devuelve `initPoint = <BASE>/mock/mp/<orderId>` y
   `id = MOCK-PREF-<orderId>`), `fetchPaymentInfo()` (GET `/v1/payments/{id}`; en mock deriva
   todo del convenio `data.id = MOCK-<orderId>-<approved|rejected>`), `mapMpStatus()`
@@ -371,6 +373,17 @@ cambios de schema — `Payment` ya tenía `provider`/`status`/`providerRef`/`raw
 - **`pedido-client.tsx`**: botón "Pagar con Mercado Pago" cuando el pago es MP, no está
   confirmado y el pedido no está cancelado — reintento del pago desde la página de seguimiento.
 - **`.env.example`**: se documentó `MP_MOCK`.
+- **Nota de seguridad (hardening aplicado en el mismo pase, tras un push intermedio)**: la
+  primera versión hacía `isMpMock()` true cuando faltaba `MP_ACCESS_TOKEN`. Eso era un
+  agujero: en producción (sin token todavía) el checkout ofrecía "Mercado Pago" y mandaba al
+  cliente a `/mock/mp/...` con botones "aprobar/rechazar" → cualquiera podía marcarse el
+  pedido como pagado. Se cerró así: (1) `isMpMock()` exige `MP_MOCK === "true"` explícito;
+  (2) `/api/settings` expone `mpEnabled = isMpAvailable()` y el checkout **solo muestra el
+  pill de MP si `mpEnabled`** (sin mock y sin token no aparece, igual que antes de Fase 4);
+  (3) `fetchPaymentInfo` y `verifyWebhookSignature` solo tratan los `data.id` con prefijo
+  `MOCK-` de forma especial si `isMpMock()` — probado prod-like (token real + secret, sin
+  `MP_MOCK`): un webhook con `data.id = MOCK-...` sin firma da **401** y el pago queda
+  `PENDING`, y `/mock/mp/<id>` da **404**.
 - Verificado end-to-end contra Neon real (dev server en modo mock automático, sin token, vía
   curl): crear pedido MP → crear preferencia (`initPoint` correcto, `providerRef` guardado) →
   webhook aprobado (`PENDING→CONFIRMED`, `rawPayload` guardado) → webhook repetido (`unchanged`)
@@ -387,7 +400,11 @@ cambios de schema — `Payment` ya tenía `provider`/`status`/`providerRef`/`raw
   (`<BASE>/api/webhooks/mercadopago`) en el panel de MP, y probar el flujo real con
   credenciales de test. Sin túnel, el webhook real no llega en local — usar el sandbox de MP o
   desplegar a Vercel para esa prueba. No se probó visualmente en navegador (mismo aviso que las
-  fases anteriores). Falta pushear a GitHub.
+  fases anteriores).
+- **Pusheado a GitHub**: el commit `bd76c2f` (2026-08-27) fue la primera versión, con el
+  agujero de mock descrito en la nota de seguridad. El hardening va en un commit posterior
+  (ver log). En producción, sin `MP_MOCK` ni `MP_ACCESS_TOKEN`, el checkout simplemente no
+  muestra "Mercado Pago" hasta que se carguen las credenciales reales en Vercel.
 
 ## Historial de decisiones (log)
 
@@ -411,4 +428,6 @@ cambios de schema — `Payment` ya tenía `provider`/`status`/`providerRef`/`raw
 - **2026-08-27** — Fase 2 pusheada a GitHub (commit `135a360`, con un token nuevo del usuario; el push lo corrió el usuario en su terminal por el bloqueo del clasificador, con el gotcha de comillas de PowerShell ya documentado en la sección "Fase 2"). Pendiente: verificar auto-deploy en Vercel y elegir el siguiente paso (`/comanda` o Mercado Pago/Modo).
 - **2026-08-27** — Usuario eligió `/comanda` (panel de cocina) como siguiente paso. Implementado como panel kanban de 4 columnas (Pendiente/Confirmado/En preparación/Listo) con polling de 5s, reusando `GET /api/orders` y `PATCH /api/admin/orders/[id]` sin tocar schema ni API. Aceptar/Rechazar en Pendiente, avanzar estado, "Cobrar" para efectivo/transferencia, y salida del tablero al pasar a Entregado. Se sumó "Comanda" al nav del admin. Probado end-to-end contra Neon (flujo completo de estados, markPaid CASH/MP, rechazo), pedidos de prueba borrados. Ver sección "Fase 3: panel de comanda" para el detalle. Siguiente: Mercado Pago o WhatsApp automático.
 - **2026-08-27** — Fase 3 (panel de comanda) pusheada a GitHub (commit `ede9e1d`, push corrido por el usuario con el mismo token). `origin/main` al día. Pendiente: verificar auto-deploy en Vercel y elegir el siguiente paso (Mercado Pago o WhatsApp automático).
-- **2026-08-27** — Usuario eligió Mercado Pago como Fase 4. Implementada la capa completa de Checkout Pro (crear preferencia + webhook con validación de firma HMAC + mapeo de estados) como tercer medio de pago del checkout, más un modo mock (`MP_MOCK`, o automático sin `MP_ACCESS_TOKEN`) con página simuladora `/mock/mp/[orderId]` para ver el flujo sin cuenta real. Sin cambios de schema. Probado end-to-end contra Neon en modo mock (preferencia, webhook aprobado/rechazado, idempotencia, no-degradado de un pago confirmado, casos de error) + test unitario de la firma con secreto real. Ver sección "Fase 4: integración Mercado Pago" para el detalle. Pendiente: que el usuario cree la cuenta de developer de MP y cargue las credenciales; pushear a GitHub. Modo (Fase 5) y WhatsApp automático quedan como siguientes.
+- **2026-08-27** — Usuario eligió Mercado Pago como Fase 4. Implementada la capa completa de Checkout Pro (crear preferencia + webhook con validación de firma HMAC + mapeo de estados) como tercer medio de pago del checkout, más un modo mock (`MP_MOCK`, o automático sin `MP_ACCESS_TOKEN`) con página simuladora `/mock/mp/[orderId]` para ver el flujo sin cuenta real. Sin cambios de schema. Probado end-to-end contra Neon en modo mock (preferencia, webhook aprobado/rechazado, idempotencia, no-degradado de un pago confirmado, casos de error) + test unitario de la firma con secreto real. Ver sección "Fase 4: integración Mercado Pago" para el detalle. Pendiente: que el usuario cree la cuenta de developer de MP y cargue las credenciales. Modo (Fase 5) y WhatsApp automático quedan como siguientes.
+- **2026-08-27** — Fase 4 (Mercado Pago) pusheada a GitHub (commit `bd76c2f`, push corrido por el usuario). `origin/main` al día.
+- **2026-08-27** — Hardening de Fase 4 tras detectar que `isMpMock()` daba true sin token → en prod el checkout MP mandaba a la página simuladora y un cliente podía marcarse pagado. Se corrigió: mock solo con `MP_MOCK === "true"` explícito, el pill de MP solo aparece si `mpEnabled` (nuevo campo de `/api/settings`), y las ramas mock del webhook/firma se saltean si no hay mock. Probado prod-like (webhook `MOCK-...` sin firma → 401, `/mock/mp` → 404) + re-probado el flujo mock con `MP_MOCK=true`. Pendiente de pushear.
