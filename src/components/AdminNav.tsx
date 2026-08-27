@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/admin/adicionales", label: "Adicionales" },
   { href: "/admin/pedidos", label: "Pedidos" },
   { href: "/admin/configuracion", label: "Configuración" },
+  { href: "/comanda", label: "Comanda" },
 ];
 
 export default function AdminNav() {

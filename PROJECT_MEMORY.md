@@ -275,8 +275,59 @@ seguimiento público del pedido.
   201 cuando el canal sí está habilitado); el listado admin de pedidos sigue protegido.
   Pedidos de prueba borrados después.
 - `npx tsc --noEmit` y `npm run build` pasan limpio.
-- **Pendiente**: no se probó visualmente en navegador (mismo aviso que Fase 1). Falta
-  pushear a GitHub y decidir el siguiente paso (`/comanda`, o empezar Mercado Pago/Modo).
+- **Pusheado a GitHub** (2026-08-27, commit `135a360`, `origin/main` al día). El push con
+  token embebido lo tuvo que correr el usuario en su terminal — el clasificador de la sesión
+  bloquea cualquier comando con el token (`git push` con URL embebida y `git remote set-url`
+  por igual). Gotcha de PowerShell: el primer intento quedó colgado en el prompt `>>` por un
+  problema de comillas al pegar la URL larga; funcionó recién con **comillas simples** y
+  `HEAD:main` en vez de `main`.
+- **Pendiente**: no se probó visualmente en navegador (mismo aviso que Fase 1). Si el
+  auto-deploy de Vercel sigue conectado, este push ya actualizó producción (verificar en
+  `https://rowlys.vercel.app`).
+
+## Fase 3: panel de comanda (`/comanda`) (completa, 2026-08-27)
+
+Panel de cocina tipo kanban. Implementado y probado end-to-end contra Neon (vía API/curl con
+sesión válida, sin navegador en esta sesión). **No requirió tocar el schema ni las API** —
+reusa `GET /api/orders` (listado sin filtro = estados activos, ya excluía DELIVERED/CANCELLED)
+y `PATCH /api/admin/orders/[id]` (`status` y `markPaid`), ambos ya existentes y probados en
+Fase 1. Todo el trabajo fue UI cliente.
+
+- **`src/app/comanda/page.tsx`**: pasó de placeholder a wrapper server (`dynamic = "force-dynamic"`)
+  que renderiza `comanda-client.tsx`. Sigue protegido por `middleware.ts` (`/comanda/:path*`).
+- **`src/app/comanda/comanda-client.tsx`** (nuevo): 4 columnas fijas = `ORDER_STATUS_FLOW`
+  sin `DELIVERED` (Pendiente / Confirmado / En preparación / Listo). Polling cada 5s con
+  `apiFetch` (mismo patrón que `/pedido/[id]`, sin SWR). Tras cada acción manual se ignora el
+  resultado del siguiente poll durante 4s (`suppressPollUntil` ref) para que no pise el estado
+  optimista con datos viejos. Reloj propio cada 30s para que los "hace X min" avancen sin
+  depender del poll. Un pedido `PENDING` con más de 10 min sin aceptar se resalta con borde ámbar.
+- **Acciones por tarjeta** (todas = un `PATCH`): `PENDING` → Aceptar (`CONFIRMED`) / Rechazar
+  (`CANCELLED`, con `window.confirm`); `CONFIRMED` → Empezar preparación (`IN_PROGRESS`);
+  `IN_PROGRESS` → Marcar listo (`READY`); `READY` → Entregado/Enviado (`DELIVERED`, sale del
+  tablero). "Cobrar" (`markPaid: true`) aparece solo si el pago es `CASH`/`BANK_TRANSFER` y no
+  está confirmado — la API ya devuelve 400 si se intenta con MP/MODO. Botón "Cancelar" chico en
+  todos los estados salvo `PENDING` (ahí es "Rechazar"). Al pasar a un estado fuera del tablero
+  (`DELIVERED`/`CANCELLED`) la tarjeta se saca de la lista local en el acto.
+- Tarjeta muestra: nombre + teléfono, tiempo relativo, canal, dirección si es delivery, ítems
+  con adicionales y nota por ítem, nota general del pedido (destacada), badge de pago
+  (verde si pagado), total, y — solo para efectivo con `changeFor` — "paga con X, vuelto Y"
+  (`Math.max(0, changeFor - total)`).
+- Header propio (no usa el `AdminLayout`): título, contador de pedidos activos, hora de última
+  sincronización, botón "Actualizar" manual, link a `/admin`, `LogoutButton`.
+- **`src/components/AdminNav.tsx`**: se agregó "Comanda" como link al final del nav del admin
+  (jump-out; nunca queda "activo" porque el nav solo vive dentro de `/admin/*`).
+- Verificado contra Neon real (curl + sesión de prueba con credenciales inyectadas por
+  `.env.local`, revertido después): login OK, `GET /api/orders` con y sin cookie (401/200),
+  forma de la respuesta = `OrderDTO` (ítems con `notes` y `options`, `payment.changeFor`),
+  flujo completo `PENDING→CONFIRMED→IN_PROGRESS→READY→DELIVERED` vía PATCH, `markPaid` sobre
+  CASH (OK) y sobre MP (400 con mensaje), rechazo `PENDING→CANCELLED`, y que DELIVERED/CANCELLED
+  desaparecen del listado que el panel consume. Los 2 pedidos de prueba se borraron de la base.
+- `npx tsc --noEmit` y `npm run build` pasan limpio (`/comanda` = ƒ dynamic, ~3.4 kB).
+- **Pendiente**: no se probó visualmente en navegador (mismo aviso que las fases anteriores).
+  Falta pushear a GitHub (token nuevo). Fuera de alcance de esta fase: barra de métricas del día
+  (caja/total acumulado — necesitaría otra query, no está), sonido/notificación al entrar un
+  pedido nuevo, y el disparo de WhatsApp al confirmar (su propia fase). Siguiente paso natural:
+  Mercado Pago (Fase 3 del plan original) o el WhatsApp automático.
 
 ## Historial de decisiones (log)
 
@@ -297,3 +348,5 @@ seguimiento público del pedido.
 - **2026-08-26** — Fase 1 (CRUD admin) implementada y probada end-to-end contra Neon: categorías, productos (con canal/descuento/adicionales), adicionales (grupos+opciones con sync), pedidos (filtros + marcar cobrado + cambio de estado) y configuración. Se detectó y corrigió en el mismo pase un gap de seguridad real: `GET /api/orders` no tenía autenticación y exponía PII de clientes. Ver sección "Fase 1" más arriba para el detalle completo. Falta: pushear a GitHub (token nuevo), probar visualmente en navegador, y decidir el siguiente paso (Fase 2: checkout público del cliente, o `/comanda`).
 - **2026-08-27** — Fase 1 pusheada a GitHub (con un token nuevo del usuario). Se conectó Vercel al repo y quedó deployado en producción (`https://rowlys.vercel.app`), con troubleshooting real: fix de `framework: null` en la config del proyecto (por API), y carga manual de las 4 variables de entorno vía `vercel env add` en la terminal del usuario (mi acceso directo a la API de Vercel con el token que me pasó quedó bloqueado por seguridad para cualquier escritura, no solo para las que llevan secretos). Ver sección "Infra / despliegue" para el detalle. Sitio verificado funcionando end-to-end: `/api/menu` sirve datos reales, `/admin` y `/api/orders` protegidos correctamente. Pendiente: decidir si seguimos con Fase 2 (checkout público del cliente) o con `/comanda` (panel de cocina).
 - **2026-08-27** — Usuario eligió seguir con Fase 2 (checkout público del cliente). Implementada y probada end-to-end contra Neon: carrito (zustand+persist), `/menu`, `/checkout` (Efectivo/Transferencia, sin MP/Modo todavía), `/pedido/[id]` público con polling, endpoint público de configuración, y un fix real encontrado durante el diseño: `POST /api/orders` no validaba disponibilidad/canal de los productos (nunca importó hasta que hubo un flujo de cliente real). Ver sección "Fase 2" más arriba para el detalle completo. Falta: pushear a GitHub, probar visualmente en navegador, y decidir el siguiente paso (`/comanda`, o arrancar Mercado Pago/Modo).
+- **2026-08-27** — Fase 2 pusheada a GitHub (commit `135a360`, con un token nuevo del usuario; el push lo corrió el usuario en su terminal por el bloqueo del clasificador, con el gotcha de comillas de PowerShell ya documentado en la sección "Fase 2"). Pendiente: verificar auto-deploy en Vercel y elegir el siguiente paso (`/comanda` o Mercado Pago/Modo).
+- **2026-08-27** — Usuario eligió `/comanda` (panel de cocina) como siguiente paso. Implementado como panel kanban de 4 columnas (Pendiente/Confirmado/En preparación/Listo) con polling de 5s, reusando `GET /api/orders` y `PATCH /api/admin/orders/[id]` sin tocar schema ni API. Aceptar/Rechazar en Pendiente, avanzar estado, "Cobrar" para efectivo/transferencia, y salida del tablero al pasar a Entregado. Se sumó "Comanda" al nav del admin. Probado end-to-end contra Neon (flujo completo de estados, markPaid CASH/MP, rechazo), pedidos de prueba borrados. Ver sección "Fase 3: panel de comanda" para el detalle. Falta pushear a GitHub. Siguiente: Mercado Pago o WhatsApp automático.
