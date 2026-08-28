@@ -139,6 +139,14 @@ export interface OrderDTO {
   updatedAt: string;
 }
 
+// Resultado del intento de aviso por WhatsApp al confirmar un pedido. Lo
+// devuelve PATCH /api/admin/orders/[id] junto con el pedido actualizado.
+export type WhatsAppSendResult =
+  | { status: "sent"; to: string; id?: string }
+  | { status: "mock"; to: string; body: string }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; error: string };
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat("es-AR", {
     style: "currency",

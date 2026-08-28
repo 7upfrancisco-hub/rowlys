@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { baseUrl } from "@/lib/base-url";
 import type { PaymentStatus } from "@/types";
 
 // Capa del proveedor Mercado Pago (Checkout Pro: billetera + tarjetas +
@@ -22,13 +23,6 @@ export function isMpMock(): boolean {
 // Si el checkout debe ofrecer Mercado Pago: hay mock activo o hay token real.
 export function isMpAvailable(): boolean {
   return isMpMock() || !!process.env.MP_ACCESS_TOKEN;
-}
-
-function baseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "") ??
-    "http://localhost:3000"
-  );
 }
 
 export interface PreferenceInput {

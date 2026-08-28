@@ -16,3 +16,7 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Capturas de referencia de RestoSimple (no son parte del producto)
+capturas row.pdf
+*.pdf

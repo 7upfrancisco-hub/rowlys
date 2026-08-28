@@ -11,6 +11,7 @@ import {
   formatCurrency,
   type OrderDTO,
   type OrderStatus,
+  type WhatsAppSendResult,
 } from "@/types";
 
 // Columnas del tablero: el flujo de cocina sin el estado final DELIVERED
@@ -44,7 +45,31 @@ export default function ComandaClient() {
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<
+    { kind: "ok" | "warn"; text: string } | null
+  >(null);
   const suppressPollUntil = useRef(0);
+
+  function showNotice(n: { kind: "ok" | "warn"; text: string }) {
+    setNotice(n);
+    setTimeout(() => setNotice(null), 8000);
+  }
+
+  function whatsappNotice(r: WhatsAppSendResult) {
+    if (r.status === "sent") {
+      showNotice({ kind: "ok", text: "WhatsApp de confirmación enviado al cliente." });
+    } else if (r.status === "mock") {
+      showNotice({
+        kind: "ok",
+        text: `WhatsApp (simulado) a +${r.to}. Config real pendiente.`,
+      });
+    } else if (r.status === "failed") {
+      showNotice({ kind: "warn", text: `WhatsApp no se envió: ${r.error}` });
+    } else if (r.reason && !r.reason.includes("no configurado")) {
+      // "no configurado" es lo normal sin credenciales — no vale la pena avisar.
+      showNotice({ kind: "warn", text: `WhatsApp no se envió: ${r.reason}` });
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -78,10 +103,15 @@ export default function ComandaClient() {
     setError(null);
     suppressPollUntil.current = Date.now() + SUPPRESS_POLL_MS;
     try {
-      const updated = await apiFetch<OrderDTO>(`/api/admin/orders/${id}`, {
+      const updated = await apiFetch<
+        OrderDTO & { whatsappNotification?: WhatsAppSendResult }
+      >(`/api/admin/orders/${id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });
+      if (updated.whatsappNotification) {
+        whatsappNotice(updated.whatsappNotification);
+      }
       setOrders((prev) => {
         if (!prev) return prev;
         const stillOnBoard = (BOARD_COLUMNS as OrderStatus[]).includes(
@@ -161,6 +191,25 @@ export default function ComandaClient() {
         {error && (
           <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
             {error}
+          </p>
+        )}
+
+        {notice && (
+          <p
+            className={
+              "mb-4 flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm " +
+              (notice.kind === "ok"
+                ? "bg-green-50 text-green-700"
+                : "bg-amber-50 text-amber-800")
+            }
+          >
+            <span>{notice.text}</span>
+            <button
+              onClick={() => setNotice(null)}
+              className="text-xs font-medium underline"
+            >
+              cerrar
+            </button>
           </p>
         )}
 

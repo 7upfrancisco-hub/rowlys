@@ -410,6 +410,88 @@ cambios de schema — `Payment` ya tenía `provider`/`status`/`providerRef`/`raw
   producción, sin `MP_MOCK` ni `MP_ACCESS_TOKEN`, el checkout simplemente no muestra
   "Mercado Pago" hasta que se carguen las credenciales reales en Vercel.
 
+## Fase 5: WhatsApp automático al confirmar el pedido (completa en código + mock, 2026-08-28)
+
+El usuario quiere que, cuando el local confirma un pedido, el cliente reciba automáticamente
+un WhatsApp avisando "pedido confirmado" + un link de seguimiento. Mismo patrón que MP: capa
++ modo mock (todavía no hay cuenta de Meta Business). **Sin cambios de schema.**
+
+- **`src/lib/base-url.ts`** (nuevo): helper `baseUrl()` compartido. Resuelve
+  `NEXT_PUBLIC_BASE_URL` → `VERCEL_PROJECT_PRODUCTION_URL` (la inyecta Vercel sola, = dominio
+  de prod) → `http://localhost:3000`. `mercadopago.ts` ahora lo usa también — **arregla de
+  paso un bug latente**: en prod `NEXT_PUBLIC_BASE_URL` no está seteada, así que las
+  `back_urls`/`initPoint` de MP apuntaban a `localhost`.
+- **`src/lib/notifications/whatsapp.ts`** (nuevo, server-only): `isWhatsAppMock()`
+  (`WHATSAPP_MOCK === "true"` explícito, nunca inferido), `isWhatsAppEnabled()` (mock o
+  `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`), `normalizeArPhone()` (a `549` + área + local
+  = 13 díg.; maneja `+54`/`0054`/prefijo `0`/prefijo `15`/el `9`; si no llegan 10 díg. limpios
+  → null y el aviso se saltea), `notifyOrderConfirmed(order, storeName)` → manda la plantilla
+  vía `POST graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages`; en mock solo loguea el
+  mensaje y devuelve `{status:"mock", to, body}`. Timeout de 8s con `AbortController`.
+- **Plantilla de Meta**: `WHATSAPP_TEMPLATE_NAME` (default `order_confirmed`),
+  `WHATSAPP_TEMPLATE_LANG` (default `es_AR`). Body con 3 parámetros: `{{1}}` nombre, `{{2}}`
+  local, `{{3}}` link de seguimiento. **El usuario tiene que crear y hacer aprobar esta
+  plantilla en Meta** antes de que funcione en real (mensaje iniciado por el negocio ⇒
+  plantilla pre-aprobada obligatoria).
+- **Disparador** en `PATCH /api/admin/orders/[id]`: SOLO en la transición
+  `existing.status !== "CONFIRMED" && status === "CONFIRMED"` (no re-envía si ya estaba
+  confirmado). Nunca hace fallar el PATCH: el envío va en un `.catch` que devuelve
+  `{status:"failed", error}`. La respuesta ahora es `{...order, whatsappNotification?}`
+  (`WhatsAppSendResult` en `types/index.ts`: `sent` | `mock` | `skipped` | `failed`).
+- **`/comanda`**: al aceptar un pedido muestra un cartel (verde/ámbar, se cierra solo a los
+  8s) con el resultado del aviso — "WhatsApp enviado", "WhatsApp (simulado) a +54…", o el
+  motivo si se salteó/falló. `skipped` por "no configurado" no muestra nada (es lo normal sin
+  credenciales).
+- **`.env.example`**: bloque WhatsApp documentado.
+- **Edge case conocido, no cubierto**: si un pedido va `CONFIRMED → PENDING → CONFIRMED` (raro,
+  el admin tendría que retroceder el estado a mano), se re-envía el WhatsApp. Aceptable para
+  v1; si molesta, agregar una columna `whatsappConfirmedAt` a `Order`.
+- Verificado end-to-end contra Neon en modo mock (dev server + curl, credenciales de test
+  inyectadas por `.env.local` y revertidas): la transición a CONFIRMED devuelve
+  `whatsappNotification:{status:"mock",...}` con el teléfono normalizado y el link correcto, y
+  loguea el mensaje; una segunda transición a CONFIRMED no re-envía; pasar a IN_PROGRESS no
+  dispara nada. Normalización probada con `3462376810` → `5493462376810`, `+54 9 11 5566-7788`
+  → `5491155667788`, `011 15 3456 7890` → `5491134567890`, y teléfonos basura → `skipped`.
+  13 pedidos de prueba borrados de la base.
+- `npx tsc --noEmit` y `npm run build` pasan limpio.
+- **Pendiente**: pushear a GitHub. Para que funcione en real el usuario tiene que: verificar
+  cuenta de Meta Business, dar de alta el número de WhatsApp Business, crear el System User
+  token permanente, crear + aprobar la plantilla `order_confirmed`, y cargar `WHATSAPP_TOKEN`
+  / `WHATSAPP_PHONE_NUMBER_ID` (+ opcionalmente `WHATSAPP_TEMPLATE_*`) en Vercel. Nada de
+  código. Idealmente también `NEXT_PUBLIC_BASE_URL=https://rowlys.vercel.app` en Vercel (o
+  confiar en `VERCEL_PROJECT_PRODUCTION_URL`).
+
+## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
+
+El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
+"Rowly'S" de Venado Tuerto, Santa Fe). Gitignoreado (`capturas row.pdf` + `*.pdf`). Cosas
+nuevas o que refinan lo ya sabido:
+
+- **El storefront del cliente de RestoSimple es tema OSCURO + acento ROJO** (el logo real de
+  "Rowly'S" es rojo). Nuestra build es clara + naranja (`brand` = paleta naranja en
+  `tailwind.config.ts`). A tener en cuenta si se hace un pase de diseño/branding.
+- El checkout del cliente tiene selector de código de país (+54 por defecto, "Ej:
+  +541123456789"). El nuestro es un input de texto plano.
+- **Descuento por método de pago**: el local real USA activamente "8% off en Transferencia" /
+  "PROMOCION TRANSFERENCIA". RestoSimple tiene un motor de descuentos (Directo / 2×1-Combo /
+  **Método de pago** / **Envío gratis con zonas dibujadas en Google Maps**). Nuestra v1 solo
+  tiene `discountPrice` por producto. Pendiente de decidir si el descuento por medio de pago
+  entra a la v1.
+- **Envío por zonas**: en RestoSimple el costo de envío es por zona (polígono en mapa), no un
+  monto fijo. Nuestra v1 = `Settings.deliveryFee` único.
+- El menú "⋯" de cada pedido en la comanda de RestoSimple tiene: Copiar link, Copiar datos,
+  Contactar cliente, **Enviar WhatsApp** (manual — es lo que automatizamos en Fase 5), Editar
+  nota, **Agregar demora** (15/30/45/60/personalizado), Finalizar, Cancelar.
+- Modal "Estado de los canales": on/off por canal (Delivery/Takeaway) + "Tiempo de demora"
+  (minutos de preparación) configurable + "Mensaje de cierre". Nuestro checkout hardcodea "10
+  minutos".
+- Módulos que RestoSimple tiene y nosotros no (todos fuera de v1): Reportes (~30 tipos,
+  export, corte de día a las 05:00), Gestión de cajas (arqueo + caja por repartidor),
+  **Repartidores** como entidad, Marketing/Cupones (códigos con targeting/límites/presupuesto),
+  "Etiquetas" en productos, precio "Múltiple" (variantes) y galería de imágenes por producto.
+- El grupo de adicionales "Arma tu promoción" usa **productos como opciones** ($0 c/u, min 1
+  max 2) — o sea, el sistema de modificadores también sirve para armar combos.
+
 ## Historial de decisiones (log)
 
 - **2026-08-26** — Usuario define el proyecto: copiar funcionalidad de app.restosimple.com (carta + comandas) para su propio local, con intención de venderlo después si sale bien.

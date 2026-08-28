@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { notifyOrderConfirmed } from "@/lib/notifications/whatsapp";
+import type { WhatsAppSendResult } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +88,29 @@ export async function PATCH(
         include: { items: { include: { options: true } }, payment: true },
       });
     });
-    return NextResponse.json(order);
+
+    // Aviso automático por WhatsApp SOLO en la transición a Confirmado (no si
+    // ya estaba confirmado, para no re-enviar). Nunca hace fallar el PATCH: si
+    // el envío falla, el cambio de estado ya quedó guardado igual.
+    let whatsappNotification: WhatsAppSendResult | undefined;
+    if (status === "CONFIRMED" && existing.status !== "CONFIRMED") {
+      const settings = await prisma.settings.findUnique({
+        where: { id: "singleton" },
+      });
+      whatsappNotification = await notifyOrderConfirmed(
+        {
+          id: order.id,
+          customerFirstName: order.customerFirstName,
+          customerPhone: order.customerPhone,
+        },
+        settings?.storeName ?? "el local"
+      ).catch((err): WhatsAppSendResult => {
+        console.error("WhatsApp: aviso de confirmación falló:", err);
+        return { status: "failed", error: String(err?.message ?? err) };
+      });
+    }
+
+    return NextResponse.json({ ...order, whatsappNotification });
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
