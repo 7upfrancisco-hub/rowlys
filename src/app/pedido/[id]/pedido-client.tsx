@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   formatCurrency,
   ORDER_STATUS_FLOW,
@@ -59,6 +60,7 @@ export default function PedidoClient({ id }: { id: string }) {
   if (notFound) {
     return (
       <div className="storefront">
+      <ThemeToggle />
         <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
           <p className="text-muted">No encontramos ese pedido.</p>
         </main>
@@ -69,6 +71,7 @@ export default function PedidoClient({ id }: { id: string }) {
   if (!order) {
     return (
       <div className="storefront">
+      <ThemeToggle />
         <main className="mx-auto max-w-md px-6 py-12">
           <p className="text-muted">Cargando...</p>
         </main>
@@ -80,15 +83,16 @@ export default function PedidoClient({ id }: { id: string }) {
 
   return (
     <div className="storefront">
+      <ThemeToggle />
       <main className="mx-auto max-w-md px-6 py-10">
-        <h1 className="mb-1 text-2xl font-bold text-store-400">Tu pedido</h1>
+        <h1 className="mb-1 text-2xl font-bold text-accent">Tu pedido</h1>
         <p className="mb-6 text-sm text-muted">
           {ORDER_TYPE_LABELS[order.orderType]}
           {order.deliveryAddress && ` · ${order.deliveryAddress}`}
         </p>
 
         {order.status === "CANCELLED" ? (
-          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-500">
             Este pedido fue cancelado.
           </div>
         ) : (
@@ -105,7 +109,7 @@ export default function PedidoClient({ id }: { id: string }) {
                   className={
                     "mt-1 text-center text-xs " +
                     (i <= currentIndex
-                      ? "font-medium text-store-400"
+                      ? "font-medium text-accent"
                       : "text-muted")
                   }
                 >
@@ -152,7 +156,7 @@ export default function PedidoClient({ id }: { id: string }) {
                     {paying ? "Redirigiendo..." : "Pagar con Mercado Pago"}
                   </button>
                   {payError && (
-                    <p className="mt-2 text-sm text-red-400">{payError}</p>
+                    <p className="mt-2 text-sm text-red-500">{payError}</p>
                   )}
                 </>
               )}

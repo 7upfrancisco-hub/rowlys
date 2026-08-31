@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useCartStore, cartLineKey, cartSubtotal } from "@/lib/cart-store";
 import {
   formatCurrency,
@@ -38,8 +39,9 @@ export default function MenuClient() {
 
   return (
     <div className="storefront min-h-screen pb-24">
+      <ThemeToggle />
       <header className="border-b border-line bg-surface px-6 py-4">
-        <h1 className="text-xl font-bold text-store-400">Rowlys</h1>
+        <h1 className="text-xl font-bold text-accent">Rowlys</h1>
 
         <div className="mt-3 flex gap-1">
           {(Object.keys(ORDER_TYPE_LABELS) as OrderType[]).map((type) => (
@@ -59,7 +61,7 @@ export default function MenuClient() {
         </div>
       </header>
 
-      {error && <p className="px-6 py-4 text-sm text-red-400">{error}</p>}
+      {error && <p className="px-6 py-4 text-sm text-red-500">{error}</p>}
 
       {categories === null ? (
         <p className="px-6 py-8 text-muted">Cargando...</p>
@@ -73,7 +75,7 @@ export default function MenuClient() {
                 className={
                   "whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium " +
                   (activeCategoryId === category.id
-                    ? "bg-store-500/15 text-store-300"
+                    ? "bg-store-500/15 text-accent"
                     : "text-muted hover:bg-surface-2")
                 }
               >
@@ -156,7 +158,7 @@ function ProductCard({
               <span className="mr-2 text-muted line-through">
                 {formatCurrency(product.price)}
               </span>
-              <span className="font-semibold text-store-400">
+              <span className="font-semibold text-accent">
                 {formatCurrency(product.discountPrice)}
               </span>
             </>
@@ -262,7 +264,7 @@ function ProductDetailOverlay({
         {product.description && (
           <p className="mt-1 text-sm text-muted">{product.description}</p>
         )}
-        <p className="mt-2 font-semibold text-store-400">
+        <p className="mt-2 font-semibold text-accent">
           {formatCurrency(unitPrice)}
         </p>
 
@@ -287,7 +289,7 @@ function ProductDetailOverlay({
                       className={
                         "flex items-center justify-between rounded-lg border px-4 py-2 text-left text-sm transition " +
                         (checked
-                          ? "border-store-500 bg-store-500/15 text-store-300"
+                          ? "border-store-500 bg-store-500/15 text-accent"
                           : "border-line text-fg")
                       }
                     >
@@ -416,7 +418,7 @@ function CartSheet({
                     </div>
                     <button
                       onClick={() => removeLine(key)}
-                      className="text-xs font-medium text-red-400 hover:underline"
+                      className="text-xs font-medium text-red-500 hover:underline"
                     >
                       Quitar
                     </button>

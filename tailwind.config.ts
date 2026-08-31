@@ -34,15 +34,17 @@ const config: Config = {
           800: "#8a1c1c",
           900: "#721a1a",
         },
-        // Tokens semánticos con CSS vars: valores claros por defecto (`:root`),
-        // oscuros dentro de `.storefront` (ver globals.css). Así el mismo
-        // `bg-surface` / `text-fg` sirve para tema claro y oscuro.
+        // Tokens semánticos con CSS vars. En el storefront (`.storefront`) el
+        // cliente elige tema oscuro (default) o claro con el toggle — cada tema
+        // redefine estas vars en globals.css. Así el mismo `bg-surface` /
+        // `text-fg` / `text-accent` sirve para los dos.
         canvas: "rgb(var(--s-canvas) / <alpha-value>)",
         surface: "rgb(var(--s-surface) / <alpha-value>)",
         "surface-2": "rgb(var(--s-surface-2) / <alpha-value>)",
         line: "rgb(var(--s-line) / <alpha-value>)",
         fg: "rgb(var(--s-fg) / <alpha-value>)",
         muted: "rgb(var(--s-muted) / <alpha-value>)",
+        accent: "rgb(var(--s-accent) / <alpha-value>)",
       },
     },
   },

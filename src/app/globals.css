@@ -11,9 +11,8 @@ body {
   @apply bg-neutral-50 text-neutral-900;
 }
 
-/* Tokens semánticos — valores claros por defecto (los usa el panel interno si
-   alguna vez se migra). El storefront del cliente los pisa con la paleta
-   oscura vía `.storefront`. */
+/* Tokens semánticos base (claros) — solo por si algún token se usa fuera del
+   storefront. El storefront los pisa según el tema elegido. */
 :root {
   --s-canvas: 250 250 250;
   --s-surface: 255 255 255;
@@ -21,9 +20,11 @@ body {
   --s-line: 229 229 229;
   --s-fg: 23 23 23;
   --s-muted: 115 115 115;
+  --s-accent: 201 42 42;
 }
 
-/* Storefront del cliente: tema oscuro + acento rojo (marca "Rowly'S"). */
+/* Storefront del cliente — acento rojo (marca "Rowly'S") en los dos temas.
+   Tema OSCURO por defecto; el toggle pone data-store-theme="light" en <html>. */
 .storefront {
   --s-canvas: 12 12 14;
   --s-surface: 24 24 27;
@@ -31,13 +32,24 @@ body {
   --s-line: 45 45 52;
   --s-fg: 245 245 245;
   --s-muted: 161 161 170;
+  --s-accent: 240 101 101;
 
   min-height: 100vh;
   background-color: rgb(var(--s-canvas));
   color: rgb(var(--s-fg));
 }
 
-/* En el storefront, los inputs nativos heredan el tema oscuro. */
+html[data-store-theme="light"] .storefront {
+  --s-canvas: 250 250 249;
+  --s-surface: 255 255 255;
+  --s-surface-2: 245 245 244;
+  --s-line: 231 229 228;
+  --s-fg: 28 25 23;
+  --s-muted: 120 113 108;
+  --s-accent: 201 42 42;
+}
+
+/* Inputs nativos heredan el tema. */
 .storefront input,
 .storefront textarea,
 .storefront select {

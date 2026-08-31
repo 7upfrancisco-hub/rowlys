@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useCartStore, cartSubtotal } from "@/lib/cart-store";
 import { formatCurrency, ORDER_TYPE_LABELS, type OrderDTO } from "@/types";
 
@@ -128,6 +129,7 @@ export default function CheckoutClient() {
   if (lines.length === 0) {
     return (
       <div className="storefront">
+      <ThemeToggle />
         <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
           <p className="text-muted">Tu carrito está vacío.</p>
           <Link
@@ -150,8 +152,9 @@ export default function CheckoutClient() {
 
   return (
     <div className="storefront">
+      <ThemeToggle />
       <main className="mx-auto max-w-lg px-6 py-10">
-        <h1 className="mb-2 text-2xl font-bold text-store-400">
+        <h1 className="mb-2 text-2xl font-bold text-accent">
           Finalizar compra
         </h1>
         <p className="mb-6 text-sm text-muted">
@@ -257,7 +260,7 @@ export default function CheckoutClient() {
             {paymentMethod === "BANK_TRANSFER" && (
               <div className="rounded-lg bg-surface-2 p-3 text-sm text-fg">
                 Transferí a este alias/CBU y aclaralo con tu nombre:
-                <p className="mt-1 font-mono font-semibold text-store-300">
+                <p className="mt-1 font-mono font-semibold text-accent">
                   {settings?.bankAlias ?? "Consultá el alias al confirmar"}
                 </p>
               </div>
@@ -314,7 +317,7 @@ export default function CheckoutClient() {
             </div>
           </section>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
 
           <button
             type="submit"

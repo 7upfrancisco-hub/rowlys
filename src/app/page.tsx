@@ -1,11 +1,13 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function HomePage() {
   return (
     <div className="storefront">
+      <ThemeToggle />
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-store-400">Rowlys</h1>
+          <h1 className="text-3xl font-bold text-accent">Rowlys</h1>
           <p className="mt-2 text-muted">
             Menú digital y pedidos para retiro o delivery
           </p>
@@ -19,10 +21,10 @@ export default function HomePage() {
         </Link>
 
         <div className="flex justify-center gap-6 text-sm text-muted">
-          <Link href="/comanda" className="hover:text-store-400 hover:underline">
+          <Link href="/comanda" className="hover:text-accent hover:underline">
             Panel de comanda (cocina)
           </Link>
-          <Link href="/admin" className="hover:text-store-400 hover:underline">
+          <Link href="/admin" className="hover:text-accent hover:underline">
             Administración
           </Link>
         </div>
