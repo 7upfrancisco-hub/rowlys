@@ -37,9 +37,9 @@ export default function MenuClient() {
   const subtotal = useMemo(() => cartSubtotal(lines), [lines]);
 
   return (
-    <div className="min-h-screen bg-neutral-50 pb-24">
-      <header className="border-b border-neutral-200 bg-white px-6 py-4">
-        <h1 className="text-xl font-bold text-brand-600">Rowlys</h1>
+    <div className="storefront min-h-screen pb-24">
+      <header className="border-b border-line bg-surface px-6 py-4">
+        <h1 className="text-xl font-bold text-store-400">Rowlys</h1>
 
         <div className="mt-3 flex gap-1">
           {(Object.keys(ORDER_TYPE_LABELS) as OrderType[]).map((type) => (
@@ -49,8 +49,8 @@ export default function MenuClient() {
               className={
                 "rounded-lg px-3 py-2 text-sm font-medium transition " +
                 (orderType === type
-                  ? "bg-brand-600 text-white"
-                  : "border border-neutral-300 text-neutral-600")
+                  ? "bg-store-600 text-white"
+                  : "border border-line text-muted")
               }
             >
               {ORDER_TYPE_LABELS[type]}
@@ -59,13 +59,13 @@ export default function MenuClient() {
         </div>
       </header>
 
-      {error && <p className="px-6 py-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="px-6 py-4 text-sm text-red-400">{error}</p>}
 
       {categories === null ? (
-        <p className="px-6 py-8 text-neutral-500">Cargando...</p>
+        <p className="px-6 py-8 text-muted">Cargando...</p>
       ) : (
         <>
-          <nav className="flex gap-1 overflow-x-auto border-b border-neutral-200 bg-white px-6 py-3">
+          <nav className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-6 py-3">
             {categories.map((category) => (
               <button
                 key={category.id}
@@ -73,8 +73,8 @@ export default function MenuClient() {
                 className={
                   "whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium " +
                   (activeCategoryId === category.id
-                    ? "bg-brand-100 text-brand-700"
-                    : "text-neutral-500 hover:bg-neutral-100")
+                    ? "bg-store-500/15 text-store-300"
+                    : "text-muted hover:bg-surface-2")
                 }
               >
                 {category.name}
@@ -97,7 +97,7 @@ export default function MenuClient() {
       {lines.length > 0 && (
         <button
           onClick={() => setCartOpen(true)}
-          className="fixed inset-x-6 bottom-6 rounded-xl bg-brand-600 px-4 py-4 text-center font-semibold text-white shadow-lg transition hover:bg-brand-700"
+          className="fixed inset-x-6 bottom-6 rounded-xl bg-store-600 px-4 py-4 text-center font-semibold text-white shadow-lg transition hover:bg-store-500"
         >
           Ver mi carrito ({formatCurrency(subtotal)})
         </button>
@@ -133,18 +133,19 @@ function ProductCard({
   return (
     <div
       onClick={onOpen}
-      className="cursor-pointer rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+      className="cursor-pointer rounded-2xl border border-line bg-surface p-4 shadow-sm transition hover:border-store-500/40 hover:shadow-md"
     >
       {product.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={product.imageUrl}
           alt={product.name}
           className="mb-3 h-32 w-full rounded-lg object-cover"
         />
       )}
-      <p className="font-medium text-neutral-900">{product.name}</p>
+      <p className="font-medium text-fg">{product.name}</p>
       {product.description && (
-        <p className="mt-1 line-clamp-2 text-sm text-neutral-500">
+        <p className="mt-1 line-clamp-2 text-sm text-muted">
           {product.description}
         </p>
       )}
@@ -152,15 +153,15 @@ function ProductCard({
         <p className="text-sm">
           {product.discountPrice != null ? (
             <>
-              <span className="mr-2 text-neutral-400 line-through">
+              <span className="mr-2 text-muted line-through">
                 {formatCurrency(product.price)}
               </span>
-              <span className="font-semibold text-brand-600">
+              <span className="font-semibold text-store-400">
                 {formatCurrency(product.discountPrice)}
               </span>
             </>
           ) : (
-            <span className="font-semibold text-neutral-900">
+            <span className="font-semibold text-fg">
               {formatCurrency(product.price)}
             </span>
           )}
@@ -175,7 +176,7 @@ function ProductCard({
                 price: product.discountPrice ?? product.price,
               });
             }}
-            className="rounded-full bg-brand-600 px-3 py-1 text-sm font-bold text-white hover:bg-brand-700"
+            className="rounded-full bg-store-600 px-3 py-1 text-sm font-bold text-white hover:bg-store-500"
           >
             +
           </button>
@@ -247,28 +248,29 @@ function ProductDetailOverlay({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/60 sm:items-center">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-line bg-surface p-6 shadow-xl sm:rounded-2xl">
         {product.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={product.imageUrl}
             alt={product.name}
             className="mb-4 h-48 w-full rounded-lg object-cover"
           />
         )}
-        <h2 className="text-lg font-bold text-neutral-900">{product.name}</h2>
+        <h2 className="text-lg font-bold text-fg">{product.name}</h2>
         {product.description && (
-          <p className="mt-1 text-sm text-neutral-500">{product.description}</p>
+          <p className="mt-1 text-sm text-muted">{product.description}</p>
         )}
-        <p className="mt-2 font-semibold text-brand-600">
+        <p className="mt-2 font-semibold text-store-400">
           {formatCurrency(unitPrice)}
         </p>
 
         {activeGroups.map((group) => (
           <div key={group.id} className="mt-5">
-            <p className="mb-2 text-sm font-medium text-neutral-700">
+            <p className="mb-2 text-sm font-medium text-fg">
               {group.name}{" "}
-              <span className="text-neutral-400">
+              <span className="text-muted">
                 ({group.min > 0 ? `mínimo ${group.min}, ` : ""}máximo {group.max})
               </span>
             </p>
@@ -285,8 +287,8 @@ function ProductDetailOverlay({
                       className={
                         "flex items-center justify-between rounded-lg border px-4 py-2 text-left text-sm transition " +
                         (checked
-                          ? "border-brand-500 bg-brand-50 text-brand-700"
-                          : "border-neutral-300 text-neutral-700")
+                          ? "border-store-500 bg-store-500/15 text-store-300"
+                          : "border-line text-fg")
                       }
                     >
                       <span>{option.title}</span>
@@ -301,14 +303,14 @@ function ProductDetailOverlay({
         ))}
 
         <div className="mt-5 flex flex-col gap-1">
-          <label className="text-sm font-medium text-neutral-700">
+          <label className="text-sm font-medium text-fg">
             ¿Querés aclarar algo? (opcional)
           </label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value.slice(0, 150))}
             rows={2}
-            className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
+            className="rounded-lg border border-line bg-surface-2 px-4 py-2 focus:border-store-500 focus:outline-none"
           />
         </div>
 
@@ -316,14 +318,14 @@ function ProductDetailOverlay({
           <div className="flex items-center gap-3">
             <button
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="h-9 w-9 rounded-full border border-neutral-300 font-bold text-neutral-700"
+              className="h-9 w-9 rounded-full border border-line font-bold text-fg"
             >
               −
             </button>
-            <span className="w-6 text-center font-medium">{quantity}</span>
+            <span className="w-6 text-center font-medium text-fg">{quantity}</span>
             <button
               onClick={() => setQuantity((q) => q + 1)}
-              className="h-9 w-9 rounded-full border border-neutral-300 font-bold text-neutral-700"
+              className="h-9 w-9 rounded-full border border-line font-bold text-fg"
             >
               +
             </button>
@@ -331,7 +333,7 @@ function ProductDetailOverlay({
           <button
             onClick={handleAdd}
             disabled={!canAdd}
-            className="rounded-lg bg-brand-600 px-5 py-3 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-40"
+            className="rounded-lg bg-store-600 px-5 py-3 font-semibold text-white transition hover:bg-store-500 disabled:opacity-40"
           >
             Agregar ({formatCurrency((unitPrice + optionsPrice) * quantity)})
           </button>
@@ -339,7 +341,7 @@ function ProductDetailOverlay({
 
         <button
           onClick={onClose}
-          className="mt-4 w-full text-center text-sm font-medium text-neutral-500 hover:underline"
+          className="mt-4 w-full text-center text-sm font-medium text-muted hover:underline"
         >
           Cancelar
         </button>
@@ -361,12 +363,12 @@ function CartSheet({
   const subtotal = cartSubtotal(lines);
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
-        <h2 className="mb-4 text-lg font-bold text-neutral-900">Tu carrito</h2>
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/60 sm:items-center">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-line bg-surface p-6 shadow-xl sm:rounded-2xl">
+        <h2 className="mb-4 text-lg font-bold text-fg">Tu carrito</h2>
 
         {lines.length === 0 ? (
-          <p className="text-neutral-500">Tu carrito está vacío.</p>
+          <p className="text-muted">Tu carrito está vacío.</p>
         ) : (
           <ul className="flex flex-col gap-4">
             {lines.map((line) => {
@@ -378,21 +380,21 @@ function CartSheet({
               return (
                 <li
                   key={key}
-                  className="flex items-start justify-between gap-3 border-b border-neutral-100 pb-3"
+                  className="flex items-start justify-between gap-3 border-b border-line pb-3"
                 >
                   <div>
-                    <p className="font-medium text-neutral-900">{line.name}</p>
+                    <p className="font-medium text-fg">{line.name}</p>
                     {line.options && line.options.length > 0 && (
-                      <p className="text-sm text-neutral-500">
+                      <p className="text-sm text-muted">
                         {line.options.map((o) => o.name).join(", ")}
                       </p>
                     )}
                     {line.notes && (
-                      <p className="text-sm italic text-neutral-400">
+                      <p className="text-sm italic text-muted">
                         {line.notes}
                       </p>
                     )}
-                    <p className="text-sm text-neutral-500">
+                    <p className="text-sm text-muted">
                       {formatCurrency(line.price + optionsPrice)} c/u
                     </p>
                   </div>
@@ -400,21 +402,21 @@ function CartSheet({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateQuantity(key, line.quantity - 1)}
-                        className="h-7 w-7 rounded-full border border-neutral-300 font-bold text-neutral-700"
+                        className="h-7 w-7 rounded-full border border-line font-bold text-fg"
                       >
                         −
                       </button>
-                      <span className="w-5 text-center">{line.quantity}</span>
+                      <span className="w-5 text-center text-fg">{line.quantity}</span>
                       <button
                         onClick={() => updateQuantity(key, line.quantity + 1)}
-                        className="h-7 w-7 rounded-full border border-neutral-300 font-bold text-neutral-700"
+                        className="h-7 w-7 rounded-full border border-line font-bold text-fg"
                       >
                         +
                       </button>
                     </div>
                     <button
                       onClick={() => removeLine(key)}
-                      className="text-xs font-medium text-red-600 hover:underline"
+                      className="text-xs font-medium text-red-400 hover:underline"
                     >
                       Quitar
                     </button>
@@ -425,7 +427,7 @@ function CartSheet({
           </ul>
         )}
 
-        <div className="mt-4 flex items-center justify-between font-semibold text-neutral-900">
+        <div className="mt-4 flex items-center justify-between font-semibold text-fg">
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
@@ -433,13 +435,13 @@ function CartSheet({
         <button
           onClick={onCheckout}
           disabled={lines.length === 0}
-          className="mt-4 w-full rounded-lg bg-brand-600 px-4 py-3 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-40"
+          className="mt-4 w-full rounded-lg bg-store-600 px-4 py-3 font-semibold text-white transition hover:bg-store-500 disabled:opacity-40"
         >
           Continuar al pago
         </button>
         <button
           onClick={onClose}
-          className="mt-2 w-full text-center text-sm font-medium text-neutral-500 hover:underline"
+          className="mt-2 w-full text-center text-sm font-medium text-muted hover:underline"
         >
           Seguir viendo el menú
         </button>

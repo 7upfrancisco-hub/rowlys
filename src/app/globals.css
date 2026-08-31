@@ -10,3 +10,40 @@ body {
 body {
   @apply bg-neutral-50 text-neutral-900;
 }
+
+/* Tokens semánticos — valores claros por defecto (los usa el panel interno si
+   alguna vez se migra). El storefront del cliente los pisa con la paleta
+   oscura vía `.storefront`. */
+:root {
+  --s-canvas: 250 250 250;
+  --s-surface: 255 255 255;
+  --s-surface-2: 245 245 245;
+  --s-line: 229 229 229;
+  --s-fg: 23 23 23;
+  --s-muted: 115 115 115;
+}
+
+/* Storefront del cliente: tema oscuro + acento rojo (marca "Rowly'S"). */
+.storefront {
+  --s-canvas: 12 12 14;
+  --s-surface: 24 24 27;
+  --s-surface-2: 34 34 39;
+  --s-line: 45 45 52;
+  --s-fg: 245 245 245;
+  --s-muted: 161 161 170;
+
+  min-height: 100vh;
+  background-color: rgb(var(--s-canvas));
+  color: rgb(var(--s-fg));
+}
+
+/* En el storefront, los inputs nativos heredan el tema oscuro. */
+.storefront input,
+.storefront textarea,
+.storefront select {
+  color: rgb(var(--s-fg));
+}
+.storefront input::placeholder,
+.storefront textarea::placeholder {
+  color: rgb(var(--s-muted));
+}
