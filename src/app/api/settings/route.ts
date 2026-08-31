@@ -19,6 +19,9 @@ export async function GET() {
     storeAddress: null,
     deliveryFee: 0,
     bankAlias: null,
+    storeOpen: true,
+    closedTitle: null,
+    closedMessage: null,
   };
 
   return NextResponse.json({
@@ -27,6 +30,9 @@ export async function GET() {
     storeAddress: safe.storeAddress,
     deliveryFee: safe.deliveryFee,
     bankAlias: safe.bankAlias,
+    storeOpen: safe.storeOpen,
+    closedTitle: safe.closedTitle,
+    closedMessage: safe.closedMessage,
     // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o
     // credenciales reales en este entorno.
     mpEnabled: isMpAvailable(),

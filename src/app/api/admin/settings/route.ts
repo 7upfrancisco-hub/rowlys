@@ -19,6 +19,9 @@ export async function GET() {
     storePhone: null,
     storeAddress: null,
     bankAlias: null,
+    storeOpen: true,
+    closedTitle: null,
+    closedMessage: null,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -29,6 +32,9 @@ const settingsSchema = z.object({
   storeAddress: z.string().trim().optional(),
   bankAlias: z.string().trim().optional(),
   deliveryFee: z.number().min(0),
+  storeOpen: z.boolean().default(true),
+  closedTitle: z.string().trim().optional(),
+  closedMessage: z.string().trim().optional(),
 });
 
 export async function PATCH(request: Request) {

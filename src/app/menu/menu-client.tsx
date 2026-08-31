@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
+import StoreClosedScreen from "@/components/StoreClosedScreen";
 import { useCartStore, cartLineKey, cartSubtotal } from "@/lib/cart-store";
 import {
   formatCurrency,
@@ -13,6 +14,13 @@ import {
   type OrderType,
 } from "@/types";
 
+interface StoreInfo {
+  storeName: string;
+  storeOpen: boolean;
+  closedTitle: string | null;
+  closedMessage: string | null;
+}
+
 export default function MenuClient() {
   const router = useRouter();
   const [categories, setCategories] = useState<CategoryDTO[] | null>(null);
@@ -20,22 +28,59 @@ export default function MenuClient() {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [detailProduct, setDetailProduct] = useState<ProductDTO | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
+  // Bypass del cartel de "cerrado": dura la sesión del navegador (el cliente
+  // ya lo vio una vez, no se lo repetimos al navegar).
+  const [bypassClosed, setBypassClosed] = useState(false);
 
   const orderType = useCartStore((s) => s.orderType);
   const setOrderType = useCartStore((s) => s.setOrderType);
   const lines = useCartStore((s) => s.lines);
 
   useEffect(() => {
+    try {
+      if (sessionStorage.getItem("rowlys-store-bypass") === "1") {
+        setBypassClosed(true);
+      }
+    } catch {
+      /* storage bloqueado: se muestra el cartel siempre, no rompe */
+    }
     apiFetch<CategoryDTO[]>("/api/menu")
       .then((data) => {
         setCategories(data);
         if (data.length > 0) setActiveCategoryId(data[0].id);
       })
       .catch((err: ApiError) => setError(err.message));
+    apiFetch<StoreInfo>("/api/settings")
+      .then((s) => setStoreInfo(s))
+      .catch(() => {});
   }, []);
+
+  function continueToMenu() {
+    try {
+      sessionStorage.setItem("rowlys-store-bypass", "1");
+    } catch {
+      /* ignore */
+    }
+    setBypassClosed(true);
+  }
 
   const activeCategory = categories?.find((c) => c.id === activeCategoryId) ?? null;
   const subtotal = useMemo(() => cartSubtotal(lines), [lines]);
+
+  if (storeInfo && !storeInfo.storeOpen && !bypassClosed) {
+    return (
+      <div className="storefront min-h-screen">
+        <ThemeToggle />
+        <StoreClosedScreen
+          storeName={storeInfo.storeName}
+          title={storeInfo.closedTitle || "Estamos cerrados"}
+          message={storeInfo.closedMessage || ""}
+          onContinue={continueToMenu}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="storefront min-h-screen pb-24">

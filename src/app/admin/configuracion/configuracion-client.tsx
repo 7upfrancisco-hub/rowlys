@@ -9,6 +9,9 @@ interface Settings {
   storeAddress: string | null;
   bankAlias: string | null;
   deliveryFee: number;
+  storeOpen: boolean;
+  closedTitle: string | null;
+  closedMessage: string | null;
 }
 
 export default function ConfiguracionClient() {
@@ -17,6 +20,9 @@ export default function ConfiguracionClient() {
   const [storeAddress, setStoreAddress] = useState("");
   const [bankAlias, setBankAlias] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(0);
+  const [storeOpen, setStoreOpen] = useState(true);
+  const [closedTitle, setClosedTitle] = useState("");
+  const [closedMessage, setClosedMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -30,6 +36,9 @@ export default function ConfiguracionClient() {
         setStoreAddress(settings.storeAddress ?? "");
         setBankAlias(settings.bankAlias ?? "");
         setDeliveryFee(settings.deliveryFee);
+        setStoreOpen(settings.storeOpen);
+        setClosedTitle(settings.closedTitle ?? "");
+        setClosedMessage(settings.closedMessage ?? "");
       })
       .catch((err: ApiError) => setError(err.message))
       .finally(() => setLoading(false));
@@ -49,6 +58,9 @@ export default function ConfiguracionClient() {
           storeAddress: storeAddress.trim() || undefined,
           bankAlias: bankAlias.trim() || undefined,
           deliveryFee,
+          storeOpen,
+          closedTitle: closedTitle.trim() || undefined,
+          closedMessage: closedMessage.trim() || undefined,
         }),
       });
       setSuccess(true);
@@ -70,6 +82,73 @@ export default function ConfiguracionClient() {
         onSubmit={handleSubmit}
         className="flex max-w-xl flex-col gap-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
+        <div
+          className={
+            "flex flex-col gap-3 rounded-xl border p-4 " +
+            (storeOpen
+              ? "border-green-200 bg-green-50"
+              : "border-red-200 bg-red-50")
+          }
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-neutral-900">
+                {storeOpen ? "Local abierto" : "Local cerrado"}
+              </p>
+              <p className="text-sm text-neutral-600">
+                {storeOpen
+                  ? "Los clientes ven el menú normalmente."
+                  : "Los clientes ven primero una pantalla de cerrado (pueden entrar al menú igual)."}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={storeOpen}
+              onClick={() => setStoreOpen((v) => !v)}
+              className={
+                "relative h-7 w-12 shrink-0 rounded-full transition " +
+                (storeOpen ? "bg-green-500" : "bg-neutral-300")
+              }
+            >
+              <span
+                className={
+                  "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition " +
+                  (storeOpen ? "left-[22px]" : "left-0.5")
+                }
+              />
+            </button>
+          </div>
+
+          {!storeOpen && (
+            <div className="flex flex-col gap-3 border-t border-red-200 pt-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-neutral-700">
+                  Título del cartel
+                </label>
+                <input
+                  value={closedTitle}
+                  onChange={(e) => setClosedTitle(e.target.value)}
+                  placeholder="Estamos cerrados"
+                  className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-neutral-700">
+                  Mensaje (horarios, cuándo vuelven, etc.)
+                </label>
+                <textarea
+                  value={closedMessage}
+                  onChange={(e) => setClosedMessage(e.target.value)}
+                  rows={3}
+                  placeholder="Abrimos de martes a domingo de 20 a 00 hs."
+                  className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-neutral-700">
             Nombre del local
