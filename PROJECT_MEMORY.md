@@ -581,6 +581,48 @@ naranja (`brand`). Sin cambios de schema ni de API.
   sesión). **Falta pushear** (token nuevo).
 - Pendiente relacionado (no hecho): logo real de "Rowly'S", banner de la carta, datos del
   local en un sidebar/footer (dirección, horarios, redes) como el storefront de referencia.
+- **Deployado** el 2026-08-31 (commits `83b16a5`/`009528a`/`7cec633`, ver log). Verificado en
+  prod: `/menu` y `/` sirven la clase `storefront` + CSS oscuro.
+
+## Fase 8: toggle de tema + estado del local (abierto/cerrado) (en código, 2026-08-31)
+
+Dos pedidos del usuario tras ver el branding en prod.
+
+### 8a — Toggle claro/oscuro del storefront (commit `b0a5d5c`, deployado)
+- `tailwind.config.ts` suma el token `accent` (rojo con contraste en ambos temas).
+- `globals.css`: `.storefront` = tema OSCURO por defecto; `html[data-store-theme="light"] .storefront`
+  = tema claro. Todos los tokens (`canvas`/`surface`/`surface-2`/`line`/`fg`/`muted`/`accent`)
+  se redefinen por tema.
+- `src/components/ThemeToggle.tsx` (nuevo): botón flotante ☀️/🌙 (fixed top-right, z-10). Guarda
+  `rowlys-theme` en localStorage y pone `data-store-theme` en `<html>`.
+- `layout.tsx`: script inline (`THEME_INIT`) que aplica el tema antes del primer paint → sin flash.
+- El toggle se agregó a las 4 páginas del storefront (home, `/menu`, `/checkout`, `/pedido/[id]`,
+  en todas sus ramas de return). Los acentos rojos de texto pasaron de `text-store-400`/`300` a
+  `text-accent`; errores de `text-red-400`/`300` a `text-red-500` (contraste en tema claro).
+
+### 8b — Estado del local abierto/cerrado (commit `912fc66`, NO deployado — requiere db push)
+Lo que pidió el usuario: que el dueño pueda marcar el local como cerrado y que el cliente, al
+entrar, vea primero una pantalla de "estado del local" (no el menú), con opción de entrar igual.
+"vamos trabajandolo" — es la v1, iterar.
+- **Schema**: `Settings` suma `storeOpen Boolean @default(true)`, `closedTitle String?`,
+  `closedMessage String?`. **Falta `prisma db push`** (el clasificador de la sesión bloquea
+  correrlo; lo corre el usuario). `prisma generate` sí se corrió → el client ya tipa los campos.
+- **`/api/settings`** (público) y **`/api/admin/settings`** (GET fallback + `settingsSchema`):
+  exponen/aceptan los 3 campos nuevos.
+- **`/admin/configuracion`**: switch "Local abierto / cerrado" arriba del form (verde/rojo);
+  al cerrar aparecen inputs de título y mensaje del cartel.
+- **`src/components/StoreClosedScreen.tsx`** (nuevo): pantalla themeada (ícono reloj, nombre del
+  local, título accent, mensaje `whitespace-pre-line`, botón "Ver el menú igual").
+- **`/menu` (`menu-client.tsx`)**: ahora también hace `apiFetch("/api/settings")`. Si
+  `storeOpen === false` y no hay bypass → renderiza `StoreClosedScreen` en vez de la carta. El
+  bypass se guarda en `sessionStorage` (`rowlys-store-bypass`), dura la sesión del navegador.
+- `tsc` + `build` limpios.
+- **Pendiente / a iterar**: gate en `/checkout` o rechazo en `POST /api/orders` cuando está
+  cerrado (hoy si el cliente entra igual, puede pedir); gate también en la home `/` (hoy solo
+  `/menu`); acceso rápido al toggle desde `/comanda`; diseño más rico de la pantalla (horarios,
+  redes). **Orden de deploy obligatorio**: `prisma db push` ANTES de deployar el código nuevo
+  (si el código nuevo sale sin las columnas, la lectura de Settings rompe; y si las columnas
+  salen antes, el código viejo en prod las ignora sin problema).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
@@ -647,3 +689,4 @@ nuevas o que refinan lo ya sabido:
 - **2026-08-31** — Se confirmó que el checkout funciona (pedido nuevo en la base). Fase 5b (botón WhatsApp) sigue sin commitear/pushear. El usuario eligió como próxima feature **subida de imágenes de productos**: implementada la Fase 6 con Vercel Blob (`@vercel/blob`) + `POST /api/admin/upload` + resize a WebP en el navegador en `product-form.tsx`, con fallback a `public/uploads/` en dev sin token. Validación de `imageUrl` relajada para aceptar rutas relativas. Verificado end-to-end por curl contra Neon. `tsc`/`build` OK. Ver sección "Fase 6". Falta: probar en navegador, crear el Blob store en Vercel para prod, y pushear (Fase 5b + Fase 6, token nuevo). Se limpió un archivo basura del repo (`{console.log(JSON.stringify(o`).
 - **2026-08-31** — El usuario eligió **branding oscuro + rojo del storefront** como siguiente (Fase 7). Implementado: sistema de theming con tokens semánticos (CSS vars) + paleta `store` roja en `tailwind.config.ts`, clase `.storefront` con la paleta oscura, y las 4 páginas del cliente (home, `/menu`, `/checkout`, `/pedido/[id]`) re-themeadas. Admin/comanda intactas. Sumado selector de código de país (+54 default) en el teléfono del checkout — el teléfono ahora se guarda como `"+54 <número>"`. `tsc`/`build` limpios, CSS compilado verificado. Ver sección "Fase 7".
 - **2026-08-31** — **Deploy de Fases 5b + 6 + 7.** 4 commits a `main` (`83b16a5`, `009528a`, `7cec633`, `b7f8fe9`). Antes del push se creó el **Blob store de Vercel** para la Fase 6: `npx vercel blob create-store rowlys-images --access public --yes` (id `store_rvuczY5LVTjENEye`, región iad1, linkeado a `rowlys`) → agregó `BLOB_READ_WRITE_TOKEN` a Production+Preview+Development solo, y lo bajó al `.env.local` (gitignored). El push lo corrió el usuario en `cmd` (no PowerShell — PSReadLine crashea con la línea larga del token; con `cmd` van comillas dobles). Vercel auto-deployó (`● Ready`, ~41s). Verificado en prod: `/menu` y `/` sirven la clase `storefront` + CSS con la paleta oscura; `/api/settings` OK. **Pendiente**: prueba visual en navegador (storefront oscuro, subida real de imagen a Blob, botón WhatsApp en `/comanda`). El usuario tiene que **revocar el PAT de GitHub** (quedó en texto plano en el chat). Meta/WhatsApp automático sigue sin tocar (opcional, aparte).
+- **2026-08-31** — El usuario vio el branding en prod, le gusta, pidió **toggle claro/oscuro** (Fase 8a) + como próxima feature un **estado "local cerrado"** (Fase 8b): que el dueño pueda cerrar el local y el cliente vea primero una pantalla de estado, no el menú, con opción de entrar igual ("vamos trabajandolo"). 8a implementado y deployado (commit `b0a5d5c`). 8b implementado (commit `912fc66`) pero **NO deployado**: necesita `prisma db push` (columnas `storeOpen`/`closedTitle`/`closedMessage` en `Settings`) que el clasificador me bloquea — lo corre el usuario, ANTES de deployar el código. Ver sección "Fase 8". A iterar: gate en checkout/orders, gate en la home, acceso al toggle desde `/comanda`.
