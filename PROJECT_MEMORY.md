@@ -617,12 +617,41 @@ entrar, vea primero una pantalla de "estado del local" (no el menú), con opció
   `storeOpen === false` y no hay bypass → renderiza `StoreClosedScreen` en vez de la carta. El
   bypass se guarda en `sessionStorage` (`rowlys-store-bypass`), dura la sesión del navegador.
 - `tsc` + `build` limpios.
-- **Pendiente / a iterar**: gate en `/checkout` o rechazo en `POST /api/orders` cuando está
-  cerrado (hoy si el cliente entra igual, puede pedir); gate también en la home `/` (hoy solo
-  `/menu`); acceso rápido al toggle desde `/comanda`; diseño más rico de la pantalla (horarios,
-  redes). **Orden de deploy obligatorio**: `prisma db push` ANTES de deployar el código nuevo
-  (si el código nuevo sale sin las columnas, la lectura de Settings rompe; y si las columnas
-  salen antes, el código viejo en prod las ignora sin problema).
+- `tsc` + `build` limpios.
+- **Orden de deploy obligatorio**: `prisma db push` ANTES de deployar el código nuevo (si el
+  código sale sin las columnas, la lectura de Settings rompe; si las columnas salen antes, el
+  código viejo las ignora sin problema).
+
+### 8c — "Local cerrado v2": ver el menú pero no pedir (commit `f98344c`, NO deployado)
+El usuario cambió el enfoque de 8b: cerrado NO oculta el menú. Ahora con `storeOpen=false` el
+cliente ve la carta normal pero **no puede hacer pedidos**, y además se pueden pausar canales
+sueltos.
+- **Schema**: `Settings` suma `deliveryEnabled` + `pickupEnabled` (`Boolean @default(true)`).
+  **Otro `prisma db push` pendiente.** `prisma generate` ya corrió.
+- **`StoreClosedScreen.tsx` eliminado** (ya no hay gate). El bypass por `sessionStorage` se fue.
+- **`/comanda`**: barra abajo del header con 3 toggles (`StatusToggle` local) — Abierto/Cerrado
+  (master) + Delivery + Takeaway. Cada uno = PATCH **parcial** a `/api/admin/settings`
+  (optimista, revierte si falla). Delivery/Takeaway se deshabilitan si el local está cerrado.
+- **`/api/admin/settings`**: `settingsSchema` pasó a **todos los campos opcionales** para
+  aceptar PATCH parciales de un solo toggle (el form de configuración sigue mandando todo).
+- **`/menu`**: banner de cerrado (título/mensaje de Settings); botones de canal muestran
+  "(pausado)" y se deshabilitan; `CartSheet` bloquea "Continuar al pago" con el motivo.
+- **`/checkout`**: banner + submit deshabilitado ("Pedidos pausados") si cerrado o canal pausado.
+- **`POST /api/orders`**: 409 si `!storeOpen`, o si el `orderType` elegido tiene el canal
+  pausado. Validación server-side (reusa el fetch de `settings` que ya hacía para `deliveryFee`).
+- `/admin/configuracion` sigue con el switch master + textos del cartel (no se le agregaron los
+  toggles de canal, viven en `/comanda`).
+- `tsc` + `build` limpios.
+- **Pendiente**: gate en la home `/`; diseño más rico del banner (horarios/redes); deploy
+  (needs `prisma db push` de las 2 columnas nuevas + push).
+
+### Estado de deploy de la Fase 8 (2026-08-31) — OJO
+El push de 8a+8b (commit `5805b08`) **llegó a GitHub pero Vercel NO lo buildeó** (el webhook
+git→Vercel no disparó; el deploy `pejcnyewj` de las 19:06 quedó con el build de Fase 7, CSS
+hash sin cambiar). Se creó un commit vacío `74d2bd8` para re-disparar. **Nada de Fase 8 está
+en producción todavía.** Cuando se retome: `prisma db push` (columnas de 8b + 8c) → push de
+`74d2bd8`+`f98344c` → si Vercel sigue sin buildear, fallback `npx vercel --prod` desde el repo
+(lo corre el usuario, el clasificador me bloquea las escrituras a Vercel).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
