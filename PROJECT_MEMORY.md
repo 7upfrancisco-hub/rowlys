@@ -645,13 +645,32 @@ sueltos.
 - **Pendiente**: gate en la home `/`; diseño más rico del banner (horarios/redes); deploy
   (needs `prisma db push` de las 2 columnas nuevas + push).
 
-### Estado de deploy de la Fase 8 (2026-08-31) — OJO
-El push de 8a+8b (commit `5805b08`) **llegó a GitHub pero Vercel NO lo buildeó** (el webhook
-git→Vercel no disparó; el deploy `pejcnyewj` de las 19:06 quedó con el build de Fase 7, CSS
-hash sin cambiar). Se creó un commit vacío `74d2bd8` para re-disparar. **Nada de Fase 8 está
-en producción todavía.** Cuando se retome: `prisma db push` (columnas de 8b + 8c) → push de
-`74d2bd8`+`f98344c` → si Vercel sigue sin buildear, fallback `npx vercel --prod` desde el repo
-(lo corre el usuario, el clasificador me bloquea las escrituras a Vercel).
+### 8d — Cartel de cerrado con foto + menú solo-lectura (commit `ae6640c`, NO deployado)
+El usuario refinó de nuevo: cuando el local está cerrado quiere un **cartel a pantalla
+completa** (no el banner fino de 8c), con **foto**, y arriba un botón "Ver el menú" para
+mirar la carta sin poder comprar.
+- **`Settings.closedImageUrl String?`** — foto del cartel. **Otro `prisma db push`.**
+- **`src/lib/image.ts`** (nuevo): `downscaleImage` + `uploadImage` compartidos (movidos de
+  `product-form.tsx`, que ahora los importa). `/admin/configuracion` usa los mismos para
+  subir la foto del cartel (aparece en el bloque de "Local cerrado").
+- **`/menu`**: si `storeOpen=false` y no hay bypass → pantalla `ClosedLanding` inline (botón
+  "Ver el menú →" arriba, foto, nombre, título, mensaje). "Ver el menú" setea
+  `sessionStorage["rowlys-store-bypass"]` y entra en **modo `readOnly`**: sin botones "+",
+  sin barra de carrito, sin `CartSheet`; barra fija arriba con link "volver". El detalle de
+  producto en readOnly muestra solo foto/nombre/desc/precio + aviso, sin agregar.
+- `/api/settings` + `/api/admin/settings` exponen/aceptan `closedImageUrl`.
+- El banner fino de 8c en `/menu` se reemplazó por la barra readOnly; el caso "abierto pero
+  canal pausado" sigue con el carrito activo y bloqueo solo en checkout (`channelPaused`).
+- `tsc` + `build` limpios.
+
+### Estado de deploy de la Fase 8 (2026-08-31)
+8a + 8b + 8c (`5805b08` → `d09c7da`) **deployados y funcionando** en prod (el weblook
+git→Vercel había fallado con el primer push de 8a/8b; se destrabó con el commit vacío
+`74d2bd8` + re-push, o `npx vercel --prod`). El usuario confirmó los toggles de `/comanda` en
+prod. **Falta deployar 8d** (`ae6640c`): `prisma db push` (columna `closedImageUrl`) → push.
+El `prisma db push` de las columnas de 8b/8c (`storeOpen`/`deliveryEnabled`/`pickupEnabled`)
+ya se corrió (los toggles andan en prod). Recordatorio: el usuario tiene que **revocar el PAT
+de GitHub** (sigue en texto plano en el chat).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
