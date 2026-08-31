@@ -2,52 +2,12 @@
 
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { downscaleImage, uploadImage } from "@/lib/image";
 import type { ModifierGroupDTO } from "@/types";
 
 export interface AdminCategory {
   id: string;
   name: string;
-}
-
-// Achica la imagen en el navegador antes de subirla: máximo `maxDim` px de lado
-// y re-encodeada a WebP. Deja los archivos en ~100-300 KB, así nunca choca con
-// el límite de body de las funciones serverless y la carta carga liviana.
-async function downscaleImage(
-  file: File,
-  maxDim = 1200,
-  quality = 0.82
-): Promise<Blob> {
-  const dataUrl = await new Promise<string>((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = () => rej(new Error("No se pudo leer el archivo."));
-    r.readAsDataURL(file);
-  });
-  const img = await new Promise<HTMLImageElement>((res, rej) => {
-    const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = () => rej(new Error("El archivo no es una imagen válida."));
-    i.src = dataUrl;
-  });
-
-  let { width, height } = img;
-  if (width > maxDim || height > maxDim) {
-    const scale = maxDim / Math.max(width, height);
-    width = Math.round(width * scale);
-    height = Math.round(height * scale);
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return file; // sin canvas: subimos el original tal cual
-  ctx.drawImage(img, 0, 0, width, height);
-
-  const blob = await new Promise<Blob | null>((res) =>
-    canvas.toBlob(res, "image/webp", quality)
-  );
-  return blob ?? file;
 }
 
 export interface AdminProduct {
@@ -111,15 +71,8 @@ export default function ProductForm({
     setUploadErr(null);
     setUploading(true);
     try {
-      const resized = await downscaleImage(file);
-      const baseName = file.name.replace(/\.[^.]+$/, "") || "imagen";
-      const fd = new FormData();
-      fd.append("file", resized, `${baseName}.webp`);
-      fd.append("name", file.name);
-      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error ?? "No se pudo subir la imagen.");
-      setImageUrl(data.url as string);
+      const url = await uploadImage(await downscaleImage(file), file.name);
+      setImageUrl(url);
     } catch (err) {
       setUploadErr((err as Error).message);
     } finally {

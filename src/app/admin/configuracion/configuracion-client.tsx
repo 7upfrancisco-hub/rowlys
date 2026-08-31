@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { downscaleImage, uploadImage } from "@/lib/image";
 
 interface Settings {
   storeName: string;
@@ -12,6 +13,7 @@ interface Settings {
   storeOpen: boolean;
   closedTitle: string | null;
   closedMessage: string | null;
+  closedImageUrl: string | null;
 }
 
 export default function ConfiguracionClient() {
@@ -23,6 +25,8 @@ export default function ConfiguracionClient() {
   const [storeOpen, setStoreOpen] = useState(true);
   const [closedTitle, setClosedTitle] = useState("");
   const [closedMessage, setClosedMessage] = useState("");
+  const [closedImageUrl, setClosedImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -39,10 +43,27 @@ export default function ConfiguracionClient() {
         setStoreOpen(settings.storeOpen);
         setClosedTitle(settings.closedTitle ?? "");
         setClosedMessage(settings.closedMessage ?? "");
+        setClosedImageUrl(settings.closedImageUrl ?? "");
       })
       .catch((err: ApiError) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleClosedImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const url = await uploadImage(await downscaleImage(file), file.name);
+      setClosedImageUrl(url);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +82,7 @@ export default function ConfiguracionClient() {
           storeOpen,
           closedTitle: closedTitle.trim() || undefined,
           closedMessage: closedMessage.trim() || undefined,
+          closedImageUrl: closedImageUrl.trim() || null,
         }),
       });
       setSuccess(true);
@@ -144,6 +166,55 @@ export default function ConfiguracionClient() {
                   placeholder="Abrimos de martes a domingo de 20 a 00 hs."
                   className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-neutral-700">
+                  Foto del cartel (opcional)
+                </label>
+                <div className="flex items-start gap-4">
+                  {closedImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={closedImageUrl}
+                      alt=""
+                      className="h-24 w-32 shrink-0 rounded-lg border border-neutral-200 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-24 w-32 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 text-center text-xs text-neutral-400">
+                      Sin foto
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <label
+                      className={
+                        "inline-flex w-fit cursor-pointer items-center rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 " +
+                        (uploading ? "pointer-events-none opacity-60" : "")
+                      }
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleClosedImage}
+                        className="hidden"
+                      />
+                      {uploading
+                        ? "Subiendo..."
+                        : closedImageUrl
+                          ? "Cambiar foto"
+                          : "Subir foto"}
+                    </label>
+                    {closedImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setClosedImageUrl("")}
+                        className="w-fit text-xs font-medium text-red-600 hover:underline"
+                      >
+                        Quitar foto
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

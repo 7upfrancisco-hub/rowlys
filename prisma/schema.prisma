@@ -172,5 +172,6 @@ model Settings {
   pickupEnabled   Boolean  @default(true)
   closedTitle     String?
   closedMessage   String?
+  closedImageUrl  String?
   updatedAt       DateTime @updatedAt
 }

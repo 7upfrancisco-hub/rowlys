@@ -24,6 +24,7 @@ export async function GET() {
     pickupEnabled: true,
     closedTitle: null,
     closedMessage: null,
+    closedImageUrl: null,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -41,6 +42,7 @@ const settingsSchema = z.object({
   pickupEnabled: z.boolean().optional(),
   closedTitle: z.string().trim().optional(),
   closedMessage: z.string().trim().optional(),
+  closedImageUrl: z.string().trim().nullable().optional(),
 });
 
 export async function PATCH(request: Request) {
