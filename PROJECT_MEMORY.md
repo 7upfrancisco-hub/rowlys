@@ -454,12 +454,133 @@ un WhatsApp avisando "pedido confirmado" + un link de seguimiento. Mismo patrón
   → `5491155667788`, `011 15 3456 7890` → `5491134567890`, y teléfonos basura → `skipped`.
   13 pedidos de prueba borrados de la base.
 - `npx tsc --noEmit` y `npm run build` pasan limpio.
-- **Pendiente**: pushear a GitHub. Para que funcione en real el usuario tiene que: verificar
-  cuenta de Meta Business, dar de alta el número de WhatsApp Business, crear el System User
-  token permanente, crear + aprobar la plantilla `order_confirmed`, y cargar `WHATSAPP_TOKEN`
-  / `WHATSAPP_PHONE_NUMBER_ID` (+ opcionalmente `WHATSAPP_TEMPLATE_*`) en Vercel. Nada de
+- **Pusheado a GitHub** (2026-08-28, commits `9950efe` + `1533811`, `origin/main` al día,
+  auto-deploy de Vercel OK). En producción `WHATSAPP_MOCK`/`WHATSAPP_TOKEN` no están seteados
+  ⇒ `isWhatsAppEnabled()` da false ⇒ confirmar un pedido no manda nada (silencioso, correcto).
+- **Pendiente para que funcione en real**: el usuario tiene que verificar cuenta de Meta
+  Business, dar de alta el número de WhatsApp Business, crear el System User token permanente,
+  crear + aprobar la plantilla `order_confirmed`, y cargar `WHATSAPP_TOKEN` /
+  `WHATSAPP_PHONE_NUMBER_ID` (+ opcionalmente `WHATSAPP_TEMPLATE_*`) en Vercel. Nada de
   código. Idealmente también `NEXT_PUBLIC_BASE_URL=https://rowlys.vercel.app` en Vercel (o
   confiar en `VERCEL_PROJECT_PRODUCTION_URL`).
+
+## Fase 5b: botón manual de WhatsApp en `/comanda` (completa, 2026-08-28)
+
+Tras arrancar el alta de Meta, el usuario se dio cuenta de un problema de fondo: un número
+puesto en la Cloud API **deja de funcionar en la app de WhatsApp del celular** (Meta no deja
+el mismo número en los dos lados). Para un local chico que quiere seguir atendiendo a los
+clientes desde el WhatsApp de siempre, la automatización por API obliga a un segundo número o
+a un inbox de terceros. Decisión del usuario: por ahora, **botón manual** tipo "click to
+chat" (lo mismo que hace RestoSimple), que no necesita cuenta de Meta, token ni plantilla.
+
+- **`src/lib/phone.ts`** (nuevo, puro, sin deps — sirve en server y cliente): se **mudó acá
+  `normalizeArPhone`** desde `notifications/whatsapp.ts` (que ahora lo re-exporta por
+  compatibilidad). Nuevo `whatsappLink(phone, text)` → `https://wa.me/<549…>?text=<enc>` o
+  `null` si el teléfono no normaliza.
+- **`/comanda` (`comanda-client.tsx`)**: cada tarjeta tiene un botón verde WhatsApp
+  (`#25D366`, con logo SVG inline) que abre `wa.me` en una pestaña nueva con el mensaje
+  pre-cargado al número **del cliente de ese pedido** (no un número fijo). El staff solo
+  aprieta enviar en WhatsApp. Si el teléfono no normaliza, el botón queda deshabilitado con
+  tooltip. El mensaje se adapta al estado del pedido (`whatsappMessage()`:
+  PENDING/CONFIRMED/IN_PROGRESS/READY, y READY distingue delivery/pickup) y siempre incluye
+  `"<origin>/pedido/<id>"` como link de seguimiento (origin tomado de `window.location` en el
+  click, no en render, para no romper SSR del client component).
+- El nombre del local para el mensaje sale de `GET /api/settings` (público, ya existía),
+  fetch en un `useEffect`; fallback `"Rowlys"`.
+- **La capa automática de Fase 5 sigue intacta y dormida** (sin env vars,
+  `isWhatsAppEnabled()` = false ⇒ no manda nada). El botón manual es puramente aditivo, hoy no
+  hay riesgo de doble envío. Si el usuario más adelante configura la Cloud API con un segundo
+  número, habría que decidir si el botón manual y el aviso automático coexisten.
+- `npx tsc --noEmit` y `npm run build` pasan limpio (`/comanda` ~3.4 kB → ~5.1 kB). **No
+  probado en navegador** (mismo aviso que todas las fases). **Falta pushear a GitHub** (token
+  nuevo del usuario).
+
+### Notas de entorno local (de la sesión del 2026-08-29/31)
+
+- En PowerShell hay que usar **`npm.cmd` / `npx.cmd`**, no `npm`/`npx` (política de ejecución
+  de scripts de Windows). El dev server toma el puerto **3000**, y salta a **3001** si el 3000
+  está ocupado (pasa si quedan dos servers levantados).
+- **Credenciales del panel en LOCAL**: se agregaron a **`.env.local`** (que pisa al `.env`,
+  que tenía `admin` + un hash que nadie anotó): `ADMIN_USERNAME="EVO"` /
+  `ADMIN_PASSWORD_HASH` = hash de `evolution27` **con los `$` escapados `\$`** (gotcha de
+  `dotenv-expand`). Login local OK. Los `AUTH_SECRET` sí difieren entre local y prod.
+- **Local pega contra la MISMA base de Neon que prod** (`DATABASE_URL` en `.env`) — un pedido
+  creado en local aparece en la comanda de prod y viceversa.
+- El "bloqueo" del checkout del 2026-08-29 era **falsa alarma**: el 2026-08-31 se confirmó un
+  pedido nuevo en la base (creado por el usuario), así que el checkout funciona; aquella vez
+  fue un formulario sin completar.
+
+## Fase 6: subida de imágenes de productos (completa en código, 2026-08-31)
+
+Antes la imagen del producto era solo un campo de texto (`imageUrl` con una URL pegada a
+mano). Ahora el admin sube el archivo. Sin cambios de schema (`Product.imageUrl` sigue igual).
+
+- **Storage: Vercel Blob** (`@vercel/blob`, nuevo dep `^2.8.0`). `src/lib/blob.ts`
+  (server-only): `storeProductImage(file, name)` sube a Blob si hay
+  `BLOB_READ_WRITE_TOKEN` en el entorno; **sin token, fallback dev** que escribe en
+  `public/uploads/` y devuelve una ruta relativa `/uploads/<archivo>` (solo sirve en dev —
+  en un build de prod `public/` es read-only y Vercel tiene FS efímero, ahí hace falta el
+  token sí o sí). `public/uploads` está gitignoreado. `MAX_IMAGE_BYTES` = 5 MB.
+- **`POST /api/admin/upload`** (nuevo, `runtime="nodejs"`): recibe `multipart/form-data`
+  (`file` + opcional `name`). Valida que sea `image/*` y ≤ 5 MB. Protegido por `middleware.ts`
+  (matcher `/api/admin/:path*` — verificado: 401 sin cookie). Devuelve `{ url }`.
+- **`product-form.tsx`**: input de archivo + `downscaleImage()` que en el navegador redimensiona
+  a máx. 1200 px de lado y re-encodea a **WebP** (canvas `toBlob`) antes de subir — los
+  archivos quedan en ~100-300 KB, así nunca chocan con el límite de body de las funciones
+  serverless (4.5 MB en Vercel) y la carta carga liviana. Preview de la imagen actual, botón
+  "Cambiar/Quitar", y **se dejó también el input de URL manual** ("o pegá una URL") como
+  alternativa para imágenes externas.
+- **Validación `imageUrl` relajada** en `POST /api/admin/products` y `PATCH .../[id]`: antes
+  era `z.string().url()` (rechazaba la ruta relativa `/uploads/...` del fallback). Ahora acepta
+  `http(s)://...` **o** una ruta que empiece con `/`.
+- `.env.example`: documentado `BLOB_READ_WRITE_TOKEN`.
+- **Verificado end-to-end contra Neon** (dev server + curl, fallback local sin token): upload
+  sin cookie → 401; con cookie → 201 `{url:"/uploads/..."}`, archivo escrito y servido por
+  Next en `/uploads/...` con `content-type` correcto; no-imagen → 400; crear producto con
+  `imageUrl` relativa → 201; con basura → 400; `PATCH {imageUrl:null}` limpia el campo.
+  Producto y archivo de prueba borrados.
+- `npx tsc --noEmit` y `npm run build` pasan limpio (`/admin/productos` 2.98 kB → 3.81 kB;
+  ruta `/api/admin/upload` registrada).
+- **Pendiente**: no se probó en navegador (el resize por canvas solo corre ahí — el curl subió
+  el archivo crudo). **Falta pushear** (token nuevo). **Para prod**: crear un Blob store en el
+  dashboard de Vercel (Storage → Blob) y vincularlo al proyecto `rowlys` — eso inyecta
+  `BLOB_READ_WRITE_TOKEN` solo; sin eso, subir una imagen en prod va a dar 502. No hace falta
+  tocar `next.config` (la carta usa `<img>` plano, no `next/image`).
+- **Gap conocido**: no se borra el blob viejo al reemplazar o borrar un producto (quedan
+  huérfanos). Storage es barato; se puede sumar `del()` de `@vercel/blob` más adelante.
+
+## Fase 7: branding del storefront — tema oscuro + rojo (completa en código, 2026-08-31)
+
+El storefront real de RestoSimple ("Rowly'S") es **oscuro + rojo**; nuestra build era clara +
+naranja. Se re-themeó **solo el storefront del cliente** — admin y comanda siguen claras +
+naranja (`brand`). Sin cambios de schema ni de API.
+
+- **Sistema de theming** (para no reescribir clase por clase): `tailwind.config.ts` suma una
+  paleta `store` (rojo, 50-900) y **tokens semánticos con CSS vars**: `canvas`, `surface`,
+  `surface-2`, `line`, `fg`, `muted` → `rgb(var(--s-*) / <alpha-value>)`. `globals.css` los
+  define claros en `:root` y **oscuros dentro de `.storefront`** (esa clase también pone
+  `background-color`/`color`/`min-height` y un reset de color para `input/textarea/select` +
+  placeholders). El `brand` naranja queda intacto para el panel.
+- **Páginas envueltas en `<div className="storefront">` y re-themeadas**: `src/app/page.tsx`
+  (home), `src/app/menu/menu-client.tsx` (carta + tarjetas + overlay de adicionales +
+  carrito), `src/app/checkout/checkout-client.tsx`, `src/app/pedido/[id]/pedido-client.tsx`.
+  Reemplazos: `bg-white`→`bg-surface`, `bg-neutral-50/100`→`bg-canvas`(vía `.storefront`)/`bg-surface-2`,
+  `text-neutral-900/700`→`text-fg`, `text-neutral-600/500/400`→`text-muted`,
+  `border-neutral-*`→`border-line`, `brand-*`→`store-*` (acento de texto → `store-400`, más
+  claro sobre fondo oscuro), overlays `bg-black/40`→`bg-black/60`, `text-red-600`→`text-red-400`.
+  `/login` NO se tocó (es staff, no cliente).
+- **Selector de código de país** en el teléfono del checkout: `<select>` (🇦🇷 +54 por
+  defecto; UY/BR/CL/PY/BO/PE/ES/US) al lado del input. El teléfono ahora se guarda como
+  `"+54 <número>"` — `normalizeArPhone` ya maneja el prefijo `+54`, así que el botón de
+  WhatsApp de Fase 5b sigue funcionando. `POST /api/orders` valida `customerPhone` como
+  string libre, no le afecta.
+- Verificado: `tsc` y `npm run build` limpios; el CSS compilado tiene la regla `.storefront`
+  con las vars oscuras y todas las utilidades `store-*`/`surface`/`line`/`fg`/`muted` (incl.
+  variantes `hover:`/`focus:`/`/15`/`/40`); `/`, `/menu`, `/checkout` responden 200 con la
+  clase `storefront` en el HTML. **No se probó visualmente en navegador** (sin browser en la
+  sesión). **Falta pushear** (token nuevo).
+- Pendiente relacionado (no hecho): logo real de "Rowly'S", banner de la carta, datos del
+  local en un sidebar/footer (dirección, horarios, redes) como el storefront de referencia.
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
@@ -518,3 +639,10 @@ nuevas o que refinan lo ya sabido:
 - **2026-08-27** — Fase 4 (Mercado Pago) pusheada a GitHub (commit `bd76c2f`, push corrido por el usuario). `origin/main` al día.
 - **2026-08-27** — Hardening de Fase 4 tras detectar que `isMpMock()` daba true sin token → en prod el checkout MP mandaba a la página simuladora y un cliente podía marcarse pagado. Se corrigió: mock solo con `MP_MOCK === "true"` explícito, el pill de MP solo aparece si `mpEnabled` (nuevo campo de `/api/settings`), y las ramas mock del webhook/firma se saltean si no hay mock. Probado prod-like (webhook `MOCK-...` sin firma → 401, `/mock/mp` → 404) + re-probado el flujo mock con `MP_MOCK=true`. Pusheado a GitHub (commit `29a281e`, `origin/main` al día).
 - **2026-08-28** — El usuario quiso entrar al panel desplegado y no tenía credenciales (las de la Fase 1 se perdieron; son "Secret", no se leen). Se recrearon `ADMIN_USERNAME=EVO` / `ADMIN_PASSWORD_HASH` (hash de `evolution27`) en Vercel Production por CLI (el usuario) + **Redeploy desde el dashboard**. Se perdió ~1h porque el login seguía dando 401: las env vars nuevas no las toma un deployment ya construido, hay que redeployar. Confirmado funcionando por API (`/api/auth/login` → 200). Ver sección "Infra / despliegue" para el detalle y las lecciones (qué puedo leer/no escribir en Vercel, gotcha del `>>` de PowerShell, gotcha del `vercel env add`).
+- **2026-08-28** — Recorrido completo del flujo probado en producción por el usuario (config del local → pedido del cliente con adicionales → comanda moviendo estados → seguimiento actualizándose). Todo OK. Quedan 2 pedidos de prueba del usuario en la base de prod (Francisco Teglia, DELIVERED).
+- **2026-08-28** — Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 19 pág., gitignoreado). Extraídas y revisadas. Hallazgos volcados en la sección "Segunda tanda de capturas": storefront oscuro+rojo, descuento por método de pago (que el local usa en serio), envío por zonas de mapa, módulos fuera de v1 (reportes, cajas, repartidores, cupones).
+- **2026-08-28** — Usuario eligió WhatsApp automático como siguiente (Fase 5). Implementado: aviso por WhatsApp (Meta Cloud API, plantilla pre-aprobada) al confirmar el pedido, con link de seguimiento, disparado en la transición a CONFIRMED en `PATCH /api/admin/orders/[id]`, con modo mock y feedback en `/comanda`. Se agregó `src/lib/base-url.ts` compartido (arregla back_urls de MP en prod). Sin cambios de schema. Probado end-to-end contra Neon en mock. Ver sección "Fase 5". Pusheado (`9950efe` + `1533811`), `origin/main` al día, auto-deploy OK. Pendiente: alta de Meta Business + plantilla + credenciales en Vercel (sin código).
+- **2026-08-28** — Empezando el alta de Meta (pantalla "Conectar en WhatsApp": número de prueba `+1 555 654-4174`, Phone Number ID `1337670366086452`, WABA ID `1926520254991945`). El usuario preguntó si podía tener el mismo número en la API y en la app de WhatsApp a la vez → NO (Meta lo prohíbe). Ante eso eligió sumar un **botón manual de WhatsApp** en cada tarjeta de `/comanda` (Fase 5b): abre `wa.me` con el mensaje + link de seguimiento pre-cargados al teléfono del cliente de ese pedido, sin cuenta/token/plantilla de Meta. Se creó `src/lib/phone.ts` (se mudó `normalizeArPhone` ahí + `whatsappLink()`). La capa automática de Fase 5 queda intacta y dormida. `tsc`/`build` OK, sin probar en navegador. Falta pushear (token nuevo). Ver sección "Fase 5b".
+- **2026-08-29** — Sesión de prueba local de la Fase 5b, quedó a medias. Se levantó el dev server (`npm.cmd run dev`, puerto 3000/3001) y se agregaron credenciales de panel para local en `.env.local` (`EVO`/`evolution27`, hash con `$` escapados). Login local OK. Se creyó que el checkout no guardaba pedidos — resultó ser falsa alarma (formulario incompleto).
+- **2026-08-31** — Se confirmó que el checkout funciona (pedido nuevo en la base). Fase 5b (botón WhatsApp) sigue sin commitear/pushear. El usuario eligió como próxima feature **subida de imágenes de productos**: implementada la Fase 6 con Vercel Blob (`@vercel/blob`) + `POST /api/admin/upload` + resize a WebP en el navegador en `product-form.tsx`, con fallback a `public/uploads/` en dev sin token. Validación de `imageUrl` relajada para aceptar rutas relativas. Verificado end-to-end por curl contra Neon. `tsc`/`build` OK. Ver sección "Fase 6". Falta: probar en navegador, crear el Blob store en Vercel para prod, y pushear (Fase 5b + Fase 6, token nuevo). Se limpió un archivo basura del repo (`{console.log(JSON.stringify(o`).
+- **2026-08-31** — El usuario eligió **branding oscuro + rojo del storefront** como siguiente (Fase 7). Implementado: sistema de theming con tokens semánticos (CSS vars) + paleta `store` roja en `tailwind.config.ts`, clase `.storefront` con la paleta oscura, y las 4 páginas del cliente (home, `/menu`, `/checkout`, `/pedido/[id]`) re-themeadas. Admin/comanda intactas. Sumado selector de código de país (+54 default) en el teléfono del checkout — el teléfono ahora se guarda como `"+54 <número>"`. `tsc`/`build` limpios, CSS compilado verificado. Ver sección "Fase 7". Falta: probar en navegador y pushear (ahora van juntas Fase 5b + 6 + 7, token nuevo). El usuario prefiere acumular features y hacer todo el deploy (push + Blob store + Meta) junto al final.
