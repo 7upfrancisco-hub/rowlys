@@ -163,10 +163,14 @@ model Settings {
   storePhone    String?
   storeAddress  String?
   bankAlias     String?
-  // Estado del local. Cuando storeOpen=false, el cliente ve primero una
-  // pantalla de "cerrado" (con closedTitle/closedMessage) antes del menu.
-  storeOpen     Boolean  @default(true)
-  closedTitle   String?
-  closedMessage String?
-  updatedAt     DateTime @updatedAt
+  // Estado del local. storeOpen=false => el cliente puede VER el menu pero no
+  // hacer pedidos (banner con closedTitle/closedMessage). deliveryEnabled /
+  // pickupEnabled cierran un canal puntual sin cerrar todo el local. Todo se
+  // togglea desde el header de /comanda.
+  storeOpen       Boolean  @default(true)
+  deliveryEnabled Boolean  @default(true)
+  pickupEnabled   Boolean  @default(true)
+  closedTitle     String?
+  closedMessage   String?
+  updatedAt       DateTime @updatedAt
 }

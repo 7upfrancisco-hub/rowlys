@@ -15,6 +15,10 @@ interface PublicSettings {
   deliveryFee: number;
   bankAlias: string | null;
   mpEnabled: boolean;
+  storeOpen: boolean;
+  deliveryEnabled: boolean;
+  pickupEnabled: boolean;
+  closedTitle: string | null;
 }
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "MP";
@@ -66,10 +70,29 @@ export default function CheckoutClient() {
   const deliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
   const total = itemsSubtotal + deliveryFee;
 
+  // Pedir queda bloqueado si el local está cerrado o el canal elegido pausado.
+  const storeClosed = !!settings && !settings.storeOpen;
+  const channelPaused =
+    !storeClosed &&
+    !!settings &&
+    (orderType === "DELIVERY"
+      ? !settings.deliveryEnabled
+      : !settings.pickupEnabled);
+  const orderBlocked = storeClosed || channelPaused;
+  const orderBlockedReason = storeClosed
+    ? settings?.closedTitle || "El local está cerrado en este momento"
+    : orderType === "DELIVERY"
+      ? "El envío a domicilio está pausado en este momento"
+      : "El retiro en el local está pausado en este momento";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
+    if (orderBlocked) {
+      setError(`${orderBlockedReason}. No se pueden tomar pedidos.`);
+      return;
+    }
     if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
       setError("Faltan completar nombre, apellido o teléfono.");
       return;
@@ -163,6 +186,17 @@ export default function CheckoutClient() {
             <> Retirá tu pedido en {settings.storeName}, {settings.storeAddress}.</>
           )}
         </p>
+
+        {orderBlocked && (
+          <div className="mb-6 rounded-2xl border border-store-500/30 bg-store-500/10 p-4">
+            <p className="font-semibold text-accent">{orderBlockedReason}</p>
+            <p className="mt-1 text-sm text-muted">
+              {settings?.closedTitle && storeClosed
+                ? "Podés ver el menú, pero no se pueden tomar pedidos ahora."
+                : "Probá con el otro canal o volvé más tarde."}
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <section className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-6 shadow-sm">
@@ -321,14 +355,16 @@ export default function CheckoutClient() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || orderBlocked}
             className="rounded-lg bg-store-600 px-4 py-4 font-semibold text-white transition hover:bg-store-500 disabled:opacity-60"
           >
-            {submitting
-              ? paymentMethod === "MP"
-                ? "Redirigiendo a Mercado Pago..."
-                : "Enviando..."
-              : `Pagar ${formatCurrency(total)} (${PAYMENT_METHOD_LABELS[paymentMethod]})`}
+            {orderBlocked
+              ? "Pedidos pausados"
+              : submitting
+                ? paymentMethod === "MP"
+                  ? "Redirigiendo a Mercado Pago..."
+                  : "Enviando..."
+                : `Pagar ${formatCurrency(total)} (${PAYMENT_METHOD_LABELS[paymentMethod]})`}
           </button>
         </form>
       </main>

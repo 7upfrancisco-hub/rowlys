@@ -83,6 +83,35 @@ export async function POST(request: Request) {
   }
   const body = parsed.data;
 
+  // Estado del local: se puede ver el menú siempre, pero no pedir si el local
+  // está cerrado o el canal elegido está deshabilitado. Se valida acá aunque
+  // el cliente ya lo bloquee en la UI (nunca confiar en el front).
+  const settings = await prisma.settings.findUnique({
+    where: { id: "singleton" },
+  });
+  if (settings && !settings.storeOpen) {
+    return NextResponse.json(
+      { error: "El local está cerrado en este momento. No se pueden tomar pedidos." },
+      { status: 409 }
+    );
+  }
+  if (
+    settings &&
+    body.orderType === "DELIVERY" &&
+    !settings.deliveryEnabled
+  ) {
+    return NextResponse.json(
+      { error: "El envío a domicilio está pausado en este momento." },
+      { status: 409 }
+    );
+  }
+  if (settings && body.orderType === "PICKUP" && !settings.pickupEnabled) {
+    return NextResponse.json(
+      { error: "El retiro en el local está pausado en este momento." },
+      { status: 409 }
+    );
+  }
+
   const productIds = [...new Set(body.items.map((i) => i.productId))];
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
@@ -154,9 +183,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const settings = await prisma.settings.findUnique({
-    where: { id: "singleton" },
-  });
   const deliveryFee =
     body.orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
 

@@ -20,19 +20,25 @@ export async function GET() {
     storeAddress: null,
     bankAlias: null,
     storeOpen: true,
+    deliveryEnabled: true,
+    pickupEnabled: true,
     closedTitle: null,
     closedMessage: null,
     updatedAt: new Date().toISOString(),
   });
 }
 
+// Todos los campos son opcionales: el form de /admin/configuracion los manda
+// todos, pero el header de /comanda hace PATCH parciales de un solo toggle.
 const settingsSchema = z.object({
-  storeName: z.string().trim().min(1),
+  storeName: z.string().trim().min(1).optional(),
   storePhone: z.string().trim().optional(),
   storeAddress: z.string().trim().optional(),
   bankAlias: z.string().trim().optional(),
-  deliveryFee: z.number().min(0),
-  storeOpen: z.boolean().default(true),
+  deliveryFee: z.number().min(0).optional(),
+  storeOpen: z.boolean().optional(),
+  deliveryEnabled: z.boolean().optional(),
+  pickupEnabled: z.boolean().optional(),
   closedTitle: z.string().trim().optional(),
   closedMessage: z.string().trim().optional(),
 });

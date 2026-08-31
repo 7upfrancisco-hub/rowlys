@@ -20,6 +20,8 @@ export async function GET() {
     deliveryFee: 0,
     bankAlias: null,
     storeOpen: true,
+    deliveryEnabled: true,
+    pickupEnabled: true,
     closedTitle: null,
     closedMessage: null,
   };
@@ -31,6 +33,8 @@ export async function GET() {
     deliveryFee: safe.deliveryFee,
     bankAlias: safe.bankAlias,
     storeOpen: safe.storeOpen,
+    deliveryEnabled: safe.deliveryEnabled,
+    pickupEnabled: safe.pickupEnabled,
     closedTitle: safe.closedTitle,
     closedMessage: safe.closedMessage,
     // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o

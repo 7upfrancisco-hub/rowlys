@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
-import StoreClosedScreen from "@/components/StoreClosedScreen";
 import { useCartStore, cartLineKey, cartSubtotal } from "@/lib/cart-store";
 import {
   formatCurrency,
@@ -17,8 +16,15 @@ import {
 interface StoreInfo {
   storeName: string;
   storeOpen: boolean;
+  deliveryEnabled: boolean;
+  pickupEnabled: boolean;
   closedTitle: string | null;
   closedMessage: string | null;
+}
+
+function channelEnabled(info: StoreInfo | null, type: OrderType): boolean {
+  if (!info) return true;
+  return type === "DELIVERY" ? info.deliveryEnabled : info.pickupEnabled;
 }
 
 export default function MenuClient() {
@@ -29,22 +35,12 @@ export default function MenuClient() {
   const [detailProduct, setDetailProduct] = useState<ProductDTO | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null);
-  // Bypass del cartel de "cerrado": dura la sesión del navegador (el cliente
-  // ya lo vio una vez, no se lo repetimos al navegar).
-  const [bypassClosed, setBypassClosed] = useState(false);
 
   const orderType = useCartStore((s) => s.orderType);
   const setOrderType = useCartStore((s) => s.setOrderType);
   const lines = useCartStore((s) => s.lines);
 
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem("rowlys-store-bypass") === "1") {
-        setBypassClosed(true);
-      }
-    } catch {
-      /* storage bloqueado: se muestra el cartel siempre, no rompe */
-    }
     apiFetch<CategoryDTO[]>("/api/menu")
       .then((data) => {
         setCategories(data);
@@ -56,31 +52,19 @@ export default function MenuClient() {
       .catch(() => {});
   }, []);
 
-  function continueToMenu() {
-    try {
-      sessionStorage.setItem("rowlys-store-bypass", "1");
-    } catch {
-      /* ignore */
-    }
-    setBypassClosed(true);
-  }
-
   const activeCategory = categories?.find((c) => c.id === activeCategoryId) ?? null;
   const subtotal = useMemo(() => cartSubtotal(lines), [lines]);
 
-  if (storeInfo && !storeInfo.storeOpen && !bypassClosed) {
-    return (
-      <div className="storefront min-h-screen">
-        <ThemeToggle />
-        <StoreClosedScreen
-          storeName={storeInfo.storeName}
-          title={storeInfo.closedTitle || "Estamos cerrados"}
-          message={storeInfo.closedMessage || ""}
-          onContinue={continueToMenu}
-        />
-      </div>
-    );
-  }
+  // El menú se ve siempre. Lo que se bloquea es pedir: si el local está
+  // cerrado, o si el canal elegido está pausado.
+  const storeClosed = !!storeInfo && !storeInfo.storeOpen;
+  const channelPaused = !storeClosed && !channelEnabled(storeInfo, orderType);
+  const orderBlocked = storeClosed || channelPaused;
+  const orderBlockedReason = storeClosed
+    ? storeInfo?.closedTitle || "El local está cerrado"
+    : orderType === "DELIVERY"
+      ? "El envío a domicilio está pausado"
+      : "El retiro en el local está pausado";
 
   return (
     <div className="storefront min-h-screen pb-24">
@@ -89,22 +73,39 @@ export default function MenuClient() {
         <h1 className="text-xl font-bold text-accent">Rowlys</h1>
 
         <div className="mt-3 flex gap-1">
-          {(Object.keys(ORDER_TYPE_LABELS) as OrderType[]).map((type) => (
-            <button
-              key={type}
-              onClick={() => setOrderType(type)}
-              className={
-                "rounded-lg px-3 py-2 text-sm font-medium transition " +
-                (orderType === type
-                  ? "bg-store-600 text-white"
-                  : "border border-line text-muted")
-              }
-            >
-              {ORDER_TYPE_LABELS[type]}
-            </button>
-          ))}
+          {(Object.keys(ORDER_TYPE_LABELS) as OrderType[]).map((type) => {
+            const enabled = channelEnabled(storeInfo, type);
+            return (
+              <button
+                key={type}
+                onClick={() => setOrderType(type)}
+                disabled={!enabled && !storeClosed}
+                className={
+                  "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-40 " +
+                  (orderType === type
+                    ? "bg-store-600 text-white"
+                    : "border border-line text-muted")
+                }
+              >
+                {ORDER_TYPE_LABELS[type]}
+                {!enabled && !storeClosed ? " (pausado)" : ""}
+              </button>
+            );
+          })}
         </div>
       </header>
+
+      {storeClosed && (
+        <div className="border-b border-line bg-store-500/10 px-6 py-3">
+          <p className="text-sm font-semibold text-accent">
+            {storeInfo?.closedTitle || "Estamos cerrados"}
+          </p>
+          <p className="text-sm text-muted">
+            {storeInfo?.closedMessage ||
+              "Podés ver el menú, pero los pedidos están pausados por ahora."}
+          </p>
+        </div>
+      )}
 
       {error && <p className="px-6 py-4 text-sm text-red-500">{error}</p>}
 
@@ -159,6 +160,8 @@ export default function MenuClient() {
 
       {cartOpen && (
         <CartSheet
+          orderBlocked={orderBlocked}
+          orderBlockedReason={orderBlockedReason}
           onClose={() => setCartOpen(false)}
           onCheckout={() => router.push("/checkout")}
         />
@@ -398,9 +401,13 @@ function ProductDetailOverlay({
 }
 
 function CartSheet({
+  orderBlocked,
+  orderBlockedReason,
   onClose,
   onCheckout,
 }: {
+  orderBlocked: boolean;
+  orderBlockedReason: string;
   onClose: () => void;
   onCheckout: () => void;
 }) {
@@ -479,9 +486,15 @@ function CartSheet({
           <span>{formatCurrency(subtotal)}</span>
         </div>
 
+        {orderBlocked && (
+          <p className="mt-3 rounded-lg bg-store-500/10 px-3 py-2 text-sm text-accent">
+            {orderBlockedReason}. No se pueden tomar pedidos ahora.
+          </p>
+        )}
+
         <button
           onClick={onCheckout}
-          disabled={lines.length === 0}
+          disabled={lines.length === 0 || orderBlocked}
           className="mt-4 w-full rounded-lg bg-store-600 px-4 py-3 font-semibold text-white transition hover:bg-store-500 disabled:opacity-40"
         >
           Continuar al pago

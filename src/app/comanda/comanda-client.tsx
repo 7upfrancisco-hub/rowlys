@@ -84,9 +84,50 @@ function relativeTime(iso: string, now: number): string {
   return m === 0 ? `hace ${h} h` : `hace ${h} h ${m} min`;
 }
 
+function StatusToggle({
+  label,
+  on,
+  busy,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  busy: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={busy || disabled}
+      className={
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1 font-medium transition disabled:opacity-50 " +
+        (on
+          ? "border-green-300 bg-green-50 text-green-700"
+          : "border-neutral-300 bg-neutral-100 text-neutral-500")
+      }
+    >
+      <span
+        className={
+          "h-2 w-2 rounded-full " + (on ? "bg-green-500" : "bg-neutral-400")
+        }
+      />
+      {label}
+    </button>
+  );
+}
+
 export default function ComandaClient() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [storeName, setStoreName] = useState("Rowlys");
+  const [storeStatus, setStoreStatus] = useState<{
+    storeOpen: boolean;
+    deliveryEnabled: boolean;
+    pickupEnabled: boolean;
+  } | null>(null);
+  const [statusBusy, setStatusBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -141,15 +182,45 @@ export default function ComandaClient() {
     return () => clearInterval(id);
   }, []);
 
-  // Nombre del local para el mensaje de WhatsApp (endpoint público, igual que
-  // el checkout). Si falla, queda el fallback "Rowlys".
+  // Nombre + estado del local (endpoint público). El nombre alimenta el
+  // mensaje de WhatsApp; el estado, los toggles de canal del header.
   useEffect(() => {
-    apiFetch<{ storeName?: string }>("/api/settings")
+    apiFetch<{
+      storeName?: string;
+      storeOpen: boolean;
+      deliveryEnabled: boolean;
+      pickupEnabled: boolean;
+    }>("/api/settings")
       .then((s) => {
         if (s?.storeName) setStoreName(s.storeName);
+        setStoreStatus({
+          storeOpen: s.storeOpen,
+          deliveryEnabled: s.deliveryEnabled,
+          pickupEnabled: s.pickupEnabled,
+        });
       })
       .catch(() => {});
   }, []);
+
+  async function toggleStoreFlag(
+    field: "storeOpen" | "deliveryEnabled" | "pickupEnabled"
+  ) {
+    if (!storeStatus) return;
+    const next = { ...storeStatus, [field]: !storeStatus[field] };
+    setStoreStatus(next); // optimista
+    setStatusBusy(field);
+    try {
+      await apiFetch("/api/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ [field]: next[field] }),
+      });
+    } catch (err) {
+      setStoreStatus(storeStatus); // revierte
+      showNotice({ kind: "warn", text: (err as ApiError).message });
+    } finally {
+      setStatusBusy(null);
+    }
+  }
 
   async function mutate(
     id: string,
@@ -242,6 +313,40 @@ export default function ComandaClient() {
           </div>
         </div>
       </header>
+
+      {storeStatus && (
+        <div className="border-b border-neutral-200 bg-white">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-6 py-3 text-sm">
+            <span className="font-medium text-neutral-500">Estado del local:</span>
+            <StatusToggle
+              label={storeStatus.storeOpen ? "Abierto" : "Cerrado"}
+              on={storeStatus.storeOpen}
+              busy={statusBusy === "storeOpen"}
+              onToggle={() => toggleStoreFlag("storeOpen")}
+            />
+            <span className="mx-1 h-4 w-px bg-neutral-200" />
+            <StatusToggle
+              label="Delivery"
+              on={storeStatus.deliveryEnabled}
+              busy={statusBusy === "deliveryEnabled"}
+              disabled={!storeStatus.storeOpen}
+              onToggle={() => toggleStoreFlag("deliveryEnabled")}
+            />
+            <StatusToggle
+              label="Takeaway"
+              on={storeStatus.pickupEnabled}
+              busy={statusBusy === "pickupEnabled"}
+              disabled={!storeStatus.storeOpen}
+              onToggle={() => toggleStoreFlag("pickupEnabled")}
+            />
+            {!storeStatus.storeOpen && (
+              <span className="text-xs text-neutral-400">
+                Con el local cerrado, el cliente ve el menú pero no puede pedir.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <main className="mx-auto max-w-7xl px-6 py-6">
         {error && (
