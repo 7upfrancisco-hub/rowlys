@@ -5,12 +5,20 @@ import { prisma, isForeignKeyViolation } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+// URL absoluta externa o ruta subida por `/api/admin/upload` (Blob o `/uploads/...`).
+const imageUrlSchema = z
+  .string()
+  .trim()
+  .refine((v) => /^https?:\/\//.test(v) || v.startsWith("/"), {
+    message: "La imagen debe ser una URL válida o una imagen subida.",
+  });
+
 const updateProductSchema = z.object({
   name: z.string().trim().min(1).optional(),
   description: z.string().trim().optional(),
   price: z.number().positive().optional(),
   discountPrice: z.number().positive().nullable().optional(),
-  imageUrl: z.string().trim().url().nullable().optional(),
+  imageUrl: imageUrlSchema.nullable().optional(),
   categoryId: z.string().optional(),
   available: z.boolean().optional(),
   availableDelivery: z.boolean().optional(),

@@ -14,6 +14,9 @@ prisma/dev.db-journal
 next-env.d.ts
 .claude/settings.local.json
 
+# Imágenes subidas en el fallback de dev (sin Vercel Blob configurado)
+/public/uploads
+
 .vercel
 .env*
 

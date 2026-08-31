@@ -4,6 +4,16 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+// Acepta una URL absoluta (imagen externa pegada a mano) o una ruta subida por
+// `/api/admin/upload` (absoluta de Vercel Blob, o relativa `/uploads/...` en el
+// fallback de dev).
+const imageUrlSchema = z
+  .string()
+  .trim()
+  .refine((v) => /^https?:\/\//.test(v) || v.startsWith("/"), {
+    message: "La imagen debe ser una URL válida o una imagen subida.",
+  });
+
 export async function GET() {
   const products = await prisma.product.findMany({
     orderBy: { name: "asc" },
@@ -33,7 +43,7 @@ const productSchema = z
     description: z.string().trim().optional(),
     price: z.number().positive(),
     discountPrice: z.number().positive().optional(),
-    imageUrl: z.string().trim().url().optional(),
+    imageUrl: imageUrlSchema.optional(),
     categoryId: z.string(),
     available: z.boolean().default(true),
     availableDelivery: z.boolean().default(true),

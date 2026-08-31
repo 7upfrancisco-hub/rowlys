@@ -9,6 +9,47 @@ export interface AdminCategory {
   name: string;
 }
 
+// Achica la imagen en el navegador antes de subirla: máximo `maxDim` px de lado
+// y re-encodeada a WebP. Deja los archivos en ~100-300 KB, así nunca choca con
+// el límite de body de las funciones serverless y la carta carga liviana.
+async function downscaleImage(
+  file: File,
+  maxDim = 1200,
+  quality = 0.82
+): Promise<Blob> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error("No se pudo leer el archivo."));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("El archivo no es una imagen válida."));
+    i.src = dataUrl;
+  });
+
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return file; // sin canvas: subimos el original tal cual
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const blob = await new Promise<Blob | null>((res) =>
+    canvas.toBlob(res, "image/webp", quality)
+  );
+  return blob ?? file;
+}
+
 export interface AdminProduct {
   id: string;
   name: string;
@@ -60,6 +101,31 @@ export default function ProductForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo
+    if (!file) return;
+    setUploadErr(null);
+    setUploading(true);
+    try {
+      const resized = await downscaleImage(file);
+      const baseName = file.name.replace(/\.[^.]+$/, "") || "imagen";
+      const fd = new FormData();
+      fd.append("file", resized, `${baseName}.webp`);
+      fd.append("name", file.name);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo subir la imagen.");
+      setImageUrl(data.url as string);
+    } catch (err) {
+      setUploadErr((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function toggleGroup(groupId: string) {
     setSelectedGroupIds((prev) =>
@@ -159,7 +225,7 @@ export default function ProductForm({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-neutral-700">
             Precio
@@ -185,16 +251,59 @@ export default function ProductForm({
             className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-neutral-700">
-            Imagen (URL)
-          </label>
-          <input
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://..."
-            className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
-          />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-700">Imagen</label>
+        <div className="flex items-start gap-4">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt=""
+              className="h-24 w-24 shrink-0 rounded-lg border border-neutral-200 object-cover"
+            />
+          ) : (
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 text-center text-xs text-neutral-400">
+              Sin imagen
+            </div>
+          )}
+          <div className="flex flex-1 flex-col gap-2">
+            <label
+              className={
+                "inline-flex w-fit cursor-pointer items-center rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 " +
+                (uploading ? "pointer-events-none opacity-60" : "")
+              }
+            >
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFile}
+                className="hidden"
+              />
+              {uploading
+                ? "Subiendo..."
+                : imageUrl
+                  ? "Cambiar imagen"
+                  : "Subir imagen"}
+            </label>
+            {imageUrl && (
+              <button
+                type="button"
+                onClick={() => setImageUrl("")}
+                className="w-fit text-xs font-medium text-red-600 hover:underline"
+              >
+                Quitar imagen
+              </button>
+            )}
+            {uploadErr && <p className="text-xs text-red-600">{uploadErr}</p>}
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="o pegá una URL: https://..."
+              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
