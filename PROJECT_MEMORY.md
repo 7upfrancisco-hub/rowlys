@@ -812,7 +812,12 @@ no hace falta para mostrar el pedido histórico — solo estorbaba el FK.
   Postgres y puede volver a hacer falta).
 - `tsc` + `build` limpios. **Orden de deploy obligatorio**: `prisma db push` ANTES del deploy
   del código (si el código sale sin la columna migrada, `DELETE /api/admin/products` tira 500
-  al chocar con el FK viejo). **Falta db push + commitear/pushear.**
+  al chocar con el FK viejo).
+- **Deployada el 2026-09-01** (commit `fdf9833`). El usuario corrió `prisma db push` (verificado:
+  `information_schema` muestra `OrderItem.productId` `is_nullable = YES`), después se pusheó el
+  código y Vercel auto-deployó (`● Ready`, 34s). Prod verificado: `/`, `/menu`, `/api/menu`,
+  `/api/settings` → 200; `/admin/*` → 307. No se probó el borrado real de un producto con
+  pedidos en el navegador (para no tocar datos reales del usuario).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
