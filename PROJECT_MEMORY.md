@@ -742,9 +742,9 @@ RestoSimple. **Sin cambios de schema.**
   listado sin cookie sigue 401. Pedido de prueba borrado de la base.
 - `npx tsc --noEmit` y `npm run build` limpios (`/comanda` 6.16 kB → 8.85 kB, ruta
   `/api/admin/orders` registrada).
-- **Pendiente**: no se probó en navegador (sin browser en la sesión). Falta commitear/pushear.
-  Ideas si se piden: ofrecer MP como medio en la carga manual; arrancar en `PENDING` en vez de
-  `CONFIRMED`; precargar teléfono con `+54`.
+- **Deployada el 2026-09-01** (commit `f152364`, auto-deploy de Vercel OK). No se probó en
+  navegador. Ideas si se piden: ofrecer MP como medio en la carga manual; arrancar en `PENDING`
+  en vez de `CONFIRMED`; precargar teléfono con `+54`.
 
 ## Fase 10: admin de productos/categorías — borrado de categorías + stock (en código, 2026-09-01)
 
@@ -784,7 +784,9 @@ editable", (3) poder **ocultar un producto de la carta cuando no hay stock** des
   + el pedido quedan intactos y reasignados. Todos los datos de prueba (2 categorías, 2
   productos, 1 pedido) borrados de la base.
 - `npx tsc --noEmit` y `npm run build` limpios.
-- **Pendiente**: no se probó en navegador. Falta commitear/pushear.
+- **Deployada el 2026-09-01** (commit `2b2d042`, auto-deploy de Vercel OK — verificado en prod:
+  `/api/menu` sigue OK con las 4 categorías reales, `/admin/*` protegido). No se probó en
+  navegador.
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
