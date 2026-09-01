@@ -672,6 +672,35 @@ El `prisma db push` de las columnas de 8b/8c (`storeOpen`/`deliveryEnabled`/`pic
 ya se corrió (los toggles andan en prod). Recordatorio: el usuario tiene que **revocar el PAT
 de GitHub** (sigue en texto plano en el chat).
 
+## Fase 8e: timbre de pedidos nuevos en `/comanda` (en código, 2026-09-01)
+
+Como el "Desactivar sonidos" de RestoSimple: un botón en el header de `/comanda` que activa/
+desactiva un timbre "ding-dong" cuando entra un pedido nuevo. **Sin cambios de schema ni de
+API** — todo cliente, apoyado en el poll de 5s que ya existía.
+
+- **`src/lib/doorbell.ts`** (nuevo, client-only): sintetiza el timbre con la Web Audio API
+  (dos notas sinusoidales con envolvente de campana, E5→C5) — **sin archivo de audio**, no
+  toca Vercel Blob ni `public/`. `playDoorbell()` y `unlockDoorbell()` (resume del
+  `AudioContext`, que arranca `suspended` por la política de autoplay). Un `AudioContext`
+  compartido en módulo, creado lazy, con fallback `webkitAudioContext`.
+- **`comanda-client.tsx`**:
+  - Estado `soundOn` + `soundOnRef` (espejo para leer dentro de `load` sin recrear el
+    callback) + `seenOrderIds` ref (`Set<string>`, `null` hasta la primera carga).
+  - En `load()`: la **primera** carga solo siembra los ids (no suena al abrir). Después, si
+    `soundOn` y aparece un id nuevo en estado `PENDING` → `playDoorbell()`. Todos los ids del
+    poll se agregan al set siempre. Respeta el `suppressPollUntil` que ya existía (early return
+    antes de la detección).
+  - Preferencia persistida en `localStorage["rowlys-comanda-sound"]`, default **activado**
+    (suena salvo que se haya apagado explícitamente = valor `"0"`). Listener `pointerdown` de
+    una sola vez para destrabar el audio en el primer gesto (el `AudioContext` arranca
+    `suspended`). Al activar el toggle suena una vez de confirmación.
+  - Botón en el header al lado de "Actualizar": 🔔 "Sonido activado" (borde/fondo `brand`) /
+    🔕 "Sonido" (gris). `title` explica el estado.
+- `npx tsc --noEmit` y `npm run build` pasan limpio (`/comanda` 5.1 kB → 6.16 kB).
+- **Pendiente**: no se probó en navegador (sin browser en la sesión — el audio real solo se
+  puede oír ahí). Falta commitear/pushear (junto con 8d, que sigue sin deployar). Idea futura
+  si se pide: elegir el sonido, o repetir el timbre mientras haya pedidos sin aceptar.
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
@@ -738,3 +767,4 @@ nuevas o que refinan lo ya sabido:
 - **2026-08-31** — El usuario eligió **branding oscuro + rojo del storefront** como siguiente (Fase 7). Implementado: sistema de theming con tokens semánticos (CSS vars) + paleta `store` roja en `tailwind.config.ts`, clase `.storefront` con la paleta oscura, y las 4 páginas del cliente (home, `/menu`, `/checkout`, `/pedido/[id]`) re-themeadas. Admin/comanda intactas. Sumado selector de código de país (+54 default) en el teléfono del checkout — el teléfono ahora se guarda como `"+54 <número>"`. `tsc`/`build` limpios, CSS compilado verificado. Ver sección "Fase 7".
 - **2026-08-31** — **Deploy de Fases 5b + 6 + 7.** 4 commits a `main` (`83b16a5`, `009528a`, `7cec633`, `b7f8fe9`). Antes del push se creó el **Blob store de Vercel** para la Fase 6: `npx vercel blob create-store rowlys-images --access public --yes` (id `store_rvuczY5LVTjENEye`, región iad1, linkeado a `rowlys`) → agregó `BLOB_READ_WRITE_TOKEN` a Production+Preview+Development solo, y lo bajó al `.env.local` (gitignored). El push lo corrió el usuario en `cmd` (no PowerShell — PSReadLine crashea con la línea larga del token; con `cmd` van comillas dobles). Vercel auto-deployó (`● Ready`, ~41s). Verificado en prod: `/menu` y `/` sirven la clase `storefront` + CSS con la paleta oscura; `/api/settings` OK. **Pendiente**: prueba visual en navegador (storefront oscuro, subida real de imagen a Blob, botón WhatsApp en `/comanda`). El usuario tiene que **revocar el PAT de GitHub** (quedó en texto plano en el chat). Meta/WhatsApp automático sigue sin tocar (opcional, aparte).
 - **2026-08-31** — El usuario vio el branding en prod, le gusta, pidió **toggle claro/oscuro** (Fase 8a) + como próxima feature un **estado "local cerrado"** (Fase 8b): que el dueño pueda cerrar el local y el cliente vea primero una pantalla de estado, no el menú, con opción de entrar igual ("vamos trabajandolo"). 8a implementado y deployado (commit `b0a5d5c`). 8b implementado (commit `912fc66`) pero **NO deployado**: necesita `prisma db push` (columnas `storeOpen`/`closedTitle`/`closedMessage` en `Settings`) que el clasificador me bloquea — lo corre el usuario, ANTES de deployar el código. Ver sección "Fase 8". A iterar: gate en checkout/orders, gate en la home, acceso al toggle desde `/comanda`.
+- **2026-09-01** — El usuario pidió un **botón activar/desactivar sonido en `/comanda`** con un timbre cuando entra un pedido (como el "Desactivar sonidos" de RestoSimple). Implementado como **Fase 8e** (ver sección): `src/lib/doorbell.ts` sintetiza un "ding-dong" con la Web Audio API (sin archivo de audio), y `comanda-client.tsx` detecta ids de pedido nuevos en el poll de 5s y hace sonar el timbre si el toggle está activo. Preferencia en `localStorage`, default activado, botón 🔔/🔕 en el header. Sin schema ni API. `tsc`/`build` limpios, sin probar en navegador. **Falta commitear/pushear** (junto con 8d, que sigue sin deployar — necesita `prisma db push` de `closedImageUrl`).

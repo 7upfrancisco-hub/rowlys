@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { normalizeArPhone, whatsappLink } from "@/lib/phone";
+import { playDoorbell, unlockDoorbell } from "@/lib/doorbell";
 import LogoutButton from "@/components/LogoutButton";
 import {
   ORDER_STATUS_LABELS,
@@ -25,6 +26,8 @@ const BOARD_COLUMNS: OrderStatus[] = [
 ];
 
 const POLL_MS = 5000;
+// Preferencia del timbre de pedidos nuevos (persiste en el navegador del local).
+const SOUND_KEY = "rowlys-comanda-sound";
 // Tras una acción manual, ignoramos el resultado del próximo poll un rato para
 // que no pise el estado optimista con datos viejos.
 const SUPPRESS_POLL_MS = 4000;
@@ -135,7 +138,12 @@ export default function ComandaClient() {
   const [notice, setNotice] = useState<
     { kind: "ok" | "warn"; text: string } | null
   >(null);
+  const [soundOn, setSoundOn] = useState(false);
   const suppressPollUntil = useRef(0);
+  // Ids de pedidos ya vistos; null hasta la primera carga (que no hace sonar nada).
+  const seenOrderIds = useRef<Set<string> | null>(null);
+  // Espejo de `soundOn` para leerlo dentro de `load` sin recrear el callback.
+  const soundOnRef = useRef(false);
 
   function showNotice(n: { kind: "ok" | "warn"; text: string }) {
     setNotice(n);
@@ -162,6 +170,21 @@ export default function ComandaClient() {
     try {
       const data = await apiFetch<OrderDTO[]>("/api/orders");
       if (Date.now() < suppressPollUntil.current) return;
+
+      // Timbre: suena si aparece un pedido nuevo en PENDING. La primera carga
+      // solo siembra los ids conocidos (no suena al abrir la comanda).
+      if (seenOrderIds.current === null) {
+        seenOrderIds.current = new Set(data.map((o) => o.id));
+      } else {
+        const isNew =
+          soundOnRef.current &&
+          data.some(
+            (o) => o.status === "PENDING" && !seenOrderIds.current!.has(o.id)
+          );
+        for (const o of data) seenOrderIds.current.add(o.id);
+        if (isNew) playDoorbell();
+      }
+
       setOrders(data);
       setError(null);
       setLastSync(Date.now());
@@ -181,6 +204,39 @@ export default function ComandaClient() {
     const id = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
+
+  // Preferencia de sonido guardada + destrabar el audio en el primer gesto
+  // (los navegadores arrancan el AudioContext "suspended" hasta que hay click).
+  useEffect(() => {
+    try {
+      // Activado salvo que se haya apagado explícitamente.
+      const on = localStorage.getItem(SOUND_KEY) !== "0";
+      setSoundOn(on);
+      soundOnRef.current = on;
+    } catch {
+      /* localStorage no disponible */
+    }
+    const unlock = () => unlockDoorbell();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  function toggleSound() {
+    setSoundOn((prev) => {
+      const next = !prev;
+      soundOnRef.current = next;
+      try {
+        localStorage.setItem(SOUND_KEY, next ? "1" : "0");
+      } catch {
+        /* ignora */
+      }
+      if (next) {
+        unlockDoorbell();
+        playDoorbell(); // confirma que se escucha y destraba el audio
+      }
+      return next;
+    });
+  }
 
   // Nombre + estado del local (endpoint público). El nombre alimenta el
   // mensaje de WhatsApp; el estado, los toggles de canal del header.
@@ -302,6 +358,23 @@ export default function ComandaClient() {
               className="rounded-lg border border-neutral-300 px-3 py-1.5 font-medium text-neutral-600 hover:bg-neutral-100"
             >
               Actualizar
+            </button>
+            <button
+              onClick={toggleSound}
+              title={
+                soundOn
+                  ? "Timbre activado: suena al entrar un pedido nuevo. Click para silenciar."
+                  : "Timbre silenciado. Click para que suene al entrar un pedido nuevo."
+              }
+              className={
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-medium " +
+                (soundOn
+                  ? "border-brand-300 bg-brand-50 text-brand-700"
+                  : "border-neutral-300 text-neutral-500 hover:bg-neutral-100")
+              }
+            >
+              <span aria-hidden="true">{soundOn ? "🔔" : "🔕"}</span>
+              {soundOn ? "Sonido activado" : "Sonido"}
             </button>
             <Link
               href="/admin"
