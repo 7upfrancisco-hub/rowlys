@@ -704,6 +704,48 @@ API** — todo cliente, apoyado en el poll de 5s que ya existía.
 - **Pendiente**: no se probó en navegador el audio real (sin browser en la sesión). Idea futura
   si se pide: elegir el sonido, o repetir el timbre mientras haya pedidos sin aceptar.
 
+## Fase 9: carga manual de pedidos desde `/comanda` (en código, 2026-09-01)
+
+El usuario pidió poder cargar un pedido a mano desde la comanda (cliente que pide en el local
+o por teléfono), con un botón flotante "+" ("un globito con un +"). Como el "Nuevo pedido" de
+RestoSimple. **Sin cambios de schema.**
+
+- **`src/lib/orders.ts`** (nuevo): se extrajo la lógica de creación de pedidos del
+  `POST /api/orders` a un helper compartido `createOrder(body, opts)` + `createOrderSchema`
+  (mismo zod que antes). Reusa toda la validación existente (productos, adicionales min/max,
+  disponibilidad por canal) y el recálculo de total en servidor. `opts.enforceStoreStatus`
+  (el checkout público lo pasa `true`; la carga manual `false` — el staff toma el pedido de
+  frente aunque el local figure cerrado / canal pausado) y `opts.initialStatus`
+  (`PENDING` público / `CONFIRMED` staff). El tipo del pedido con relaciones sale de
+  `Prisma.OrderGetPayload<{ include: typeof orderInclude }>`.
+- **`POST /api/orders`**: quedó fino, delega en `createOrder(..., { enforceStoreStatus: true })`.
+  Comportamiento idéntico al anterior (extracción, no cambio de lógica).
+- **`POST /api/admin/orders`** (nuevo, protegido por `middleware.ts` `/api/admin/:path*`):
+  `staffOrderSchema` propio — nombre obligatorio, **apellido y teléfono opcionales** (se guardan
+  como `""` si faltan), dirección obligatoria solo si `DELIVERY`, `changeFor` solo con efectivo.
+  Llama `createOrder(..., { enforceStoreStatus: false, initialStatus: "CONFIRMED" })` → el pedido
+  nace en la columna "Confirmado".
+- **`src/app/comanda/new-order-modal.tsx`** (nuevo): modal con estado local propio (**NO usa el
+  carrito zustand del cliente**). Dos columnas: menú (tabs de categoría + lista de productos;
+  tap agrega, o abre un sub-panel de adicionales si el producto tiene grupos activos — reusa la
+  lógica min/max del `/menu`) y datos (toggle Retiro/Envío, nombre*/apellido/teléfono/dirección,
+  líneas del pedido con +/−, medio de pago Efectivo/Transferencia, `changeFor`, nota general).
+  Total estimado en cliente; el server recalcula. Al crear: `POST /api/admin/orders` → cierra y
+  fuerza un `load()` de la comanda.
+- **`comanda-client.tsx`**: FAB `+` circular `fixed bottom-right` (`h-14 w-14`, `brand-600`),
+  abre el modal. `onCreated` → `load()` inmediato.
+- **Probado end-to-end contra Neon** (dev server + curl con sesión `EVO`): sin cookie → 401;
+  sin ítems → 400; `DELIVERY` sin dirección → 400; milanesa sin la guarnición obligatoria → 400
+  con el mensaje correcto; pedido OK (2× producto simple + 1× milanesa con guarnición y nota
+  por ítem, efectivo con `changeFor`) → 201 `status=CONFIRMED`, total 49500 bien calculado,
+  `customerLastName=""`, pago `CASH`/`PENDING`/`changeFor`; aparece en `GET /api/orders`; el
+  listado sin cookie sigue 401. Pedido de prueba borrado de la base.
+- `npx tsc --noEmit` y `npm run build` limpios (`/comanda` 6.16 kB → 8.85 kB, ruta
+  `/api/admin/orders` registrada).
+- **Pendiente**: no se probó en navegador (sin browser en la sesión). Falta commitear/pushear.
+  Ideas si se piden: ofrecer MP como medio en la carga manual; arrancar en `PENDING` en vez de
+  `CONFIRMED`; precargar teléfono con `+54`.
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
@@ -771,3 +813,4 @@ nuevas o que refinan lo ya sabido:
 - **2026-08-31** — **Deploy de Fases 5b + 6 + 7.** 4 commits a `main` (`83b16a5`, `009528a`, `7cec633`, `b7f8fe9`). Antes del push se creó el **Blob store de Vercel** para la Fase 6: `npx vercel blob create-store rowlys-images --access public --yes` (id `store_rvuczY5LVTjENEye`, región iad1, linkeado a `rowlys`) → agregó `BLOB_READ_WRITE_TOKEN` a Production+Preview+Development solo, y lo bajó al `.env.local` (gitignored). El push lo corrió el usuario en `cmd` (no PowerShell — PSReadLine crashea con la línea larga del token; con `cmd` van comillas dobles). Vercel auto-deployó (`● Ready`, ~41s). Verificado en prod: `/menu` y `/` sirven la clase `storefront` + CSS con la paleta oscura; `/api/settings` OK. **Pendiente**: prueba visual en navegador (storefront oscuro, subida real de imagen a Blob, botón WhatsApp en `/comanda`). El usuario tiene que **revocar el PAT de GitHub** (quedó en texto plano en el chat). Meta/WhatsApp automático sigue sin tocar (opcional, aparte).
 - **2026-08-31** — El usuario vio el branding en prod, le gusta, pidió **toggle claro/oscuro** (Fase 8a) + como próxima feature un **estado "local cerrado"** (Fase 8b): que el dueño pueda cerrar el local y el cliente vea primero una pantalla de estado, no el menú, con opción de entrar igual ("vamos trabajandolo"). 8a implementado y deployado (commit `b0a5d5c`). 8b implementado (commit `912fc66`) pero **NO deployado**: necesita `prisma db push` (columnas `storeOpen`/`closedTitle`/`closedMessage` en `Settings`) que el clasificador me bloquea — lo corre el usuario, ANTES de deployar el código. Ver sección "Fase 8". A iterar: gate en checkout/orders, gate en la home, acceso al toggle desde `/comanda`.
 - **2026-09-01** — El usuario pidió un **botón activar/desactivar sonido en `/comanda`** con un timbre cuando entra un pedido (como el "Desactivar sonidos" de RestoSimple). Implementado como **Fase 8e** (ver sección): `src/lib/doorbell.ts` sintetiza un "ding-dong" con la Web Audio API (sin archivo de audio), y `comanda-client.tsx` detecta ids de pedido nuevos en el poll de 5s y hace sonar el timbre si el toggle está activo. Preferencia en `localStorage`, default activado, botón 🔔/🔕 en el header. Sin schema ni API. `tsc`/`build` limpios. **Deployado** (commit `a999fd0`, auto-deploy OK). La Fase 8d ya estaba en prod (la columna `closedImageUrl` ya estaba pusheada a Neon). **Git push resuelto para siempre:** el usuario le dio acceso a su cuenta de GitHub al Git Credential Manager (que ya estaba configurado como `credential.helper=manager` pero nunca había guardado nada porque los push históricos llevaban el token en la URL) — desde ahora `git push origin main` es silencioso, no hace falta PAT por sesión.
+- **2026-09-01** — El usuario eligió como próxima feature la **carga manual de pedidos desde `/comanda`** (cliente que pide en el local o por teléfono), con un botón flotante "+". Implementado como **Fase 9** (ver sección): se extrajo la creación de pedidos a `src/lib/orders.ts` (`createOrder(body, opts)`), `POST /api/orders` ahora delega ahí, nuevo `POST /api/admin/orders` (protegido) con `enforceStoreStatus:false` + `initialStatus:"CONFIRMED"`, y un modal `new-order-modal.tsx` con estado local propio (menú + adicionales + datos del cliente + pago). FAB `+` en `comanda-client.tsx`. Sin schema. Probado end-to-end contra Neon con curl (validaciones + creación OK + visible en `GET /api/orders`, pedido de prueba borrado). `tsc`/`build` limpios. Falta commitear/pushear y probar en navegador.

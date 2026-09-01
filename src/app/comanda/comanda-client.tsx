@@ -6,6 +6,7 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { normalizeArPhone, whatsappLink } from "@/lib/phone";
 import { playDoorbell, unlockDoorbell } from "@/lib/doorbell";
 import LogoutButton from "@/components/LogoutButton";
+import NewOrderModal from "./new-order-modal";
 import {
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
@@ -139,6 +140,7 @@ export default function ComandaClient() {
     { kind: "ok" | "warn"; text: string } | null
   >(null);
   const [soundOn, setSoundOn] = useState(false);
+  const [newOrderOpen, setNewOrderOpen] = useState(false);
   const suppressPollUntil = useRef(0);
   // Ids de pedidos ya vistos; null hasta la primera carga (que no hace sonar nada).
   const seenOrderIds = useRef<Set<string> | null>(null);
@@ -491,6 +493,25 @@ export default function ComandaClient() {
           </div>
         )}
       </main>
+
+      <button
+        onClick={() => setNewOrderOpen(true)}
+        title="Cargar un pedido a mano (cliente en el local o por teléfono)"
+        className="fixed bottom-6 right-6 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-3xl font-light text-white shadow-lg transition hover:bg-brand-700"
+        aria-label="Nuevo pedido"
+      >
+        +
+      </button>
+
+      {newOrderOpen && (
+        <NewOrderModal
+          onClose={() => setNewOrderOpen(false)}
+          onCreated={() => {
+            suppressPollUntil.current = 0;
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
