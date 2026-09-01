@@ -8,6 +8,8 @@ export async function GET() {
     orderBy: { order: "asc" },
     include: {
       products: {
+        // Un producto sin stock / desactivado no se muestra en la carta.
+        where: { available: true },
         orderBy: { name: "asc" },
         include: {
           modifierGroups: {
@@ -25,16 +27,19 @@ export async function GET() {
     },
   });
 
-  const result = categories.map((category) => ({
-    ...category,
-    products: category.products.map((product) => {
-      const { modifierGroups, ...rest } = product;
-      return {
-        ...rest,
-        modifierGroups: modifierGroups.map((pmg) => pmg.group),
-      };
-    }),
-  }));
+  const result = categories
+    // Una categoría sin productos visibles no aparece en la carta.
+    .filter((category) => category.products.length > 0)
+    .map((category) => ({
+      ...category,
+      products: category.products.map((product) => {
+        const { modifierGroups, ...rest } = product;
+        return {
+          ...rest,
+          modifierGroups: modifierGroups.map((pmg) => pmg.group),
+        };
+      }),
+    }));
 
   return NextResponse.json(result);
 }

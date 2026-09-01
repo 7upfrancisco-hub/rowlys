@@ -16,6 +16,7 @@ export default function ProductosClient() {
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AdminProduct | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   function load() {
     Promise.all([
@@ -59,6 +60,24 @@ export default function ProductosClient() {
       load();
     } catch (err) {
       setError((err as ApiError).message);
+    }
+  }
+
+  // Ocultar / mostrar un producto en la carta sin abrir el formulario
+  // (p. ej. cuando se queda sin stock).
+  async function toggleStock(product: AdminProduct) {
+    setError(null);
+    setTogglingId(product.id);
+    try {
+      await apiFetch(`/api/admin/products/${product.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ available: !product.available }),
+      });
+      load();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -116,11 +135,21 @@ export default function ProductosClient() {
                 {items.map((product) => (
                   <li
                     key={product.id}
-                    className="flex items-center justify-between gap-4 px-6 py-4"
+                    className={
+                      "flex items-center justify-between gap-4 px-6 py-4 " +
+                      (product.available ? "" : "bg-neutral-50")
+                    }
                   >
                     <div>
-                      <p className="font-medium text-neutral-900">
-                        {product.name}
+                      <p className="flex items-center gap-2 font-medium text-neutral-900">
+                        <span className={product.available ? "" : "text-neutral-400"}>
+                          {product.name}
+                        </span>
+                        {!product.available && (
+                          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium text-neutral-600">
+                            Oculto en la carta
+                          </span>
+                        )}
                       </p>
                       <p className="text-sm text-neutral-500">
                         {product.discountPrice != null ? (
@@ -135,12 +164,27 @@ export default function ProductosClient() {
                         ) : (
                           formatCurrency(product.price)
                         )}
-                        {!product.available && " · Inactivo"}
                         {!product.availableDelivery && " · Sin delivery"}
                         {!product.availablePickup && " · Sin retiro"}
                       </p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleStock(product)}
+                        disabled={togglingId === product.id}
+                        className={
+                          "rounded-lg border px-2.5 py-1 text-sm font-medium disabled:opacity-50 " +
+                          (product.available
+                            ? "border-neutral-300 text-neutral-600 hover:bg-neutral-100"
+                            : "border-green-500 text-green-700 hover:bg-green-50")
+                        }
+                      >
+                        {togglingId === product.id
+                          ? "..."
+                          : product.available
+                            ? "Ocultar (sin stock)"
+                            : "Mostrar en la carta"}
+                      </button>
                       <button
                         onClick={() => startEdit(product)}
                         className="text-sm font-medium text-brand-600 hover:underline"

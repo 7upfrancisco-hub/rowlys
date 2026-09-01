@@ -746,6 +746,46 @@ RestoSimple. **Sin cambios de schema.**
   Ideas si se piden: ofrecer MP como medio en la carga manual; arrancar en `PENDING` en vez de
   `CONFIRMED`; precargar teléfono con `+54`.
 
+## Fase 10: admin de productos/categorías — borrado de categorías + stock (en código, 2026-09-01)
+
+El usuario pidió: (1) poder **eliminar categorías** aunque tengan productos, (2) "hacerlo todo
+editable", (3) poder **ocultar un producto de la carta cuando no hay stock** desde el admin.
+**Sin cambios de schema** — se usa el `Product.available` que ya existía.
+
+- **`/api/menu`**: ahora filtra `products: { where: { available: true } }` y además **descarta
+  las categorías que quedan sin productos visibles**. Antes la carta mostraba productos
+  desactivados (solo fallaban al confirmar el pedido); ahora directamente no aparecen. El
+  `/api/admin/products` sigue devolviendo todo (el admin ve los ocultos). La carga manual de
+  `/comanda` también consume `/api/menu`, así que tampoco ofrece productos sin stock.
+- **`DELETE /api/admin/categories/[id]`** reescrito. Acepta `?moveProductsTo=<id>`:
+  - sin el parámetro: borra la categoría y, por el `onDelete: Cascade` de `Product→Category`,
+    sus productos. Si algún producto tiene `OrderItem` (historial de pedidos) → FK violation →
+    **409 con el/los nombre(s)** de los productos que bloquean.
+  - con `moveProductsTo`: `updateMany` de los productos a esa otra categoría + `delete` de la
+    categoría, en una transacción. No se pierde historial. Valida que el destino exista y no
+    sea la misma.
+- **`categorias-client.tsx`**: si la categoría está vacía → `confirm()` y borra. Si tiene
+  productos → abre `DeleteCategoryDialog` (modal) con dos opciones: "eliminar también los N
+  productos" o "mover los productos a [select de otra categoría]" (la segunda deshabilitada si
+  no hay otra categoría). Llama al DELETE con o sin `?moveProductsTo`.
+- **`productos-client.tsx`**: botón por fila **"Ocultar (sin stock)" / "Mostrar en la carta"**
+  que hace `PATCH { available }` sin abrir el formulario. Fila con fondo gris + badge "Oculto
+  en la carta" cuando está oculto. Se sacó el sufijo " · Inactivo" del texto de precio (ahora
+  es el badge).
+- **`product-form.tsx`**: el checkbox "Activo" pasó a "Visible en la carta (con stock)".
+- "Hacerlo todo editable": los formularios de edición ya cubren todos los campos de
+  producto/categoría; lo que faltaba era el borrado flexible de categorías y el toggle rápido
+  de stock, que es lo que se hizo. Si el usuario se refería a otra cosa (ej. editar inline en
+  la lista, reordenar productos), queda para confirmar.
+- **Probado end-to-end contra Neon** (dev server + curl con sesión): `/api/menu` oculta un
+  producto con `available:false` y la categoría que queda vacía; el admin lo sigue viendo;
+  `PATCH {available}` toggle OK; DELETE de categoría con producto nunca pedido → 204 (cascada);
+  con producto que tiene pedido → 409 con el nombre; con `?moveProductsTo` → 204 y el producto
+  + el pedido quedan intactos y reasignados. Todos los datos de prueba (2 categorías, 2
+  productos, 1 pedido) borrados de la base.
+- `npx tsc --noEmit` y `npm run build` limpios.
+- **Pendiente**: no se probó en navegador. Falta commitear/pushear.
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local

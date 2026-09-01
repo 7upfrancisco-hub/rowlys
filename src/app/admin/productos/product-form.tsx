@@ -267,7 +267,7 @@ export default function ProductForm({
             checked={available}
             onChange={(e) => setAvailable(e.target.checked)}
           />
-          Activo
+          Visible en la carta (con stock)
         </label>
         <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input
