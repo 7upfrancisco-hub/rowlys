@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { prisma, isForeignKeyViolation } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +120,10 @@ export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
+  // Se puede borrar siempre. Los pedidos que incluían este producto conservan
+  // el nombre/precio/opciones como snapshot; su `productId` pasa a null
+  // (`onDelete: SetNull` en OrderItem). Los grupos de adicionales asignados se
+  // borran en cascada.
   try {
     await prisma.product.delete({ where: { id: params.id } });
     return new NextResponse(null, { status: 204 });
@@ -131,15 +135,6 @@ export async function DELETE(
       return NextResponse.json(
         { error: "El producto no existe." },
         { status: 404 }
-      );
-    }
-    if (isForeignKeyViolation(err)) {
-      return NextResponse.json(
-        {
-          error:
-            "No se puede eliminar: el producto tiene pedidos registrados. Marcalo como no disponible en su lugar.",
-        },
-        { status: 409 }
       );
     }
     throw err;

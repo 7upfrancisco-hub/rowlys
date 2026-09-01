@@ -788,6 +788,32 @@ editable", (3) poder **ocultar un producto de la carta cuando no hay stock** des
   `/api/menu` sigue OK con las 4 categorías reales, `/admin/*` protegido). No se probó en
   navegador.
 
+### Fase 10b — borrar productos SIEMPRE, aunque tengan pedidos (2026-09-01)
+
+El usuario probó en prod y el borrado de "Bife de chorizo" seguía bloqueado por tener pedidos.
+Pidió que sea **100% editable**: borrar cualquier producto y que **el pedido viejo quede como
+está**. `OrderItem` ya guarda `productName`/`price`/`options` como snapshot, así que el `Product`
+no hace falta para mostrar el pedido histórico — solo estorbaba el FK.
+
+- **Schema**: `OrderItem.product` pasó a opcional y `OrderItem.productId` a `String?`, con
+  `onDelete: SetNull`. Al borrar un producto, sus `OrderItem` quedan con `productId = null` y
+  conservan el snapshot. **Requiere `prisma db push`** (el clasificador me lo bloquea, lo corre
+  el usuario). `prisma generate` ya corrió.
+- **`src/types/index.ts`**: `OrderItemDTO.productId: string | null`. Ningún consumidor lee ese
+  campo para lógica (la comanda y el seguimiento usan `productName`/`price`), así que no rompió
+  nada más.
+- **`DELETE /api/admin/products/[id]`**: se sacó el branch de FK violation → ahora borra siempre
+  (solo queda el 404 si no existe). Los `ProductModifierGroup` se borran en cascada como antes.
+- **`DELETE /api/admin/categories/[id]`**: como ahora el borrado en cascada de productos nunca
+  choca con `OrderItem`, se sacó el branch de 409-con-nombres de Fase 10. El diálogo de decisión
+  del cliente (eliminar productos / mover a otra categoría) se mantiene — la opción "mover"
+  sigue siendo útil para no perder los productos.
+- `isForeignKeyViolation` en `src/lib/prisma.ts` quedó sin usar (se dejó, documenta un quirk de
+  Postgres y puede volver a hacer falta).
+- `tsc` + `build` limpios. **Orden de deploy obligatorio**: `prisma db push` ANTES del deploy
+  del código (si el código sale sin la columna migrada, `DELETE /api/admin/products` tira 500
+  al chocar con el FK viejo). **Falta db push + commitear/pushear.**
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local

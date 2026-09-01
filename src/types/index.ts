@@ -104,7 +104,7 @@ export interface OrderItemOptionDTO {
 
 export interface OrderItemDTO {
   id: string;
-  productId: string;
+  productId: string | null;
   productName: string;
   price: number;
   quantity: number;

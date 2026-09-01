@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { prisma, isForeignKeyViolation } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +45,11 @@ export async function PATCH(
 }
 
 // DELETE /api/admin/categories/[id]?moveProductsTo=<id>
-//  - sin `moveProductsTo`: borra la categoría y, en cascada, sus productos.
-//    Si algún producto tiene pedidos registrados, no se puede (409 con la lista).
-//  - con `moveProductsTo`: reasigna todos los productos a esa otra categoría y
-//    después borra la categoría (ya vacía). No se pierde historial de pedidos.
+//  - sin `moveProductsTo`: borra la categoría y, en cascada, sus productos. Los
+//    pedidos que incluían esos productos conservan el snapshot (nombre/precio);
+//    su `productId` queda en null.
+//  - con `moveProductsTo`: reasigna los productos a esa otra categoría y después
+//    borra la categoría (ya vacía).
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
@@ -57,7 +58,6 @@ export async function DELETE(
 
   const category = await prisma.category.findUnique({
     where: { id: params.id },
-    include: { _count: { select: { products: true } } },
   });
   if (!category) {
     return NextResponse.json({ error: "La categoría no existe." }, { status: 404 });
@@ -89,27 +89,6 @@ export async function DELETE(
     return new NextResponse(null, { status: 204 });
   }
 
-  try {
-    await prisma.category.delete({ where: { id: params.id } });
-    return new NextResponse(null, { status: 204 });
-  } catch (err) {
-    if (isForeignKeyViolation(err)) {
-      const blocking = await prisma.product.findMany({
-        where: { categoryId: params.id, orderItems: { some: {} } },
-        select: { name: true },
-      });
-      const names = blocking.map((p) => p.name).join(", ");
-      return NextResponse.json(
-        {
-          error:
-            `No se puede eliminar: ${
-              names || "algún producto de esta categoría"
-            } tiene${blocking.length === 1 ? "" : "n"} pedidos registrados. ` +
-            "Mové los productos a otra categoría o marcalos como sin stock.",
-        },
-        { status: 409 }
-      );
-    }
-    throw err;
-  }
+  await prisma.category.delete({ where: { id: params.id } });
+  return new NextResponse(null, { status: 204 });
 }
