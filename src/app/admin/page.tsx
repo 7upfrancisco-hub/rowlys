@@ -22,6 +22,11 @@ const SECTIONS = [
     description: "Grupos de opciones (guarniciones, salsas, quitar ingredientes).",
   },
   {
+    href: "/admin/repartidores",
+    title: "Repartidores",
+    description: "Perfiles de repartidores y sus datos para asignarlos a los envíos.",
+  },
+  {
     href: "/admin/configuracion",
     title: "Configuración",
     description: "Datos del local, costo de envío y alias bancario.",

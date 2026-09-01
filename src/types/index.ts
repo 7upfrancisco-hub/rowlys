@@ -121,6 +121,25 @@ export interface PaymentDTO {
   providerRef: string | null;
 }
 
+export interface DriverDTO {
+  id: string;
+  name: string;
+  phone: string;
+  vehicle: string | null;
+  licensePlate: string | null;
+  documentId: string | null;
+  address: string | null;
+  notes: string | null;
+  active: boolean;
+}
+
+// Versión reducida que viaja dentro de un pedido.
+export interface OrderDriverDTO {
+  id: string;
+  name: string;
+  phone: string;
+}
+
 export interface OrderDTO {
   id: string;
   orderType: OrderType;
@@ -135,6 +154,8 @@ export interface OrderDTO {
   notes: string | null;
   items: OrderItemDTO[];
   payment: PaymentDTO | null;
+  driverId: string | null;
+  driver: OrderDriverDTO | null;
   createdAt: string;
   updatedAt: string;
 }

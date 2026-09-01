@@ -115,10 +115,29 @@ model Order {
   notes             String?
   items             OrderItem[]
   payment           Payment?
+  // Repartidor asignado (solo pedidos de envío). Si se borra el repartidor,
+  // el pedido queda sin asignar pero no se pierde.
+  driver            Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId          String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   @@index([status])
+}
+
+model Driver {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String
+  vehicle      String?
+  licensePlate String?
+  documentId   String?
+  address      String?
+  notes        String?
+  active       Boolean  @default(true)
+  orders       Order[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model OrderItem {

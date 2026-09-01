@@ -20,10 +20,22 @@ const patchOrderSchema = z
       ])
       .optional(),
     markPaid: z.boolean().optional(),
+    // string = asignar ese repartidor; null = desasignar.
+    driverId: z.string().nullable().optional(),
   })
-  .refine((data) => data.status !== undefined || data.markPaid !== undefined, {
-    message: "No hay nada para actualizar.",
-  });
+  .refine(
+    (data) =>
+      data.status !== undefined ||
+      data.markPaid !== undefined ||
+      data.driverId !== undefined,
+    { message: "No hay nada para actualizar." }
+  );
+
+const ORDER_INCLUDE = {
+  items: { include: { options: true } },
+  payment: true,
+  driver: { select: { id: true, name: true, phone: true } },
+} as const;
 
 export async function PATCH(
   request: Request,
@@ -38,7 +50,7 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  const { status, markPaid } = parsed.data;
+  const { status, markPaid, driverId } = parsed.data;
 
   const existing = await prisma.order.findUnique({
     where: { id: params.id },
@@ -49,6 +61,22 @@ export async function PATCH(
       { error: "El pedido no existe." },
       { status: 404 }
     );
+  }
+
+  if (driverId) {
+    if (existing.orderType !== "DELIVERY") {
+      return NextResponse.json(
+        { error: "Solo los pedidos de envío llevan repartidor." },
+        { status: 400 }
+      );
+    }
+    const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+    if (!driver) {
+      return NextResponse.json(
+        { error: "El repartidor no existe." },
+        { status: 400 }
+      );
+    }
   }
 
   if (markPaid) {
@@ -74,8 +102,14 @@ export async function PATCH(
 
   try {
     const order = await prisma.$transaction(async (tx) => {
-      if (status) {
-        await tx.order.update({ where: { id: params.id }, data: { status } });
+      if (status || driverId !== undefined) {
+        await tx.order.update({
+          where: { id: params.id },
+          data: {
+            ...(status ? { status } : {}),
+            ...(driverId !== undefined ? { driverId } : {}),
+          },
+        });
       }
       if (markPaid) {
         await tx.payment.update({
@@ -85,7 +119,7 @@ export async function PATCH(
       }
       return tx.order.findUniqueOrThrow({
         where: { id: params.id },
-        include: { items: { include: { options: true } }, payment: true },
+        include: ORDER_INCLUDE,
       });
     });
 

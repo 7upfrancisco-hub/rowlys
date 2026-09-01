@@ -819,6 +819,40 @@ no hace falta para mostrar el pedido histórico — solo estorbaba el FK.
   `/api/settings` → 200; `/admin/*` → 307. No se probó el borrado real de un producto con
   pedidos en el navegador (para no tocar datos reales del usuario).
 
+## Fase 11: sección de Repartidores + mensaje de reparto por WhatsApp (en código, 2026-09-01)
+
+El usuario pidió una sección de repartidores con perfil completo, y poder mandarle a un
+repartidor por WhatsApp los datos del pedido (cliente, código, monto a cobrar, dirección, etc.).
+
+- **Schema**: nuevo modelo `Driver` (`name`, `phone`, `vehicle?`, `licensePlate?`,
+  `documentId?`, `address?`, `notes?`, `active` default true). `Order` gana `driverId String?` +
+  relación `driver Driver?` con `onDelete: SetNull` (borrar un repartidor deja los pedidos sin
+  asignar, no los pierde). **Requiere `prisma db push`** (lo corre el usuario). `prisma generate`
+  ya corrió.
+- **`src/types/index.ts`**: `DriverDTO`, `OrderDriverDTO` (id/name/phone reducido), y `OrderDTO`
+  gana `driverId` + `driver`.
+- **API**: `GET/POST /api/admin/drivers` + `PATCH/DELETE /api/admin/drivers/[id]` (protegidas por
+  el matcher `/api/admin/:path*`). `PATCH /api/admin/orders/[id]` acepta `driverId` (string =
+  asignar, null = desasignar; 400 si el pedido no es DELIVERY o el repartidor no existe). `driver`
+  se incluye en `GET /api/orders`, `GET /api/orders/[id]`, el PATCH de orden y `src/lib/orders.ts`
+  (`orderInclude`).
+- **`src/lib/driver-message.ts`** (nuevo, puro): `orderCode(id)` = últimos 6 chars del cuid en
+  mayúscula (no hay número secuencial de pedido; se puede sumar después). `buildDriverMessage`
+  arma: local, código, cliente + tel, dirección + link a Google Maps, lista de ítems con
+  adicionales, y la línea de cobro — distingue **ya pagó** (no cobrar), **efectivo** (monto + "paga
+  con X, vuelto Y" si hay `changeFor`), o **a cobrar sin confirmar** — más la nota del pedido.
+- **`/admin/repartidores`** (`page.tsx` + `repartidores-client.tsx`): form inline crear/editar
+  con todos los campos + validación blanda del teléfono (avisa si no normaliza para WhatsApp),
+  lista con activar/desactivar y borrar. Link agregado a `AdminNav` y card en el dashboard.
+- **`/comanda`**: cada tarjeta de pedido **DELIVERY** tiene un `<select>` de repartidor
+  (activos; si el asignado quedó inactivo igual se muestra) que hace `PATCH { driverId }`
+  optimista, y — cuando hay uno asignado — un botón verde "Enviar al repartidor" que abre
+  `wa.me` al teléfono del repartidor con `buildDriverMessage`. Si no hay repartidores cargados,
+  muestra un link a Admin → Repartidores. `mutate()` y `OrderCard` pasaron a un tipo
+  `OrderPatch` compartido.
+- `tsc` + `build` limpios (`/comanda` 8.85 kB → 9.74 kB). **Orden de deploy**: `prisma db push`
+  ANTES del código. **Falta db push + probar contra Neon + commitear/pushear.**
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local

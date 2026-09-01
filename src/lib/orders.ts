@@ -44,6 +44,7 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 const orderInclude = {
   items: { include: { options: true } },
   payment: true,
+  driver: { select: { id: true, name: true, phone: true } },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithRelations = Prisma.OrderGetPayload<{

@@ -36,7 +36,11 @@ export async function GET(request: Request) {
     where: {
       status: statuses ? { in: statuses } : { notIn: ["DELIVERED", "CANCELLED"] },
     },
-    include: { items: { include: { options: true } }, payment: true },
+    include: {
+      items: { include: { options: true } },
+      payment: true,
+      driver: { select: { id: true, name: true, phone: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
 

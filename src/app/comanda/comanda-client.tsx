@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { normalizeArPhone, whatsappLink } from "@/lib/phone";
 import { playDoorbell, unlockDoorbell } from "@/lib/doorbell";
+import { buildDriverMessage } from "@/lib/driver-message";
 import LogoutButton from "@/components/LogoutButton";
 import NewOrderModal from "./new-order-modal";
 import {
@@ -12,10 +13,14 @@ import {
   ORDER_TYPE_LABELS,
   PAYMENT_PROVIDER_LABELS,
   formatCurrency,
+  type DriverDTO,
   type OrderDTO,
   type OrderStatus,
   type WhatsAppSendResult,
 } from "@/types";
+
+// Cambios que un PATCH a /api/admin/orders/[id] puede aplicar desde la comanda.
+type OrderPatch = { status?: OrderStatus; markPaid?: boolean; driverId?: string | null };
 
 // Columnas del tablero: el flujo de cocina sin el estado final DELIVERED
 // (los entregados salen del tablero). CANCELLED tampoco aparece.
@@ -141,6 +146,7 @@ export default function ComandaClient() {
   >(null);
   const [soundOn, setSoundOn] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
+  const [drivers, setDrivers] = useState<DriverDTO[]>([]);
   const suppressPollUntil = useRef(0);
   // Ids de pedidos ya vistos; null hasta la primera carga (que no hace sonar nada).
   const seenOrderIds = useRef<Set<string> | null>(null);
@@ -260,6 +266,16 @@ export default function ComandaClient() {
       .catch(() => {});
   }, []);
 
+  // Repartidores para el selector de asignación de los pedidos de envío.
+  const loadDrivers = useCallback(() => {
+    apiFetch<DriverDTO[]>("/api/admin/drivers")
+      .then(setDrivers)
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadDrivers();
+  }, [loadDrivers]);
+
   async function toggleStoreFlag(
     field: "storeOpen" | "deliveryEnabled" | "pickupEnabled"
   ) {
@@ -280,10 +296,7 @@ export default function ComandaClient() {
     }
   }
 
-  async function mutate(
-    id: string,
-    body: { status?: OrderStatus; markPaid?: boolean }
-  ) {
+  async function mutate(id: string, body: OrderPatch) {
     setBusyId(id);
     setError(null);
     suppressPollUntil.current = Date.now() + SUPPRESS_POLL_MS;
@@ -479,6 +492,7 @@ export default function ComandaClient() {
                           key={order.id}
                           order={order}
                           storeName={storeName}
+                          drivers={drivers}
                           now={now}
                           busy={busyId === order.id}
                           onMutate={mutate}
@@ -519,6 +533,7 @@ export default function ComandaClient() {
 function OrderCard({
   order,
   storeName,
+  drivers,
   now,
   busy,
   onMutate,
@@ -526,12 +541,10 @@ function OrderCard({
 }: {
   order: OrderDTO;
   storeName: string;
+  drivers: DriverDTO[];
   now: number;
   busy: boolean;
-  onMutate: (
-    id: string,
-    body: { status?: OrderStatus; markPaid?: boolean }
-  ) => void;
+  onMutate: (id: string, body: OrderPatch) => void;
   onReject: (order: OrderDTO) => void;
 }) {
   const canWhatsApp = normalizeArPhone(order.customerPhone) !== null;
@@ -544,6 +557,28 @@ function OrderCard({
     );
     if (link) window.open(link, "_blank", "noopener,noreferrer");
   }
+
+  function openDriverWhatsApp() {
+    if (!order.driver) return;
+    const link = whatsappLink(
+      order.driver.phone,
+      buildDriverMessage(order, storeName)
+    );
+    if (link) window.open(link, "_blank", "noopener,noreferrer");
+  }
+
+  const isDelivery = order.orderType === "DELIVERY";
+  const activeDrivers = drivers.filter((d) => d.active);
+  // Si el repartidor asignado está inactivo, igual hay que mostrarlo en el select.
+  const driverOptions =
+    order.driver && !activeDrivers.some((d) => d.id === order.driver!.id)
+      ? [
+          ...activeDrivers,
+          { id: order.driver.id, name: `${order.driver.name} (inactivo)` },
+        ]
+      : activeDrivers;
+  const driverPhoneOk =
+    !!order.driver && normalizeArPhone(order.driver.phone) !== null;
 
   const isStalePending =
     order.status === "PENDING" &&
@@ -648,6 +683,55 @@ function OrderCard({
         <WhatsAppIcon className="h-4 w-4" />
         Enviar WhatsApp
       </button>
+
+      {isDelivery && (
+        <div className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2">
+          <label className="mb-1 block text-xs font-medium text-neutral-500">
+            Repartidor
+          </label>
+          {activeDrivers.length === 0 && !order.driver ? (
+            <p className="text-xs text-neutral-400">
+              Cargá repartidores en{" "}
+              <Link href="/admin/repartidores" className="underline">
+                Admin → Repartidores
+              </Link>
+              .
+            </p>
+          ) : (
+            <select
+              value={order.driverId ?? ""}
+              disabled={busy}
+              onChange={(e) =>
+                onMutate(order.id, { driverId: e.target.value || null })
+              }
+              className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm disabled:opacity-50"
+            >
+              <option value="">— Sin asignar —</option>
+              {driverOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {order.driver && (
+            <button
+              type="button"
+              onClick={openDriverWhatsApp}
+              disabled={!driverPhoneOk}
+              title={
+                driverPhoneOk
+                  ? "Abrir WhatsApp con los datos del reparto para el repartidor"
+                  : "El teléfono del repartidor no sirve para WhatsApp"
+              }
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1ebe5b] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <WhatsAppIcon className="h-4 w-4" />
+              Enviar al repartidor
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {order.status === "PENDING" && (
