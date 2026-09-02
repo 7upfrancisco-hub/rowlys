@@ -61,8 +61,9 @@ const BILLABLE: OrderStatus[] = [
 type Pair = { orders: number; revenue: number };
 const emptyPair = (): Pair => ({ orders: 0, revenue: 0 });
 
-// Métricas de seguimiento e historial para /admin/metricas. Un solo query
-// (12 meses de un local = pocas filas) y todo el agregado en memoria.
+// Métricas de seguimiento e historial para /admin/metricas. Trae los pedidos
+// desde el primer mes del negocio (para un local son pocas filas) y hace todo
+// el agregado en memoria.
 export async function GET(request: NextRequest) {
   const now = new Date();
   const current = arParts(now);
@@ -82,11 +83,17 @@ export async function GET(request: NextRequest) {
   }
 
   const selectedEnd = arMidnight(sy, sm + 1, 1);
-  // Tabla de historial: 12 meses terminando en el mes seleccionado.
-  const historyStart = arMidnight(sy, sm - 11, 1);
+
+  // La tabla de historial arranca en el mes del primer pedido del negocio.
+  const firstOrder = await prisma.order.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { createdAt: true },
+  });
+  const first = firstOrder ? arParts(firstOrder.createdAt) : current;
+  const historyStart = arMidnight(first.year, first.month, 1);
 
   const rows = await prisma.order.findMany({
-    where: { createdAt: { gte: historyStart, lt: selectedEnd } },
+    where: { createdAt: { gte: historyStart } },
     select: {
       createdAt: true,
       status: true,
@@ -96,12 +103,20 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // --- Historial mes a mes: 12 filas fijas, más viejo -> más nuevo ---
+  // --- Historial mes a mes: del primer pedido del negocio hasta el mes actual
+  // (o el seleccionado, si por algo fuese posterior). Más viejo -> más nuevo ---
   type MonthAgg = { orders: number; revenue: number; cancelled: number };
+  const viewingFuture =
+    sy > current.year || (sy === current.year && sm > current.month);
+  const endYM = viewingFuture ? { year: sy, month: sm } : current;
+  const totalMonths =
+    (endYM.year - first.year) * 12 + (endYM.month - first.month) + 1;
+  const monthCount = Math.min(Math.max(totalMonths, 1), 240);
+
   const monthOrder: string[] = [];
   const monthIndex = new Map<string, { label: string; agg: MonthAgg }>();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(Date.UTC(sy, sm - i, 1));
+  for (let i = 0; i < monthCount; i++) {
+    const d = new Date(Date.UTC(first.year, first.month + i, 1));
     const y = d.getUTCFullYear();
     const mo = d.getUTCMonth();
     const key = monthKey(y, mo);

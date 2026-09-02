@@ -315,7 +315,7 @@ function MonthlyTable({
       <div className="border-b border-neutral-200 px-5 py-3">
         <h3 className="font-semibold text-neutral-800">Historial mensual</h3>
         <p className="text-xs text-neutral-400">
-          Últimos 12 meses. Clic en un mes para ver su detalle.
+          Desde el primer pedido del negocio. Clic en un mes para ver su detalle.
         </p>
       </div>
       <div className="overflow-x-auto">
