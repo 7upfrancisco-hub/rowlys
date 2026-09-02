@@ -4,18 +4,12 @@ import {
   type OrderDTO,
 } from "@/types";
 
-// Código corto de pedido para nombrarlo por teléfono/WhatsApp. El id es un cuid
-// largo; usamos los últimos 6 caracteres en mayúscula (p. ej. "A1B2C3").
-export function orderCode(id: string): string {
-  return id.slice(-6).toUpperCase();
-}
-
 // Mensaje para el repartidor con todo lo que necesita para el reparto.
 export function buildDriverMessage(order: OrderDTO, storeName: string): string {
   const L: string[] = [];
 
   L.push(`🛵 Reparto — ${storeName}`);
-  L.push(`Pedido ${orderCode(order.id)}`);
+  L.push(`Pedido #${order.number}`);
   L.push("");
 
   const fullName = `${order.customerFirstName} ${order.customerLastName}`.trim();

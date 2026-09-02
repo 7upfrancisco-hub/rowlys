@@ -192,6 +192,9 @@ export default function PedidosClient() {
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="font-medium text-neutral-900">
+                      <span className="mr-1.5 text-neutral-400">
+                        #{order.number}
+                      </span>
                       {order.customerFirstName} {order.customerLastName} ·{" "}
                       {order.customerPhone}
                     </p>

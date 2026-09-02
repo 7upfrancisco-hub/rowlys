@@ -851,7 +851,43 @@ repartidor por WhatsApp los datos del pedido (cliente, código, monto a cobrar, 
   muestra un link a Admin → Repartidores. `mutate()` y `OrderCard` pasaron a un tipo
   `OrderPatch` compartido.
 - `tsc` + `build` limpios (`/comanda` 8.85 kB → 9.74 kB). **Orden de deploy**: `prisma db push`
-  ANTES del código. **Falta db push + probar contra Neon + commitear/pushear.**
+  ANTES del código.
+- **Deployada el 2026-09-02** (commit `41599b9`). El usuario corrió `prisma db push` (verificado:
+  tabla `Driver` y `Order.driverId` existen en Neon). Probado end-to-end contra Neon con curl:
+  drivers CRUD, asignar/desasignar (400 en PICKUP y repartidor inexistente), `driver` incluido en
+  `GET /api/orders`, y el mensaje de WhatsApp renderizado OK (código, dirección + link a Maps,
+  cobro en efectivo con vuelto calculado). Datos de prueba borrados. Vercel auto-deployó, prod
+  verificado (`/api/admin/drivers` → 401, `/admin/repartidores` → 307).
+
+## Fase 12: número de pedido secuencial + tiempo de demora (en código, 2026-09-02)
+
+El usuario pidió (1) un Nº de pedido real (#47) en vez del código A1B2C3, y (2) tiempo de demora
+configurable en `/comanda` (hoy el checkout decía "10 minutos" fijo) + demora por pedido.
+
+- **Schema**:
+  - `Order.number Int @unique @default(autoincrement())` — Nº secuencial legible. El `id` (cuid)
+    sigue siendo la clave para los links. Postgres backfillea las filas existentes con la
+    secuencia al hacer `db push`.
+  - `Order.extraDelayMinutes Int @default(0)` — demora extra que carga el local para un pedido.
+  - `Settings.prepTimeMinutes Int @default(10)` — tiempo de preparación general.
+  - **Requiere `prisma db push`** (lo corre el usuario). `prisma generate` ya corrió.
+- **Types**: `OrderDTO` gana `number` y `extraDelayMinutes` (scalars, ya viajan solos en los
+  includes existentes).
+- **API**: `PATCH /api/admin/orders/[id]` acepta `extraDelayMinutes` (0-240). `/api/settings`
+  (público) y `/api/admin/settings` exponen/aceptan `prepTimeMinutes`.
+- **`src/lib/driver-message.ts`**: "Pedido #{number}" (se sacó `orderCode`, que no se usaba en
+  otro lado).
+- **`/comanda`**: `#{number}` en el encabezado de cada tarjeta; selector "Demora" por pedido
+  (0/10/15/20/30/45/60 min → `PATCH extraDelayMinutes`); en la barra de estado, input editable
+  "Demora general: [10] min" que hace `PATCH /api/admin/settings` optimista al salir del campo.
+- **`/pedido/[id]`** (seguimiento): muestra `#{number}` y, mientras el pedido está activo (no
+  READY/entregado/cancelado), "⏱️ Listo/Llega en ~N min aprox." con `prepTimeMinutes +
+  extraDelayMinutes` (aclara si incluye demora extra). Hace `fetch` a `/api/settings`.
+- **`/checkout`**: el "10 minutos" fijo pasó a `settings.prepTimeMinutes`.
+- **`/admin/pedidos`**: `#{number}` en el encabezado. **`/admin/configuracion`**: campo "Tiempo
+  de demora estimado (minutos)".
+- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` ANTES del código. **Falta db
+  push + probar contra Neon + commitear/pushear.**
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 

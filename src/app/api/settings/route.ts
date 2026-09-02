@@ -25,6 +25,7 @@ export async function GET() {
     closedTitle: null,
     closedMessage: null,
     closedImageUrl: null,
+    prepTimeMinutes: 10,
   };
 
   return NextResponse.json({
@@ -39,6 +40,7 @@ export async function GET() {
     closedTitle: safe.closedTitle,
     closedMessage: safe.closedMessage,
     closedImageUrl: safe.closedImageUrl,
+    prepTimeMinutes: safe.prepTimeMinutes,
     // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o
     // credenciales reales en este entorno.
     mpEnabled: isMpAvailable(),

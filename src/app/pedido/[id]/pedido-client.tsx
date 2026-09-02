@@ -14,6 +14,7 @@ import {
 
 export default function PedidoClient({ id }: { id: string }) {
   const [order, setOrder] = useState<OrderDTO | null>(null);
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState(10);
   const [notFound, setNotFound] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -51,6 +52,15 @@ export default function PedidoClient({ id }: { id: string }) {
 
     load();
     intervalRef.current = setInterval(load, 5000);
+
+    apiFetch<{ prepTimeMinutes?: number }>("/api/settings")
+      .then((s) => {
+        if (!cancelled && typeof s.prepTimeMinutes === "number") {
+          setPrepTimeMinutes(s.prepTimeMinutes);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
       clearInterval(intervalRef.current);
@@ -80,16 +90,36 @@ export default function PedidoClient({ id }: { id: string }) {
   }
 
   const currentIndex = ORDER_STATUS_FLOW.indexOf(order.status);
+  const showEta =
+    order.status === "PENDING" ||
+    order.status === "CONFIRMED" ||
+    order.status === "IN_PROGRESS";
+  const etaMinutes = prepTimeMinutes + order.extraDelayMinutes;
 
   return (
     <div className="storefront">
       <ThemeToggle />
       <main className="mx-auto max-w-md px-6 py-10">
-        <h1 className="mb-1 text-2xl font-bold text-accent">Tu pedido</h1>
-        <p className="mb-6 text-sm text-muted">
+        <h1 className="mb-1 text-2xl font-bold text-accent">
+          Tu pedido <span className="text-muted">#{order.number}</span>
+        </h1>
+        <p className="mb-4 text-sm text-muted">
           {ORDER_TYPE_LABELS[order.orderType]}
           {order.deliveryAddress && ` · ${order.deliveryAddress}`}
         </p>
+
+        {showEta && (
+          <p className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg">
+            ⏱️ {order.orderType === "DELIVERY" ? "Llega" : "Listo"} en ~
+            {etaMinutes} min aprox.
+            {order.extraDelayMinutes > 0 && (
+              <span className="text-muted">
+                {" "}
+                (incluye +{order.extraDelayMinutes} min de demora)
+              </span>
+            )}
+          </p>
+        )}
 
         {order.status === "CANCELLED" ? (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-500">

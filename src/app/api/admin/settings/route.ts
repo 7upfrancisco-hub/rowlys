@@ -25,6 +25,7 @@ export async function GET() {
     closedTitle: null,
     closedMessage: null,
     closedImageUrl: null,
+    prepTimeMinutes: 10,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -43,6 +44,7 @@ const settingsSchema = z.object({
   closedTitle: z.string().trim().optional(),
   closedMessage: z.string().trim().optional(),
   closedImageUrl: z.string().trim().nullable().optional(),
+  prepTimeMinutes: z.number().int().min(0).max(240).optional(),
 });
 
 export async function PATCH(request: Request) {

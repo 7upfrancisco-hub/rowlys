@@ -103,6 +103,9 @@ enum PaymentStatus {
 
 model Order {
   id                String      @id @default(cuid())
+  // Número secuencial legible para nombrar el pedido (comanda, seguimiento,
+  // mensaje al repartidor). El id sigue siendo el cuid para los links.
+  number            Int         @unique @default(autoincrement())
   orderType         OrderType
   customerFirstName String
   customerLastName  String
@@ -112,6 +115,9 @@ model Order {
   deliveryFee       Float       @default(0)
   total             Float
   status            OrderStatus @default(PENDING)
+  // Demora extra en minutos que carga el local para este pedido puntual; se
+  // suma al tiempo de preparación general (Settings.prepTimeMinutes).
+  extraDelayMinutes Int         @default(0)
   notes             String?
   items             OrderItem[]
   payment           Payment?
@@ -194,5 +200,8 @@ model Settings {
   closedTitle     String?
   closedMessage   String?
   closedImageUrl  String?
+  // Tiempo de preparación estimado por defecto (minutos). Se muestra en el
+  // checkout y en el seguimiento del pedido. Editable desde /comanda.
+  prepTimeMinutes Int      @default(10)
   updatedAt       DateTime @updatedAt
 }

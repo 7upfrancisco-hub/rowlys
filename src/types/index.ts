@@ -142,6 +142,7 @@ export interface OrderDriverDTO {
 
 export interface OrderDTO {
   id: string;
+  number: number;
   orderType: OrderType;
   customerFirstName: string;
   customerLastName: string;
@@ -151,6 +152,7 @@ export interface OrderDTO {
   deliveryFee: number;
   total: number;
   status: OrderStatus;
+  extraDelayMinutes: number;
   notes: string | null;
   items: OrderItemDTO[];
   payment: PaymentDTO | null;

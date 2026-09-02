@@ -22,12 +22,15 @@ const patchOrderSchema = z
     markPaid: z.boolean().optional(),
     // string = asignar ese repartidor; null = desasignar.
     driverId: z.string().nullable().optional(),
+    // Demora extra en minutos para este pedido (0 = sin demora).
+    extraDelayMinutes: z.number().int().min(0).max(240).optional(),
   })
   .refine(
     (data) =>
       data.status !== undefined ||
       data.markPaid !== undefined ||
-      data.driverId !== undefined,
+      data.driverId !== undefined ||
+      data.extraDelayMinutes !== undefined,
     { message: "No hay nada para actualizar." }
   );
 
@@ -50,7 +53,7 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  const { status, markPaid, driverId } = parsed.data;
+  const { status, markPaid, driverId, extraDelayMinutes } = parsed.data;
 
   const existing = await prisma.order.findUnique({
     where: { id: params.id },
@@ -102,12 +105,17 @@ export async function PATCH(
 
   try {
     const order = await prisma.$transaction(async (tx) => {
-      if (status || driverId !== undefined) {
+      if (
+        status ||
+        driverId !== undefined ||
+        extraDelayMinutes !== undefined
+      ) {
         await tx.order.update({
           where: { id: params.id },
           data: {
             ...(status ? { status } : {}),
             ...(driverId !== undefined ? { driverId } : {}),
+            ...(extraDelayMinutes !== undefined ? { extraDelayMinutes } : {}),
           },
         });
       }

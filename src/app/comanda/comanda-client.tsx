@@ -20,7 +20,15 @@ import {
 } from "@/types";
 
 // Cambios que un PATCH a /api/admin/orders/[id] puede aplicar desde la comanda.
-type OrderPatch = { status?: OrderStatus; markPaid?: boolean; driverId?: string | null };
+type OrderPatch = {
+  status?: OrderStatus;
+  markPaid?: boolean;
+  driverId?: string | null;
+  extraDelayMinutes?: number;
+};
+
+// Opciones del selector de demora por pedido.
+const DELAY_OPTIONS = [0, 10, 15, 20, 30, 45, 60];
 
 // Columnas del tablero: el flujo de cocina sin el estado final DELIVERED
 // (los entregados salen del tablero). CANCELLED tampoco aparece.
@@ -136,6 +144,8 @@ export default function ComandaClient() {
     deliveryEnabled: boolean;
     pickupEnabled: boolean;
   } | null>(null);
+  const [prepTime, setPrepTime] = useState<number | null>(null);
+  const [prepTimeDraft, setPrepTimeDraft] = useState("");
   const [statusBusy, setStatusBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -254,6 +264,7 @@ export default function ComandaClient() {
       storeOpen: boolean;
       deliveryEnabled: boolean;
       pickupEnabled: boolean;
+      prepTimeMinutes?: number;
     }>("/api/settings")
       .then((s) => {
         if (s?.storeName) setStoreName(s.storeName);
@@ -262,9 +273,33 @@ export default function ComandaClient() {
           deliveryEnabled: s.deliveryEnabled,
           pickupEnabled: s.pickupEnabled,
         });
+        if (typeof s.prepTimeMinutes === "number") {
+          setPrepTime(s.prepTimeMinutes);
+          setPrepTimeDraft(String(s.prepTimeMinutes));
+        }
       })
       .catch(() => {});
   }, []);
+
+  async function savePrepTime() {
+    const value = Number(prepTimeDraft);
+    if (!Number.isFinite(value) || value < 0 || value > 240 || value === prepTime) {
+      setPrepTimeDraft(String(prepTime ?? ""));
+      return;
+    }
+    const prev = prepTime;
+    setPrepTime(value); // optimista
+    try {
+      await apiFetch("/api/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ prepTimeMinutes: value }),
+      });
+    } catch (err) {
+      setPrepTime(prev);
+      setPrepTimeDraft(String(prev ?? ""));
+      showNotice({ kind: "warn", text: (err as ApiError).message });
+    }
+  }
 
   // Repartidores para el selector de asignación de los pedidos de envío.
   const loadDrivers = useCallback(() => {
@@ -431,6 +466,27 @@ export default function ComandaClient() {
               <span className="text-xs text-neutral-400">
                 Con el local cerrado, el cliente ve el menú pero no puede pedir.
               </span>
+            )}
+            {prepTime !== null && (
+              <>
+                <span className="mx-1 h-4 w-px bg-neutral-200" />
+                <label className="flex items-center gap-1.5 font-medium text-neutral-500">
+                  Demora general:
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    value={prepTimeDraft}
+                    onChange={(e) => setPrepTimeDraft(e.target.value)}
+                    onBlur={savePrepTime}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                  />
+                  min
+                </label>
+              </>
             )}
           </div>
         </div>
@@ -601,6 +657,7 @@ function OrderCard({
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <p className="font-medium leading-tight text-neutral-900">
+            <span className="mr-1.5 text-neutral-400">#{order.number}</span>
             {order.customerFirstName} {order.customerLastName}
           </p>
           <p className="text-xs text-neutral-500">{order.customerPhone}</p>
@@ -640,6 +697,29 @@ function OrderCard({
           Nota: {order.notes}
         </p>
       )}
+
+      <label className="mb-2 flex items-center gap-2 text-xs text-neutral-500">
+        Demora
+        <select
+          value={order.extraDelayMinutes}
+          disabled={busy}
+          onChange={(e) =>
+            onMutate(order.id, { extraDelayMinutes: Number(e.target.value) })
+          }
+          className="rounded-md border border-neutral-300 px-2 py-1 text-xs disabled:opacity-50"
+        >
+          {DELAY_OPTIONS.map((m) => (
+            <option key={m} value={m}>
+              {m === 0 ? "sin demora" : `+${m} min`}
+            </option>
+          ))}
+          {!DELAY_OPTIONS.includes(order.extraDelayMinutes) && (
+            <option value={order.extraDelayMinutes}>
+              +{order.extraDelayMinutes} min
+            </option>
+          )}
+        </select>
+      </label>
 
       <div className="mb-3 flex items-center justify-between text-sm">
         <span

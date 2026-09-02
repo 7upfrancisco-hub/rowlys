@@ -10,6 +10,7 @@ interface Settings {
   storeAddress: string | null;
   bankAlias: string | null;
   deliveryFee: number;
+  prepTimeMinutes: number;
   storeOpen: boolean;
   closedTitle: string | null;
   closedMessage: string | null;
@@ -22,6 +23,7 @@ export default function ConfiguracionClient() {
   const [storeAddress, setStoreAddress] = useState("");
   const [bankAlias, setBankAlias] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(0);
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState(10);
   const [storeOpen, setStoreOpen] = useState(true);
   const [closedTitle, setClosedTitle] = useState("");
   const [closedMessage, setClosedMessage] = useState("");
@@ -40,6 +42,7 @@ export default function ConfiguracionClient() {
         setStoreAddress(settings.storeAddress ?? "");
         setBankAlias(settings.bankAlias ?? "");
         setDeliveryFee(settings.deliveryFee);
+        setPrepTimeMinutes(settings.prepTimeMinutes ?? 10);
         setStoreOpen(settings.storeOpen);
         setClosedTitle(settings.closedTitle ?? "");
         setClosedMessage(settings.closedMessage ?? "");
@@ -79,6 +82,7 @@ export default function ConfiguracionClient() {
           storeAddress: storeAddress.trim() || undefined,
           bankAlias: bankAlias.trim() || undefined,
           deliveryFee,
+          prepTimeMinutes,
           storeOpen,
           closedTitle: closedTitle.trim() || undefined,
           closedMessage: closedMessage.trim() || undefined,
@@ -271,6 +275,23 @@ export default function ConfiguracionClient() {
             onChange={(e) => setDeliveryFee(Number(e.target.value))}
             className="w-40 rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-neutral-700">
+            Tiempo de demora estimado (minutos)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={240}
+            value={prepTimeMinutes}
+            onChange={(e) => setPrepTimeMinutes(Number(e.target.value))}
+            className="w-40 rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
+          />
+          <span className="text-xs text-neutral-400">
+            Se muestra en el checkout y en el seguimiento. También editable desde la
+            comanda.
+          </span>
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
