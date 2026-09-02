@@ -969,7 +969,12 @@ el día). **Sin cambios de schema.**
   en el mes en curso vía comparación lexicográfica `month >= currentMonth`), 4 KPIs (Pedidos
   facturables con hint "mes en curso", Facturado, Ticket promedio, Cancelados + "N sin
   aceptar"), gráfico de barras CSS de pedidos por día (sin librería de charts; `title` como
-  tooltip), dos `Breakdown` (canal y medio de pago, con barra de % y $), y la tabla
+  tooltip → **cambiado a un gráfico de línea SVG dibujado a mano** (`smoothPath`
+  Catmull-Rom→bézier, `axisDays`): eje Y en pesos vendidos con 5 líneas de referencia, eje X
+  del día 1 al último del mes con ~6 fechas `DD/MM`, un punto por día con `<title>` de tooltip,
+  relleno tenue debajo. En el mes en curso la línea llega solo hasta `todayDay` (campo nuevo
+  del endpoint) para no caer a cero en los días futuros. Sin librería de charts), dos
+  `Breakdown` (canal y medio de pago, con barra de % y $), y la tabla
   `Historial mensual` (desde el primer pedido del negocio, newest-first, fila clickeable que
   salta al detalle de ese mes, mes seleccionado resaltado). Nota al pie explicando la
   definición de "facturable".

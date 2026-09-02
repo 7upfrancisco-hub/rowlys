@@ -189,10 +189,16 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const isCurrentMonth = sy === current.year && sm === current.month;
+
   return NextResponse.json({
     month: monthKey(sy, sm),
     monthLabel: monthLabel(sy, sm),
-    isCurrentMonth: sy === current.year && sm === current.month,
+    isCurrentMonth,
+    // Día de hoy (1..31) si se está mirando el mes en curso; null si no. El
+    // gráfico dibuja la línea solo hasta este día para no caer a cero en los
+    // días que todavía no pasaron.
+    todayDay: isCurrentMonth ? current.day : null,
     currentMonth: monthKey(current.year, current.month),
     summary: {
       billableOrders,
