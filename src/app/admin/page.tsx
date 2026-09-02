@@ -7,6 +7,12 @@ const SECTIONS = [
     description: "Ver pedidos entrantes, cambiar su estado y marcar cobrados.",
   },
   {
+    href: "/admin/metricas",
+    title: "Métricas e historial",
+    description:
+      "Seguimiento de pedidos e ingresos por mes, con historial de los últimos 12 meses.",
+  },
+  {
     href: "/admin/categorias",
     title: "Categorías",
     description: "Organizar la carta en categorías y su orden de aparición.",

@@ -944,6 +944,41 @@ RestoSimple tiene una barra con las métricas del día arriba del tablero. El us
 - **Deployada el 2026-09-02** (commit `13bb3c2`, sin `db push` porque no toca schema). Vercel
   auto-deployó (`● Ready`, 41s); prod verificado (`/api/admin/metrics` → 401).
 
+## Fase 14: sección `/admin/metricas` — seguimiento e historial (en código, 2026-09-02)
+
+El usuario quiere ampliar las métricas: un apartado propio en el admin para ver seguimiento e
+historial, **porque el servicio se va a cobrar por pedidos mensuales** (necesita el número
+mensual claro y poder mirar meses pasados). La barra de Fase 13 en `/comanda` sigue igual (solo
+el día). **Sin cambios de schema.**
+
+- **Definición de "pedido facturable"** (elegida por el usuario entre 4 opciones): un pedido que
+  el local aceptó = estados `CONFIRMED`/`IN_PROGRESS`/`READY`/`DELIVERED`. Deja afuera los
+  `PENDING` sin aceptar y los `CANCELLED`. Es el número por el que se cobra.
+- **`GET /api/admin/metrics/history`** (nuevo, protegido por el matcher `/api/admin/*`). Query
+  `?month=YYYY-MM` (default: mes actual de Argentina, UTC-3 fijo). Un solo `findMany` de los
+  pedidos desde `historyStart` (12 meses atrás del mes elegido) hasta el fin del mes elegido +
+  agregado en memoria. Devuelve: `summary` (billableOrders, revenue, avgTicket, cancelled,
+  pending), `daily` (array día 1..N del mes con orders/revenue facturables), `byChannel`
+  (DELIVERY/PICKUP), `byPayment` (CASH/MP/MODO/BANK_TRANSFER), y `monthlyHistory` (12 filas, mes
+  a mes, con orders/revenue/cancelled/avgTicket). Helpers `arMidnight`/`arParts` para los
+  límites de mes/día en horario de Argentina. `month` inválido → 400.
+- **`/admin/metricas`** (`page.tsx` → `metricas-client.tsx`, mismo patrón que las demás
+  pantallas admin, dentro del `AdminLayout`): selector de mes (‹ / ›, "siguiente" deshabilitado
+  en el mes en curso vía comparación lexicográfica `month >= currentMonth`), 4 KPIs (Pedidos
+  facturables con hint "mes en curso", Facturado, Ticket promedio, Cancelados + "N sin
+  aceptar"), gráfico de barras CSS de pedidos por día (sin librería de charts; `title` como
+  tooltip), dos `Breakdown` (canal y medio de pago, con barra de % y $), y la tabla
+  `Historial mensual` (12 meses, newest-first, fila clickeable que salta al detalle de ese mes,
+  mes seleccionado resaltado). Nota al pie explicando la definición de "facturable".
+- **Enlaces**: link "Métricas" en `AdminNav.tsx` (entre Pedidos y Repartidores), card en el
+  dashboard `/admin`, y "Ver historial →" al final de la barra "HOY" de `comanda-client.tsx`
+  (usa el `Link` ya importado).
+- `npx tsc --noEmit` y `npx next build` limpios. `/admin/metricas` = ○ 2.99 kB / 90.2 kB First
+  Load; `/api/admin/metrics/history` = ƒ dynamic.
+- **Pendiente**: no probado contra Neon ni en navegador en esta sesión (sin datos multi-mes en
+  local). Falta commitear/pushear (git push lo corre el usuario, GCM ya resuelto). Al deployar
+  no hace falta `db push`.
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
@@ -1012,3 +1047,4 @@ nuevas o que refinan lo ya sabido:
 - **2026-08-31** — El usuario vio el branding en prod, le gusta, pidió **toggle claro/oscuro** (Fase 8a) + como próxima feature un **estado "local cerrado"** (Fase 8b): que el dueño pueda cerrar el local y el cliente vea primero una pantalla de estado, no el menú, con opción de entrar igual ("vamos trabajandolo"). 8a implementado y deployado (commit `b0a5d5c`). 8b implementado (commit `912fc66`) pero **NO deployado**: necesita `prisma db push` (columnas `storeOpen`/`closedTitle`/`closedMessage` en `Settings`) que el clasificador me bloquea — lo corre el usuario, ANTES de deployar el código. Ver sección "Fase 8". A iterar: gate en checkout/orders, gate en la home, acceso al toggle desde `/comanda`.
 - **2026-09-01** — El usuario pidió un **botón activar/desactivar sonido en `/comanda`** con un timbre cuando entra un pedido (como el "Desactivar sonidos" de RestoSimple). Implementado como **Fase 8e** (ver sección): `src/lib/doorbell.ts` sintetiza un "ding-dong" con la Web Audio API (sin archivo de audio), y `comanda-client.tsx` detecta ids de pedido nuevos en el poll de 5s y hace sonar el timbre si el toggle está activo. Preferencia en `localStorage`, default activado, botón 🔔/🔕 en el header. Sin schema ni API. `tsc`/`build` limpios. **Deployado** (commit `a999fd0`, auto-deploy OK). La Fase 8d ya estaba en prod (la columna `closedImageUrl` ya estaba pusheada a Neon). **Git push resuelto para siempre:** el usuario le dio acceso a su cuenta de GitHub al Git Credential Manager (que ya estaba configurado como `credential.helper=manager` pero nunca había guardado nada porque los push históricos llevaban el token en la URL) — desde ahora `git push origin main` es silencioso, no hace falta PAT por sesión.
 - **2026-09-01** — El usuario eligió como próxima feature la **carga manual de pedidos desde `/comanda`** (cliente que pide en el local o por teléfono), con un botón flotante "+". Implementado como **Fase 9** (ver sección): se extrajo la creación de pedidos a `src/lib/orders.ts` (`createOrder(body, opts)`), `POST /api/orders` ahora delega ahí, nuevo `POST /api/admin/orders` (protegido) con `enforceStoreStatus:false` + `initialStatus:"CONFIRMED"`, y un modal `new-order-modal.tsx` con estado local propio (menú + adicionales + datos del cliente + pago). FAB `+` en `comanda-client.tsx`. Sin schema. Probado end-to-end contra Neon con curl (validaciones + creación OK + visible en `GET /api/orders`, pedido de prueba borrado). `tsc`/`build` limpios. Falta commitear/pushear y probar en navegador.
+- **2026-09-02** — El usuario pidió **ampliar las métricas** con un apartado de seguimiento e historial, porque el servicio se va a cobrar por pedidos mensuales. Implementado como **Fase 14** (ver sección): nueva `GET /api/admin/metrics/history?month=YYYY-MM` (12 meses en un query + agregado en memoria, horario de Argentina) y pantalla `/admin/metricas` con selector de mes, 4 KPIs, gráfico de barras por día (CSS, sin librería), desglose por canal y por medio de pago, y tabla de historial mensual (12 meses, fila clickeable). "Pedido facturable" = aceptado por el local (CONFIRMED/IN_PROGRESS/READY/DELIVERED), sin PENDING ni CANCELLED — decisión del usuario. Links en el nav del admin, el dashboard y la barra de `/comanda`. Sin schema. `tsc`/`build` limpios. Falta commitear/pushear y probar con datos reales.

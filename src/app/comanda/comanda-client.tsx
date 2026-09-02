@@ -519,6 +519,12 @@ export default function ComandaClient() {
               {metrics.byStatus.CANCELLED > 0 &&
                 ` · Canc ${metrics.byStatus.CANCELLED}`}
             </span>
+            <Link
+              href="/admin/metricas"
+              className="text-xs font-medium text-brand-600 hover:underline"
+            >
+              Ver historial →
+            </Link>
           </div>
         </div>
       )}
