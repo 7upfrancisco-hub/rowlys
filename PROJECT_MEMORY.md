@@ -924,6 +924,25 @@ El usuario quiere que Delivery y Takeaway tengan **cada uno su propia demora**.
   parcial de uno solo no pisa el otro (d:25/p:10 → d:25/p:8), fuera de rango 400. Vercel
   auto-deployó; en prod el usuario ya dejó delivery=120 / pickup=10 probándolo desde la UI.
 
+## Fase 13: barra de métricas del día en `/comanda` (en código, 2026-09-02)
+
+RestoSimple tiene una barra con las métricas del día arriba del tablero. El usuario la pidió.
+**Sin cambios de schema.**
+
+- **`GET /api/admin/metrics`** (nuevo, protegido): "hoy" = desde la medianoche de Argentina
+  (UTC-3 sin DST → 03:00 UTC). Trae los pedidos del día y calcula en memoria (pocas filas):
+  `orders` (no cancelados), `revenue` (suma de `total` de no cancelados), `cashPending` (suma de
+  `total` donde el pago es `CASH`/`BANK_TRANSFER` y no está `CONFIRMED`), y `byStatus` (conteo
+  por estado, incluye CANCELLED).
+- **`/comanda`**: barra fina arriba de la de "Estado del local" (fondo `brand-50`) con
+  "HOY · Pedidos N · Facturado $ · A cobrar (efvo/transf) $ · Pend/Conf/Prep/Listo/Entreg…".
+  El "A cobrar" se pinta ámbar si es > 0. Se refresca sola cada 60s y después de cada `mutate`
+  y de crear un pedido manual. Componente `Stat` local.
+- Verificado contra Neon: 401 sin cookie; con cookie, `dayStart` correcto (medianoche ART),
+  `byStatus` cuadra con el listado de pedidos (CONFIRMED + DELIVERED = `orders`), `cashPending`
+  = total del pedido no cobrado. `tsc` + `build` limpios (`/comanda` 9.7 → 11 kB). **Falta
+  commitear/pushear.**
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local

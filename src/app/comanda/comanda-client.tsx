@@ -30,6 +30,13 @@ type OrderPatch = {
 // Opciones del selector de demora por pedido.
 const DELAY_OPTIONS = [0, 10, 15, 20, 30, 45, 60];
 
+type DayMetrics = {
+  orders: number;
+  revenue: number;
+  cashPending: number;
+  byStatus: Record<OrderStatus, number>;
+};
+
 // Columnas del tablero: el flujo de cocina sin el estado final DELIVERED
 // (los entregados salen del tablero). CANCELLED tampoco aparece.
 const BOARD_COLUMNS: OrderStatus[] = [
@@ -136,6 +143,31 @@ function StatusToggle({
   );
 }
 
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+}) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span className="text-xs uppercase tracking-wide text-neutral-400">
+        {label}
+      </span>
+      <span
+        className={
+          "font-semibold " + (accent ? "text-amber-600" : "text-neutral-800")
+        }
+      >
+        {value}
+      </span>
+    </span>
+  );
+}
+
 export default function ComandaClient() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [storeName, setStoreName] = useState("Rowlys");
@@ -151,6 +183,7 @@ export default function ComandaClient() {
   } | null>(null);
   const [prepDrafts, setPrepDrafts] = useState({ delivery: "", pickup: "" });
   const [channelsOpen, setChannelsOpen] = useState(false);
+  const [metrics, setMetrics] = useState<DayMetrics | null>(null);
   const [statusBusy, setStatusBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -327,6 +360,18 @@ export default function ComandaClient() {
     loadDrivers();
   }, [loadDrivers]);
 
+  // Métricas del día (barra superior). Se refresca sola y tras cada acción.
+  const loadMetrics = useCallback(() => {
+    apiFetch<DayMetrics>("/api/admin/metrics")
+      .then(setMetrics)
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadMetrics();
+    const id = setInterval(loadMetrics, 60000);
+    return () => clearInterval(id);
+  }, [loadMetrics]);
+
   async function toggleStoreFlag(
     field: "storeOpen" | "deliveryEnabled" | "pickupEnabled"
   ) {
@@ -369,6 +414,7 @@ export default function ComandaClient() {
         if (!stillOnBoard) return prev.filter((o) => o.id !== id);
         return prev.map((o) => (o.id === id ? updated : o));
       });
+      loadMetrics();
     } catch (err) {
       setError((err as ApiError).message);
       // Si falló, dejamos que el poll vuelva a mandar cuanto antes.
@@ -452,6 +498,30 @@ export default function ComandaClient() {
           </div>
         </div>
       </header>
+
+      {metrics && (
+        <div className="border-b border-neutral-200 bg-brand-50/40">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-1 px-6 py-2 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+              Hoy
+            </span>
+            <Stat label="Pedidos" value={metrics.orders} />
+            <Stat label="Facturado" value={formatCurrency(metrics.revenue)} />
+            <Stat
+              label="A cobrar (efvo/transf)"
+              value={formatCurrency(metrics.cashPending)}
+              accent={metrics.cashPending > 0}
+            />
+            <span className="text-neutral-400">
+              Pend {metrics.byStatus.PENDING} · Conf {metrics.byStatus.CONFIRMED}{" "}
+              · Prep {metrics.byStatus.IN_PROGRESS} · Listo{" "}
+              {metrics.byStatus.READY} · Entreg {metrics.byStatus.DELIVERED}
+              {metrics.byStatus.CANCELLED > 0 &&
+                ` · Canc ${metrics.byStatus.CANCELLED}`}
+            </span>
+          </div>
+        </div>
+      )}
 
       {storeStatus && (
         <div className="border-b border-neutral-200 bg-white">
@@ -683,6 +753,7 @@ export default function ComandaClient() {
           onCreated={() => {
             suppressPollUntil.current = 0;
             load();
+            loadMetrics();
           }}
         />
       )}
