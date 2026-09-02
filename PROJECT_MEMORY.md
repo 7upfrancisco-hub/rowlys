@@ -918,8 +918,11 @@ El usuario quiere que Delivery y Takeaway tengan **cada uno su propia demora**.
 - **`/checkout`**: el tiempo estimado se elige según el `orderType` (delivery vs pickup).
 - **`/pedido/[id]`**: la ETA usa la demora del canal del pedido + `extraDelayMinutes`.
 - **`/admin/configuracion`**: el campo único de demora pasó a dos (Envío / Retiro).
-- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` ANTES del código. **Falta db
-  push + probar + commitear/pushear.**
+- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` ANTES del código.
+- **Deployada el 2026-09-02** (commit `401253f`). El usuario corrió `prisma db push` (aceptó el
+  DROP de `prepTimeMinutes`). Probado contra Neon: `/api/settings` expone los dos campos, PATCH
+  parcial de uno solo no pisa el otro (d:25/p:10 → d:25/p:8), fuera de rango 400. Vercel
+  auto-deployó; en prod el usuario ya dejó delivery=120 / pickup=10 probándolo desde la UI.
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
