@@ -116,7 +116,7 @@ model Order {
   total             Float
   status            OrderStatus @default(PENDING)
   // Demora extra en minutos que carga el local para este pedido puntual; se
-  // suma al tiempo de preparación general (Settings.prepTimeMinutes).
+  // suma al tiempo de preparación del canal (Settings.prepTime*Minutes).
   extraDelayMinutes Int         @default(0)
   notes             String?
   items             OrderItem[]
@@ -200,8 +200,9 @@ model Settings {
   closedTitle     String?
   closedMessage   String?
   closedImageUrl  String?
-  // Tiempo de preparación estimado por defecto (minutos). Se muestra en el
+  // Tiempo de preparación estimado por canal (minutos). Se muestra en el
   // checkout y en el seguimiento del pedido. Editable desde /comanda.
-  prepTimeMinutes Int      @default(10)
+  prepTimeDeliveryMinutes Int @default(10)
+  prepTimePickupMinutes   Int @default(10)
   updatedAt       DateTime @updatedAt
 }

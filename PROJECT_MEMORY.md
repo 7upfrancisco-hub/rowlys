@@ -895,14 +895,31 @@ configurable en `/comanda` (hoy el checkout decía "10 minutos" fijo) + demora p
   `prepTimeMinutes` se PATCHea y se refleja en `/api/settings`. Datos de prueba borrados. Vercel
   auto-deployó, prod verificado (`/api/settings` devuelve `prepTimeMinutes`).
 
-### Fase 12b — modal "Canales de venta" en `/comanda` (2026-09-02)
+### Fase 12b — modal "Canales de venta" en `/comanda` (2026-09-02, deployado commit `dbb7020`)
 
 El usuario no quería que un click en Delivery/Takeaway pausara el canal directo, ni el label
 "Demora general". Ahora en la barra de estado: los chips Delivery/Takeaway (siguen mostrando
-verde/gris al vistazo) y un chip "⏱️ N min" **abren un modal "Canales de venta"** en vez de
+verde/gris al vistazo) y un chip "⏱️ … min" **abren un modal "Canales de venta"** en vez de
 togglear. El modal tiene los toggles reales de cada canal (deshabilitados si el local está
-cerrado) + el campo "Tiempo de demora" (mismo `PATCH /api/admin/settings` optimista al blur).
-Sin schema ni API nuevos — solo UI de `comanda-client.tsx`. `tsc`/`build` OK.
+cerrado) + la demora. Sin schema ni API nuevos — solo UI de `comanda-client.tsx`.
+
+### Fase 12c — demora POR CANAL (2026-09-02)
+
+El usuario quiere que Delivery y Takeaway tengan **cada uno su propia demora**.
+
+- **Schema**: `Settings.prepTimeMinutes` (único) se reemplazó por
+  `prepTimeDeliveryMinutes` + `prepTimePickupMinutes` (Int, default 10). **Requiere
+  `prisma db push`** — va a avisar del DROP de `prepTimeMinutes` (aceptar: el valor era 10, el
+  default, sin pérdida real). `prisma generate` ya corrió.
+- `/api/settings` + `/api/admin/settings`: exponen/aceptan los dos campos nuevos.
+- **`/comanda`**: dentro del modal "Canales de venta", cada fila de canal tiene su propio input
+  "Demora [N] min" (PATCH parcial optimista del campo que corresponde). El chip de la barra
+  muestra `⏱️ {delivery} / {pickup} min`.
+- **`/checkout`**: el tiempo estimado se elige según el `orderType` (delivery vs pickup).
+- **`/pedido/[id]`**: la ETA usa la demora del canal del pedido + `extraDelayMinutes`.
+- **`/admin/configuracion`**: el campo único de demora pasó a dos (Envío / Retiro).
+- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` ANTES del código. **Falta db
+  push + probar + commitear/pushear.**
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 

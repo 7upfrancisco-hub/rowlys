@@ -144,8 +144,12 @@ export default function ComandaClient() {
     deliveryEnabled: boolean;
     pickupEnabled: boolean;
   } | null>(null);
-  const [prepTime, setPrepTime] = useState<number | null>(null);
-  const [prepTimeDraft, setPrepTimeDraft] = useState("");
+  // Demora de preparación por canal (minutos). null hasta cargar settings.
+  const [prepTimes, setPrepTimes] = useState<{
+    delivery: number;
+    pickup: number;
+  } | null>(null);
+  const [prepDrafts, setPrepDrafts] = useState({ delivery: "", pickup: "" });
   const [channelsOpen, setChannelsOpen] = useState(false);
   const [statusBusy, setStatusBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -265,7 +269,8 @@ export default function ComandaClient() {
       storeOpen: boolean;
       deliveryEnabled: boolean;
       pickupEnabled: boolean;
-      prepTimeMinutes?: number;
+      prepTimeDeliveryMinutes?: number;
+      prepTimePickupMinutes?: number;
     }>("/api/settings")
       .then((s) => {
         if (s?.storeName) setStoreName(s.storeName);
@@ -274,30 +279,40 @@ export default function ComandaClient() {
           deliveryEnabled: s.deliveryEnabled,
           pickupEnabled: s.pickupEnabled,
         });
-        if (typeof s.prepTimeMinutes === "number") {
-          setPrepTime(s.prepTimeMinutes);
-          setPrepTimeDraft(String(s.prepTimeMinutes));
-        }
+        const delivery = s.prepTimeDeliveryMinutes ?? 10;
+        const pickup = s.prepTimePickupMinutes ?? 10;
+        setPrepTimes({ delivery, pickup });
+        setPrepDrafts({ delivery: String(delivery), pickup: String(pickup) });
       })
       .catch(() => {});
   }, []);
 
-  async function savePrepTime() {
-    const value = Number(prepTimeDraft);
-    if (!Number.isFinite(value) || value < 0 || value > 240 || value === prepTime) {
-      setPrepTimeDraft(String(prepTime ?? ""));
+  async function savePrepTime(channel: "delivery" | "pickup") {
+    if (!prepTimes) return;
+    const value = Number(prepDrafts[channel]);
+    if (
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > 240 ||
+      value === prepTimes[channel]
+    ) {
+      setPrepDrafts((d) => ({ ...d, [channel]: String(prepTimes[channel]) }));
       return;
     }
-    const prev = prepTime;
-    setPrepTime(value); // optimista
+    const prev = prepTimes;
+    setPrepTimes({ ...prepTimes, [channel]: value }); // optimista
+    const field =
+      channel === "delivery"
+        ? "prepTimeDeliveryMinutes"
+        : "prepTimePickupMinutes";
     try {
       await apiFetch("/api/admin/settings", {
         method: "PATCH",
-        body: JSON.stringify({ prepTimeMinutes: value }),
+        body: JSON.stringify({ [field]: value }),
       });
     } catch (err) {
-      setPrepTime(prev);
-      setPrepTimeDraft(String(prev ?? ""));
+      setPrepTimes(prev);
+      setPrepDrafts((d) => ({ ...d, [channel]: String(prev[channel]) }));
       showNotice({ kind: "warn", text: (err as ApiError).message });
     }
   }
@@ -462,13 +477,14 @@ export default function ComandaClient() {
               busy={false}
               onToggle={() => setChannelsOpen(true)}
             />
-            {prepTime !== null && (
+            {prepTimes && (
               <button
                 type="button"
                 onClick={() => setChannelsOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-3 py-1 font-medium text-neutral-600 transition hover:bg-neutral-50"
+                title="Demora: Delivery / Takeaway"
               >
-                ⏱️ {prepTime} min
+                ⏱️ {prepTimes.delivery} / {prepTimes.pickup} min
               </button>
             )}
             {!storeStatus.storeOpen && (
@@ -500,12 +516,14 @@ export default function ComandaClient() {
               {(
                 [
                   {
+                    channel: "delivery",
                     field: "deliveryEnabled",
                     label: "Delivery",
                     desc: "Envío a domicilio",
                     on: storeStatus.deliveryEnabled,
                   },
                   {
+                    channel: "pickup",
                     field: "pickupEnabled",
                     label: "Takeaway",
                     desc: "Retiro en el local",
@@ -515,24 +533,50 @@ export default function ComandaClient() {
               ).map((c) => (
                 <div
                   key={c.field}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 px-3 py-2"
+                  className="rounded-lg border border-neutral-200 px-3 py-2"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-neutral-800">
-                      {c.label}
-                    </p>
-                    <p className="text-xs text-neutral-400">{c.desc}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-neutral-800">
+                        {c.label}
+                      </p>
+                      <p className="text-xs text-neutral-400">{c.desc}</p>
+                    </div>
+                    <StatusToggle
+                      label={c.on ? "Activo" : "Pausado"}
+                      on={c.on}
+                      busy={statusBusy === c.field}
+                      disabled={!storeStatus.storeOpen}
+                      onToggle={() => toggleStoreFlag(c.field)}
+                    />
                   </div>
-                  <StatusToggle
-                    label={c.on ? "Activo" : "Pausado"}
-                    on={c.on}
-                    busy={statusBusy === c.field}
-                    disabled={!storeStatus.storeOpen}
-                    onToggle={() => toggleStoreFlag(c.field)}
-                  />
+                  <label className="mt-2 flex items-center gap-2 border-t border-neutral-100 pt-2 text-xs text-neutral-500">
+                    Demora
+                    <input
+                      type="number"
+                      min={0}
+                      max={240}
+                      value={prepDrafts[c.channel]}
+                      onChange={(e) =>
+                        setPrepDrafts((d) => ({
+                          ...d,
+                          [c.channel]: e.target.value,
+                        }))
+                      }
+                      onBlur={() => savePrepTime(c.channel)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                      className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                    />
+                    min
+                  </label>
                 </div>
               ))}
             </div>
+            <p className="mt-2 text-xs text-neutral-400">
+              La demora se muestra en el checkout y en el seguimiento del cliente.
+            </p>
 
             {!storeStatus.storeOpen && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -540,30 +584,6 @@ export default function ComandaClient() {
                 botón &ldquo;Cerrado&rdquo; de la barra.
               </p>
             )}
-
-            <div className="mt-5">
-              <label className="text-sm font-medium text-neutral-700">
-                Tiempo de demora
-              </label>
-              <p className="text-xs text-neutral-400">
-                Se muestra en el checkout y en el seguimiento del cliente.
-              </p>
-              <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={240}
-                  value={prepTimeDraft}
-                  onChange={(e) => setPrepTimeDraft(e.target.value)}
-                  onBlur={savePrepTime}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  className="w-20 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
-                />
-                <span className="text-sm text-neutral-500">minutos</span>
-              </div>
-            </div>
 
             <button
               type="button"

@@ -10,7 +10,8 @@ interface Settings {
   storeAddress: string | null;
   bankAlias: string | null;
   deliveryFee: number;
-  prepTimeMinutes: number;
+  prepTimeDeliveryMinutes: number;
+  prepTimePickupMinutes: number;
   storeOpen: boolean;
   closedTitle: string | null;
   closedMessage: string | null;
@@ -23,7 +24,8 @@ export default function ConfiguracionClient() {
   const [storeAddress, setStoreAddress] = useState("");
   const [bankAlias, setBankAlias] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(0);
-  const [prepTimeMinutes, setPrepTimeMinutes] = useState(10);
+  const [prepDelivery, setPrepDelivery] = useState(10);
+  const [prepPickup, setPrepPickup] = useState(10);
   const [storeOpen, setStoreOpen] = useState(true);
   const [closedTitle, setClosedTitle] = useState("");
   const [closedMessage, setClosedMessage] = useState("");
@@ -42,7 +44,8 @@ export default function ConfiguracionClient() {
         setStoreAddress(settings.storeAddress ?? "");
         setBankAlias(settings.bankAlias ?? "");
         setDeliveryFee(settings.deliveryFee);
-        setPrepTimeMinutes(settings.prepTimeMinutes ?? 10);
+        setPrepDelivery(settings.prepTimeDeliveryMinutes ?? 10);
+        setPrepPickup(settings.prepTimePickupMinutes ?? 10);
         setStoreOpen(settings.storeOpen);
         setClosedTitle(settings.closedTitle ?? "");
         setClosedMessage(settings.closedMessage ?? "");
@@ -82,7 +85,8 @@ export default function ConfiguracionClient() {
           storeAddress: storeAddress.trim() || undefined,
           bankAlias: bankAlias.trim() || undefined,
           deliveryFee,
-          prepTimeMinutes,
+          prepTimeDeliveryMinutes: prepDelivery,
+          prepTimePickupMinutes: prepPickup,
           storeOpen,
           closedTitle: closedTitle.trim() || undefined,
           closedMessage: closedMessage.trim() || undefined,
@@ -280,14 +284,30 @@ export default function ConfiguracionClient() {
           <label className="text-sm font-medium text-neutral-700">
             Tiempo de demora estimado (minutos)
           </label>
-          <input
-            type="number"
-            min={0}
-            max={240}
-            value={prepTimeMinutes}
-            onChange={(e) => setPrepTimeMinutes(Number(e.target.value))}
-            className="w-40 rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
-          />
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm text-neutral-600">
+              Envío a domicilio
+              <input
+                type="number"
+                min={0}
+                max={240}
+                value={prepDelivery}
+                onChange={(e) => setPrepDelivery(Number(e.target.value))}
+                className="w-24 rounded-lg border border-neutral-300 px-3 py-2 focus:border-brand-500 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-neutral-600">
+              Retiro en el local
+              <input
+                type="number"
+                min={0}
+                max={240}
+                value={prepPickup}
+                onChange={(e) => setPrepPickup(Number(e.target.value))}
+                className="w-24 rounded-lg border border-neutral-300 px-3 py-2 focus:border-brand-500 focus:outline-none"
+              />
+            </label>
+          </div>
           <span className="text-xs text-neutral-400">
             Se muestra en el checkout y en el seguimiento. También editable desde la
             comanda.

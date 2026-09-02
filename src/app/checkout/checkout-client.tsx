@@ -19,7 +19,8 @@ interface PublicSettings {
   deliveryEnabled: boolean;
   pickupEnabled: boolean;
   closedTitle: string | null;
-  prepTimeMinutes: number;
+  prepTimeDeliveryMinutes: number;
+  prepTimePickupMinutes: number;
 }
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "MP";
@@ -183,7 +184,10 @@ export default function CheckoutClient() {
         </h1>
         <p className="mb-6 text-sm text-muted">
           Tenemos un tiempo de demora estimado de{" "}
-          {settings?.prepTimeMinutes ?? 10} minutos.
+          {(orderType === "DELIVERY"
+            ? settings?.prepTimeDeliveryMinutes
+            : settings?.prepTimePickupMinutes) ?? 10}{" "}
+          minutos.
           {orderType === "PICKUP" && settings?.storeAddress && (
             <> Retirá tu pedido en {settings.storeName}, {settings.storeAddress}.</>
           )}

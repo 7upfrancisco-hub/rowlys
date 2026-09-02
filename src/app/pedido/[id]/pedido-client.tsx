@@ -14,7 +14,7 @@ import {
 
 export default function PedidoClient({ id }: { id: string }) {
   const [order, setOrder] = useState<OrderDTO | null>(null);
-  const [prepTimeMinutes, setPrepTimeMinutes] = useState(10);
+  const [prepTimes, setPrepTimes] = useState({ delivery: 10, pickup: 10 });
   const [notFound, setNotFound] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -53,11 +53,16 @@ export default function PedidoClient({ id }: { id: string }) {
     load();
     intervalRef.current = setInterval(load, 5000);
 
-    apiFetch<{ prepTimeMinutes?: number }>("/api/settings")
+    apiFetch<{
+      prepTimeDeliveryMinutes?: number;
+      prepTimePickupMinutes?: number;
+    }>("/api/settings")
       .then((s) => {
-        if (!cancelled && typeof s.prepTimeMinutes === "number") {
-          setPrepTimeMinutes(s.prepTimeMinutes);
-        }
+        if (cancelled) return;
+        setPrepTimes({
+          delivery: s.prepTimeDeliveryMinutes ?? 10,
+          pickup: s.prepTimePickupMinutes ?? 10,
+        });
       })
       .catch(() => {});
 
@@ -94,7 +99,9 @@ export default function PedidoClient({ id }: { id: string }) {
     order.status === "PENDING" ||
     order.status === "CONFIRMED" ||
     order.status === "IN_PROGRESS";
-  const etaMinutes = prepTimeMinutes + order.extraDelayMinutes;
+  const etaMinutes =
+    (order.orderType === "DELIVERY" ? prepTimes.delivery : prepTimes.pickup) +
+    order.extraDelayMinutes;
 
   return (
     <div className="storefront">
