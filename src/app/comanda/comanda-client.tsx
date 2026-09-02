@@ -146,6 +146,7 @@ export default function ComandaClient() {
   } | null>(null);
   const [prepTime, setPrepTime] = useState<number | null>(null);
   const [prepTimeDraft, setPrepTimeDraft] = useState("");
+  const [channelsOpen, setChannelsOpen] = useState(false);
   const [statusBusy, setStatusBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -448,46 +449,129 @@ export default function ComandaClient() {
               onToggle={() => toggleStoreFlag("storeOpen")}
             />
             <span className="mx-1 h-4 w-px bg-neutral-200" />
+            <span className="font-medium text-neutral-500">Canales:</span>
             <StatusToggle
               label="Delivery"
               on={storeStatus.deliveryEnabled}
-              busy={statusBusy === "deliveryEnabled"}
-              disabled={!storeStatus.storeOpen}
-              onToggle={() => toggleStoreFlag("deliveryEnabled")}
+              busy={false}
+              onToggle={() => setChannelsOpen(true)}
             />
             <StatusToggle
               label="Takeaway"
               on={storeStatus.pickupEnabled}
-              busy={statusBusy === "pickupEnabled"}
-              disabled={!storeStatus.storeOpen}
-              onToggle={() => toggleStoreFlag("pickupEnabled")}
+              busy={false}
+              onToggle={() => setChannelsOpen(true)}
             />
+            {prepTime !== null && (
+              <button
+                type="button"
+                onClick={() => setChannelsOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-3 py-1 font-medium text-neutral-600 transition hover:bg-neutral-50"
+              >
+                ⏱️ {prepTime} min
+              </button>
+            )}
             {!storeStatus.storeOpen && (
               <span className="text-xs text-neutral-400">
                 Con el local cerrado, el cliente ve el menú pero no puede pedir.
               </span>
             )}
-            {prepTime !== null && (
-              <>
-                <span className="mx-1 h-4 w-px bg-neutral-200" />
-                <label className="flex items-center gap-1.5 font-medium text-neutral-500">
-                  Demora general:
-                  <input
-                    type="number"
-                    min={0}
-                    max={240}
-                    value={prepTimeDraft}
-                    onChange={(e) => setPrepTimeDraft(e.target.value)}
-                    onBlur={savePrepTime}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur();
-                    }}
-                    className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+          </div>
+        </div>
+      )}
+
+      {channelsOpen && storeStatus && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setChannelsOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-neutral-900">
+              Canales de venta
+            </h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              Pausá un canal o ajustá la demora sin cerrar el local.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-2">
+              {(
+                [
+                  {
+                    field: "deliveryEnabled",
+                    label: "Delivery",
+                    desc: "Envío a domicilio",
+                    on: storeStatus.deliveryEnabled,
+                  },
+                  {
+                    field: "pickupEnabled",
+                    label: "Takeaway",
+                    desc: "Retiro en el local",
+                    on: storeStatus.pickupEnabled,
+                  },
+                ] as const
+              ).map((c) => (
+                <div
+                  key={c.field}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-neutral-800">
+                      {c.label}
+                    </p>
+                    <p className="text-xs text-neutral-400">{c.desc}</p>
+                  </div>
+                  <StatusToggle
+                    label={c.on ? "Activo" : "Pausado"}
+                    on={c.on}
+                    busy={statusBusy === c.field}
+                    disabled={!storeStatus.storeOpen}
+                    onToggle={() => toggleStoreFlag(c.field)}
                   />
-                  min
-                </label>
-              </>
+                </div>
+              ))}
+            </div>
+
+            {!storeStatus.storeOpen && (
+              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                El local está cerrado: ningún canal toma pedidos. Reabrilo con el
+                botón &ldquo;Cerrado&rdquo; de la barra.
+              </p>
             )}
+
+            <div className="mt-5">
+              <label className="text-sm font-medium text-neutral-700">
+                Tiempo de demora
+              </label>
+              <p className="text-xs text-neutral-400">
+                Se muestra en el checkout y en el seguimiento del cliente.
+              </p>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={240}
+                  value={prepTimeDraft}
+                  onChange={(e) => setPrepTimeDraft(e.target.value)}
+                  onBlur={savePrepTime}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  className="w-20 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+                />
+                <span className="text-sm text-neutral-500">minutos</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setChannelsOpen(false)}
+              className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              Listo
+            </button>
           </div>
         </div>
       )}

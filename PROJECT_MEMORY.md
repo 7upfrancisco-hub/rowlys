@@ -895,6 +895,15 @@ configurable en `/comanda` (hoy el checkout decía "10 minutos" fijo) + demora p
   `prepTimeMinutes` se PATCHea y se refleja en `/api/settings`. Datos de prueba borrados. Vercel
   auto-deployó, prod verificado (`/api/settings` devuelve `prepTimeMinutes`).
 
+### Fase 12b — modal "Canales de venta" en `/comanda` (2026-09-02)
+
+El usuario no quería que un click en Delivery/Takeaway pausara el canal directo, ni el label
+"Demora general". Ahora en la barra de estado: los chips Delivery/Takeaway (siguen mostrando
+verde/gris al vistazo) y un chip "⏱️ N min" **abren un modal "Canales de venta"** en vez de
+togglear. El modal tiene los toggles reales de cada canal (deshabilitados si el local está
+cerrado) + el campo "Tiempo de demora" (mismo `PATCH /api/admin/settings` optimista al blur).
+Sin schema ni API nuevos — solo UI de `comanda-client.tsx`. `tsc`/`build` OK.
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
