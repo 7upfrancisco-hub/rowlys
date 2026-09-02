@@ -995,8 +995,8 @@ el día). **Sin cambios de schema.**
   relleno tenue debajo, color `#f97316`. En el mes en curso la línea llega solo hasta
   `todayDay` (campo nuevo del endpoint) para no caer a cero en días futuros. Sección renombrada
   a "Ventas por día". `tsc`/`build` OK.
-- **Pendiente**: los 3 commits (`6fd1c70`, `6e232d7`, `7f9d3b8`) — el usuario tiene que
-  `git push origin main`. Al deployar no hace falta `db push`.
+- **Deployada el 2026-09-02** (commits `6fd1c70` + `6e232d7` + `7f9d3b8`, sin `db push`). El
+  usuario pusheó, Vercel auto-deployó y confirmó en prod que le gusta ("listo, genial").
 
 ## Fase 15: tarjetas de `/comanda` más compactas (en código, 2026-09-02)
 
@@ -1017,7 +1017,8 @@ Con varios pedidos en una columna la tarjeta quedaba muy alta. El usuario eligi�
 - **Sin cambios**: lista de ítems, badge de pago + total, "paga con X · vuelto Y", botón
   primario por columna (helper nuevo `primaryAction`) y "Cobrar" siguen siempre a la vista.
 - `npx tsc --noEmit` y `npx next build` limpios (`/comanda` 11.1→11.3 kB).
-- **Pendiente**: no probado en navegador; commitear y pushear junto con lo de Fase 14.
+- **Deployada el 2026-09-02** (commit `9086c31`, sin `db push`). Pusheada junto con Fase 14,
+  auto-deploy OK, el usuario la vio en prod y le gusta ("listo, genial").
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
@@ -1088,3 +1089,4 @@ nuevas o que refinan lo ya sabido:
 - **2026-09-01** — El usuario pidió un **botón activar/desactivar sonido en `/comanda`** con un timbre cuando entra un pedido (como el "Desactivar sonidos" de RestoSimple). Implementado como **Fase 8e** (ver sección): `src/lib/doorbell.ts` sintetiza un "ding-dong" con la Web Audio API (sin archivo de audio), y `comanda-client.tsx` detecta ids de pedido nuevos en el poll de 5s y hace sonar el timbre si el toggle está activo. Preferencia en `localStorage`, default activado, botón 🔔/🔕 en el header. Sin schema ni API. `tsc`/`build` limpios. **Deployado** (commit `a999fd0`, auto-deploy OK). La Fase 8d ya estaba en prod (la columna `closedImageUrl` ya estaba pusheada a Neon). **Git push resuelto para siempre:** el usuario le dio acceso a su cuenta de GitHub al Git Credential Manager (que ya estaba configurado como `credential.helper=manager` pero nunca había guardado nada porque los push históricos llevaban el token en la URL) — desde ahora `git push origin main` es silencioso, no hace falta PAT por sesión.
 - **2026-09-01** — El usuario eligió como próxima feature la **carga manual de pedidos desde `/comanda`** (cliente que pide en el local o por teléfono), con un botón flotante "+". Implementado como **Fase 9** (ver sección): se extrajo la creación de pedidos a `src/lib/orders.ts` (`createOrder(body, opts)`), `POST /api/orders` ahora delega ahí, nuevo `POST /api/admin/orders` (protegido) con `enforceStoreStatus:false` + `initialStatus:"CONFIRMED"`, y un modal `new-order-modal.tsx` con estado local propio (menú + adicionales + datos del cliente + pago). FAB `+` en `comanda-client.tsx`. Sin schema. Probado end-to-end contra Neon con curl (validaciones + creación OK + visible en `GET /api/orders`, pedido de prueba borrado). `tsc`/`build` limpios. Falta commitear/pushear y probar en navegador.
 - **2026-09-02** — El usuario pidió **ampliar las métricas** con un apartado de seguimiento e historial, porque el servicio se va a cobrar por pedidos mensuales. Implementado como **Fase 14** (ver sección): nueva `GET /api/admin/metrics/history?month=YYYY-MM` (12 meses en un query + agregado en memoria, horario de Argentina) y pantalla `/admin/metricas` con selector de mes, 4 KPIs, gráfico de barras por día (CSS, sin librería), desglose por canal y por medio de pago, y tabla de historial mensual (fila clickeable). "Pedido facturable" = aceptado por el local (CONFIRMED/IN_PROGRESS/READY/DELIVERED), sin PENDING ni CANCELLED — decisión del usuario. Links en el nav del admin, el dashboard y la barra de `/comanda`. Sin schema. `tsc`/`build` limpios. Commit `6fd1c70`, deployado y probado en prod OK. El usuario pidió un ajuste: el historial mensual ahora arranca en el mes del primer pedido del negocio (no 12 meses fijos) — ajustado, falta commitear ese cambio y pushear.
+- **2026-09-02** — Fase 14 (sección `/admin/metricas` con seguimiento e historial: endpoint `GET /api/admin/metrics/history`, KPIs del mes, gráfico de "Ventas por día" como SVG de línea dibujado a mano, desglose por canal/medio de pago, tabla de historial mensual desde el primer pedido del negocio). Commits `6fd1c70`+`6e232d7`+`7f9d3b8`. + Fase 15 (tarjetas de `/comanda` más compactas: layout apretado + menú `⋯` por tarjeta para demora/WhatsApp-repartidor/cancelar). Commit `9086c31`. Todo pusheado por el usuario, Vercel auto-deployó, verificado en prod y aprobado ("listo, genial"). Sin cambios de schema en ninguna de las dos.
