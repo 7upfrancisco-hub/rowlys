@@ -886,8 +886,14 @@ configurable en `/comanda` (hoy el checkout decía "10 minutos" fijo) + demora p
 - **`/checkout`**: el "10 minutos" fijo pasó a `settings.prepTimeMinutes`.
 - **`/admin/pedidos`**: `#{number}` en el encabezado. **`/admin/configuracion`**: campo "Tiempo
   de demora estimado (minutos)".
-- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` ANTES del código. **Falta db
-  push + probar contra Neon + commitear/pushear.**
+- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` ANTES del código.
+- **Deployada el 2026-09-02** (commit `55126a7`). El usuario corrió `prisma db push` (aceptó el
+  warning estándar del `@unique` sobre `number` — sin duplicados porque es columna nueva
+  autoincrement; verificado: los 14 pedidos existentes quedaron numerados 1..14). Probado
+  end-to-end contra Neon: pedidos nuevos toman `number` secuencial (15, 16), `extraDelayMinutes`
+  default 0, PATCH lo cambia (300 → 400), `/api/orders/[id]` público trae ambos campos,
+  `prepTimeMinutes` se PATCHea y se refleja en `/api/settings`. Datos de prueba borrados. Vercel
+  auto-deployó, prod verificado (`/api/settings` devuelve `prepTimeMinutes`).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
