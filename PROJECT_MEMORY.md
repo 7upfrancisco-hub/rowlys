@@ -985,9 +985,39 @@ el día). **Sin cambios de schema.**
   Load; `/api/admin/metrics/history` = ƒ dynamic.
 - **Commit `6fd1c70`** (primera versión, historial de 12 meses fijos). El usuario lo deployó y
   probó en prod — le gustó todo salvo el historial: **pidió que arranque en el primer pedido
-  del negocio, no en un recorte de 12 meses**. Ajustado (ver arriba: `findFirst` del pedido más
-  viejo, tabla desde ese mes). `tsc`/`build` OK de nuevo. Falta commitear ese ajuste y que el
-  usuario pushee. Al deployar no hace falta `db push`.
+  del negocio, no en un recorte de 12 meses**. Ajustado (commit `6e232d7`: `findFirst` del
+  pedido más viejo, tabla desde ese mes).
+- **Commit `7f9d3b8`**: el usuario pidió que "Pedidos por día" fuera un **gráfico de línea**
+  como una foto de referencia (eje Y en pesos, línea que fluctúa según lo vendido por día).
+  Reemplazado el gráfico de barras de conteo por un **SVG de línea dibujado a mano** (sin
+  librería): `smoothPath` (Catmull-Rom→bézier, tensión 0.18), `axisDays` (~6 fechas `DD/MM`),
+  eje Y con 5 líneas de referencia en `formatCurrency`, un `<circle>`+`<title>` por día,
+  relleno tenue debajo, color `#f97316`. En el mes en curso la línea llega solo hasta
+  `todayDay` (campo nuevo del endpoint) para no caer a cero en días futuros. Sección renombrada
+  a "Ventas por día". `tsc`/`build` OK.
+- **Pendiente**: los 3 commits (`6fd1c70`, `6e232d7`, `7f9d3b8`) — el usuario tiene que
+  `git push origin main`. Al deployar no hace falta `db push`.
+
+## Fase 15: tarjetas de `/comanda` más compactas (en código, 2026-09-02)
+
+Con varios pedidos en una columna la tarjeta quedaba muy alta. El usuario eligió el enfoque
+"apretar + menú ⋯". Solo UI de `comanda-client.tsx` (`OrderCard`), sin schema ni API.
+
+- **Apretado**: `p-4`→`p-3` y márgenes más chicos; el canal dejó de ser una línea en
+  mayúsculas (`ORDER_TYPE_LABELS`, import eliminado) y ahora es un pill `Envío`/`Retiro` en una
+  fila junto a la dirección; si `extraDelayMinutes > 0` aparece un pill ámbar `+N min` ahí
+  mismo; los ítems muestran opciones y nota en la misma línea (`2× X · opt1, opt2 · "nota"`) en
+  vez de bloques indentados; el WhatsApp al cliente pasó de botón verde full-width a un botón
+  chico solo-ícono en la fila de acciones; el bloque Repartidor (caja con borde + label +
+  select + botón, ~110px) pasó a una sola línea `Repartidor [select]`.
+- **Menú `⋯`** (nuevo, estado local `menuOpen` por tarjeta, backdrop `fixed inset-0` para
+  cerrar al tocar afuera): mueve ahí la Demora de preparación (el `<select>` completo),
+  "WhatsApp al repartidor" y "Cancelar pedido" (para estados != PENDING; en PENDING sigue
+  visible "Rechazar").
+- **Sin cambios**: lista de ítems, badge de pago + total, "paga con X · vuelto Y", botón
+  primario por columna (helper nuevo `primaryAction`) y "Cobrar" siguen siempre a la vista.
+- `npx tsc --noEmit` y `npx next build` limpios (`/comanda` 11.1→11.3 kB).
+- **Pendiente**: no probado en navegador; commitear y pushear junto con lo de Fase 14.
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 

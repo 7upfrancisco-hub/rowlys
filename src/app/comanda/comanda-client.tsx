@@ -10,7 +10,6 @@ import LogoutButton from "@/components/LogoutButton";
 import NewOrderModal from "./new-order-modal";
 import {
   ORDER_STATUS_LABELS,
-  ORDER_TYPE_LABELS,
   PAYMENT_PROVIDER_LABELS,
   formatCurrency,
   type DriverDTO,
@@ -785,6 +784,7 @@ function OrderCard({
   onReject: (order: OrderDTO) => void;
 }) {
   const canWhatsApp = normalizeArPhone(order.customerPhone) !== null;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   function openWhatsApp() {
     const trackUrl = `${window.location.origin}/pedido/${order.id}`;
@@ -828,45 +828,162 @@ function OrderCard({
     (order.payment.provider === "CASH" ||
       order.payment.provider === "BANK_TRANSFER");
 
+  // Acción primaria de la tarjeta según el estado (para PENDING el par
+  // Aceptar/Rechazar se renderiza aparte).
+  const primaryAction:
+    | { label: string; to: OrderStatus; cls: string }
+    | null =
+    order.status === "CONFIRMED"
+      ? {
+          label: "Empezar preparación",
+          to: "IN_PROGRESS",
+          cls: "bg-brand-600 hover:bg-brand-700",
+        }
+      : order.status === "IN_PROGRESS"
+        ? {
+            label: "Marcar listo",
+            to: "READY",
+            cls: "bg-brand-600 hover:bg-brand-700",
+          }
+        : order.status === "READY"
+          ? {
+              label: isDelivery ? "Enviado" : "Entregado",
+              to: "DELIVERED",
+              cls: "bg-green-600 hover:bg-green-700",
+            }
+          : null;
+
   return (
     <article
       className={
-        "rounded-xl border bg-white p-4 shadow-sm " +
-        (isStalePending ? "border-amber-400 ring-1 ring-amber-300" : "border-neutral-200")
+        "rounded-xl border bg-white p-3 shadow-sm " +
+        (isStalePending
+          ? "border-amber-400 ring-1 ring-amber-300"
+          : "border-neutral-200")
       }
     >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div>
-          <p className="font-medium leading-tight text-neutral-900">
-            <span className="mr-1.5 text-neutral-400">#{order.number}</span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-medium leading-tight text-neutral-900">
+            <span className="mr-1 text-neutral-400">#{order.number}</span>
             {order.customerFirstName} {order.customerLastName}
           </p>
           <p className="text-xs text-neutral-500">{order.customerPhone}</p>
         </div>
-        <span className="whitespace-nowrap text-xs text-neutral-400">
-          {relativeTime(order.createdAt, now)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="whitespace-nowrap text-xs text-neutral-400">
+            {relativeTime(order.createdAt, now)}
+          </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="rounded-md px-1.5 py-0.5 text-lg leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+              aria-label="Más acciones"
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-neutral-200 bg-white p-2 text-sm shadow-lg">
+                  <label className="block text-xs text-neutral-500">
+                    Demora de preparación
+                    <select
+                      value={order.extraDelayMinutes}
+                      disabled={busy}
+                      onChange={(e) =>
+                        onMutate(order.id, {
+                          extraDelayMinutes: Number(e.target.value),
+                        })
+                      }
+                      className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm disabled:opacity-50"
+                    >
+                      {DELAY_OPTIONS.map((m) => (
+                        <option key={m} value={m}>
+                          {m === 0 ? "sin demora" : `+${m} min`}
+                        </option>
+                      ))}
+                      {!DELAY_OPTIONS.includes(order.extraDelayMinutes) && (
+                        <option value={order.extraDelayMinutes}>
+                          +{order.extraDelayMinutes} min
+                        </option>
+                      )}
+                    </select>
+                  </label>
+
+                  {isDelivery && order.driver && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        openDriverWhatsApp();
+                      }}
+                      disabled={!driverPhoneOk}
+                      className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
+                      WhatsApp al repartidor
+                    </button>
+                  )}
+
+                  {order.status !== "PENDING" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onReject(order);
+                      }}
+                      className="mt-1 flex w-full items-center rounded-md px-2 py-1.5 text-left text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Cancelar pedido
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-brand-600">
-        {ORDER_TYPE_LABELS[order.orderType]}
-      </p>
-      {order.deliveryAddress && (
-        <p className="mb-2 text-sm text-neutral-600">{order.deliveryAddress}</p>
-      )}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">
+          {isDelivery ? "Envío" : "Retiro"}
+        </span>
+        {order.extraDelayMinutes > 0 && (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+            +{order.extraDelayMinutes} min
+          </span>
+        )}
+        {order.deliveryAddress && (
+          <span className="text-xs text-neutral-600">
+            {order.deliveryAddress}
+          </span>
+        )}
+      </div>
 
-      <ul className="mb-2 flex flex-col gap-1 border-t border-neutral-100 pt-2 text-sm text-neutral-700">
+      <ul className="mt-2 flex flex-col gap-0.5 border-t border-neutral-100 pt-2 text-sm leading-snug text-neutral-700">
         {order.items.map((item) => (
           <li key={item.id}>
-            <span className="font-medium">{item.quantity}×</span> {item.productName}
+            <span className="font-medium">{item.quantity}×</span>{" "}
+            {item.productName}
             {item.options.length > 0 && (
-              <span className="block pl-5 text-xs text-neutral-500">
+              <span className="text-xs text-neutral-500">
+                {" · "}
                 {item.options.map((o) => o.name).join(", ")}
               </span>
             )}
             {item.notes && (
-              <span className="block pl-5 text-xs italic text-neutral-500">
-                “{item.notes}”
+              <span className="text-xs italic text-neutral-500">
+                {" · “"}
+                {item.notes}”
               </span>
             )}
           </li>
@@ -874,35 +991,12 @@ function OrderCard({
       </ul>
 
       {order.notes && (
-        <p className="mb-2 rounded-md bg-amber-50 px-2 py-1 text-xs italic text-amber-800">
+        <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs italic text-amber-800">
           Nota: {order.notes}
         </p>
       )}
 
-      <label className="mb-2 flex items-center gap-2 text-xs text-neutral-500">
-        Demora
-        <select
-          value={order.extraDelayMinutes}
-          disabled={busy}
-          onChange={(e) =>
-            onMutate(order.id, { extraDelayMinutes: Number(e.target.value) })
-          }
-          className="rounded-md border border-neutral-300 px-2 py-1 text-xs disabled:opacity-50"
-        >
-          {DELAY_OPTIONS.map((m) => (
-            <option key={m} value={m}>
-              {m === 0 ? "sin demora" : `+${m} min`}
-            </option>
-          ))}
-          {!DELAY_OPTIONS.includes(order.extraDelayMinutes) && (
-            <option value={order.extraDelayMinutes}>
-              +{order.extraDelayMinutes} min
-            </option>
-          )}
-        </select>
-      </label>
-
-      <div className="mb-3 flex items-center justify-between text-sm">
+      <div className="mt-2 flex items-center justify-between gap-2 text-sm">
         <span
           className={
             "rounded-md px-2 py-0.5 text-xs font-medium " +
@@ -924,41 +1018,24 @@ function OrderCard({
 
       {order.payment?.provider === "CASH" &&
         order.payment.changeFor != null && (
-          <p className="mb-3 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-neutral-500">
             Paga con {formatCurrency(order.payment.changeFor)} · vuelto{" "}
             {formatCurrency(Math.max(0, order.payment.changeFor - order.total))}
           </p>
         )}
 
-      <button
-        type="button"
-        onClick={openWhatsApp}
-        disabled={!canWhatsApp}
-        title={
-          canWhatsApp
-            ? "Abrir WhatsApp con un mensaje listo para el cliente"
-            : "El teléfono del cliente no sirve para WhatsApp"
-        }
-        className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1ebe5b] disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        <WhatsAppIcon className="h-4 w-4" />
-        Enviar WhatsApp
-      </button>
-
-      {isDelivery && (
-        <div className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2">
-          <label className="mb-1 block text-xs font-medium text-neutral-500">
-            Repartidor
-          </label>
-          {activeDrivers.length === 0 && !order.driver ? (
-            <p className="text-xs text-neutral-400">
-              Cargá repartidores en{" "}
-              <Link href="/admin/repartidores" className="underline">
-                Admin → Repartidores
-              </Link>
-              .
-            </p>
-          ) : (
+      {isDelivery &&
+        (activeDrivers.length === 0 && !order.driver ? (
+          <p className="mt-2 text-xs text-neutral-400">
+            Cargá repartidores en{" "}
+            <Link href="/admin/repartidores" className="underline">
+              Admin → Repartidores
+            </Link>
+            .
+          </p>
+        ) : (
+          <label className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
+            <span className="shrink-0">Repartidor</span>
             <select
               value={order.driverId ?? ""}
               disabled={busy}
@@ -974,28 +1051,26 @@ function OrderCard({
                 </option>
               ))}
             </select>
-          )}
-          {order.driver && (
-            <button
-              type="button"
-              onClick={openDriverWhatsApp}
-              disabled={!driverPhoneOk}
-              title={
-                driverPhoneOk
-                  ? "Abrir WhatsApp con los datos del reparto para el repartidor"
-                  : "El teléfono del repartidor no sirve para WhatsApp"
-              }
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1ebe5b] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <WhatsAppIcon className="h-4 w-4" />
-              Enviar al repartidor
-            </button>
-          )}
-        </div>
-      )}
+          </label>
+        ))}
 
-      <div className="flex flex-wrap gap-2">
-        {order.status === "PENDING" && (
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={openWhatsApp}
+          disabled={!canWhatsApp}
+          title={
+            canWhatsApp
+              ? "Abrir WhatsApp con un mensaje listo para el cliente"
+              : "El teléfono del cliente no sirve para WhatsApp"
+          }
+          className="flex shrink-0 items-center justify-center rounded-lg bg-[#25D366] px-2.5 py-1.5 text-white hover:bg-[#1ebe5b] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Enviar WhatsApp al cliente"
+        >
+          <WhatsAppIcon className="h-4 w-4" />
+        </button>
+
+        {order.status === "PENDING" ? (
           <>
             <button
               disabled={busy}
@@ -1012,55 +1087,28 @@ function OrderCard({
               Rechazar
             </button>
           </>
-        )}
-
-        {order.status === "CONFIRMED" && (
-          <button
-            disabled={busy}
-            onClick={() => onMutate(order.id, { status: "IN_PROGRESS" })}
-            className="flex-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-          >
-            Empezar preparación
-          </button>
-        )}
-
-        {order.status === "IN_PROGRESS" && (
-          <button
-            disabled={busy}
-            onClick={() => onMutate(order.id, { status: "READY" })}
-            className="flex-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-          >
-            Marcar listo
-          </button>
-        )}
-
-        {order.status === "READY" && (
-          <button
-            disabled={busy}
-            onClick={() => onMutate(order.id, { status: "DELIVERED" })}
-            className="flex-1 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          >
-            {order.orderType === "DELIVERY" ? "Enviado" : "Entregado"}
-          </button>
+        ) : (
+          primaryAction && (
+            <button
+              disabled={busy}
+              onClick={() => onMutate(order.id, { status: primaryAction.to })}
+              className={
+                "flex-1 rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 " +
+                primaryAction.cls
+              }
+            >
+              {primaryAction.label}
+            </button>
+          )
         )}
 
         {canMarkPaid && (
           <button
             disabled={busy}
             onClick={() => onMutate(order.id, { markPaid: true })}
-            className="rounded-lg border border-green-400 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+            className="shrink-0 rounded-lg border border-green-400 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
           >
             Cobrar
-          </button>
-        )}
-
-        {order.status !== "PENDING" && (
-          <button
-            disabled={busy}
-            onClick={() => onReject(order)}
-            className="rounded-lg px-2 py-1.5 text-sm font-medium text-neutral-400 hover:text-red-600 disabled:opacity-50"
-          >
-            Cancelar
           </button>
         )}
       </div>
