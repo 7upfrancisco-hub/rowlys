@@ -940,8 +940,9 @@ RestoSimple tiene una barra con las métricas del día arriba del tablero. El us
   y de crear un pedido manual. Componente `Stat` local.
 - Verificado contra Neon: 401 sin cookie; con cookie, `dayStart` correcto (medianoche ART),
   `byStatus` cuadra con el listado de pedidos (CONFIRMED + DELIVERED = `orders`), `cashPending`
-  = total del pedido no cobrado. `tsc` + `build` limpios (`/comanda` 9.7 → 11 kB). **Falta
-  commitear/pushear.**
+  = total del pedido no cobrado. `tsc` + `build` limpios (`/comanda` 9.7 → 11 kB).
+- **Deployada el 2026-09-02** (commit `13bb3c2`, sin `db push` porque no toca schema). Vercel
+  auto-deployó (`● Ready`, 41s); prod verificado (`/api/admin/metrics` → 401).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
