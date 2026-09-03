@@ -1079,12 +1079,12 @@ CONFIGURACIÓN). El login ya redirige a `/admin`, así que basta con rehacer esa
 ### Fase 16b — KPIs del tablero (2026-09-03)
 
 El usuario ajustó los 4 KPIs del tablero: quedan **Pedidos hoy** y **Facturado hoy**; "A
-cobrar (efvo/transf)" pasó a **Ticket medio hoy** (`facturado hoy / pedidos hoy`, cálculo
-client-side) y "Pendientes sin aceptar" pasó a **Facturado mes** (`summary.revenue` de
-`GET /api/admin/metrics/history` sin `?month`, = facturado de pedidos aceptados del mes en
-curso). El 4º KPI dejó de ser un `<Link>` a `/comanda` y ahora es un `Kpi` normal. **Solo
-toca `dashboard-client.tsx`**, no cambia `/admin/metricas` ni ningún endpoint. `tsc`/`build`
-limpios. **Pendiente**: commitear + pushear (el usuario).
+cobrar (efvo/transf)" pasó a **Ticket medio mes** y "Pendientes sin aceptar" pasó a
+**Facturado mes** — ambos de `GET /api/admin/metrics/history` sin `?month` (`summary.avgTicket`
+y `summary.revenue` del mes en curso, pedidos aceptados). El 4º KPI dejó de ser un `<Link>` a
+`/comanda` y ahora es un `Kpi` normal. **Solo toca `dashboard-client.tsx`**, no cambia
+`/admin/metricas` ni ningún endpoint. `tsc`/`build` limpios. **Pendiente**: commitear +
+pushear (el usuario).
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
 "Rowly'S" de Venado Tuerto, Santa Fe). Gitignoreado (`capturas row.pdf` + `*.pdf`). Cosas

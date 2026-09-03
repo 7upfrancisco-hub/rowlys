@@ -83,16 +83,27 @@ const GROUPS = [
 export default function DashboardClient() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
-  // Facturado del mes en curso, del mismo endpoint que usa /admin/metricas
-  // (pedidos aceptados). Solo se muestra acá; no cambia esa pantalla.
-  const [monthRevenue, setMonthRevenue] = useState<number | null>(null);
+  // Facturado y ticket medio del mes en curso, del mismo endpoint que usa
+  // /admin/metricas (pedidos aceptados). Solo se muestra acá; no cambia esa
+  // pantalla.
+  const [month, setMonth] = useState<{
+    revenue: number;
+    avgTicket: number;
+  } | null>(null);
 
   useEffect(() => {
     function load() {
       apiFetch<Metrics>("/api/admin/metrics").then(setMetrics).catch(() => {});
       apiFetch<Settings>("/api/settings").then(setSettings).catch(() => {});
-      apiFetch<{ summary: { revenue: number } }>("/api/admin/metrics/history")
-        .then((h) => setMonthRevenue(h.summary.revenue))
+      apiFetch<{ summary: { revenue: number; avgTicket: number } }>(
+        "/api/admin/metrics/history"
+      )
+        .then((h) =>
+          setMonth({
+            revenue: h.summary.revenue,
+            avgTicket: h.summary.avgTicket,
+          })
+        )
         .catch(() => {});
     }
     load();
@@ -106,12 +117,6 @@ export default function DashboardClient() {
     month: "long",
     timeZone: "America/Argentina/Buenos_Aires",
   });
-
-  // Ticket medio de hoy = facturado de hoy / pedidos de hoy.
-  const avgToday =
-    metrics && metrics.orders > 0
-      ? Math.round(metrics.revenue / metrics.orders)
-      : 0;
 
   return (
     <div className="space-y-6">
@@ -149,12 +154,12 @@ export default function DashboardClient() {
           value={metrics ? formatCurrency(metrics.revenue) : "—"}
         />
         <Kpi
-          label="Ticket medio hoy"
-          value={metrics ? formatCurrency(avgToday) : "—"}
+          label="Ticket medio mes"
+          value={month ? formatCurrency(month.avgTicket) : "—"}
         />
         <Kpi
           label="Facturado mes"
-          value={monthRevenue !== null ? formatCurrency(monthRevenue) : "—"}
+          value={month ? formatCurrency(month.revenue) : "—"}
         />
       </div>
 
