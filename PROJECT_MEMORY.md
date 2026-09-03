@@ -932,8 +932,9 @@ canal + extraDelayMinutes)` minutos, formateado `HH:MM` con
 `toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })`. El cartel ahora
 dice `⏱️ Entrega estimada 19:45 hs` (delivery) / `⏱️ Listo estimado 19:45 hs` (pickup), y
 mantiene el "(incluye +N min de demora)". Se basa en `createdAt`, no en `now`, para que la hora
-no se mueva en cada poll. Sin schema ni API. `tsc`/`build` limpios. **Pendiente**: commitear +
-pushear (el usuario), no requiere `db push`.
+no se mueva en cada poll. Formato 24 h forzado con `hour12: false` (el `es-AR` del navegador
+del usuario mostraba am/pm). Sin schema ni API. `tsc`/`build` limpios. **Pendiente**: commitear
++ pushear (el usuario), no requiere `db push`.
 
 ## Fase 13: barra de métricas del día en `/comanda` (en código, 2026-09-02)
 
