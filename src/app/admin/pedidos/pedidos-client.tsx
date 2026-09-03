@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import {
   ORDER_STATUS_FLOW,
@@ -23,7 +24,10 @@ const ALL_STATUSES: OrderStatus[] = [
 ];
 
 export default function PedidosClient() {
-  const [view, setView] = useState<"activos" | "todos">("activos");
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<"activos" | "todos">(
+    searchParams.get("ver") === "todos" ? "todos" : "activos"
+  );
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusTab, setStatusTab] = useState<OrderStatus | "ALL">("ALL");

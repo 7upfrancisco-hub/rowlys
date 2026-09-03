@@ -1053,6 +1053,29 @@ Con varios pedidos en una columna la tarjeta quedaba muy alta. El usuario eligi�
 - **Deployada el 2026-09-02** (commit `9086c31`, sin `db push`). Pusheada junto con Fase 14,
   auto-deploy OK, el usuario la vio en prod y le gusta ("listo, genial").
 
+## Fase 16: `/admin` pasa de grilla de links a tablero (en código, 2026-09-03)
+
+El usuario quiere que al entrar aparezca un tablero (no la grilla plana de 7 tarjetas), con
+los accesos **agrupados por categoría** (mandó un ejemplo: PEDIDOS / MI MENÚ / MÉTRICAS /
+CONFIGURACIÓN). El login ya redirige a `/admin`, así que basta con rehacer esa página.
+
+- **`src/app/admin/page.tsx`**: pasó de server component con la grilla a wrapper de
+  `dashboard-client.tsx` (nuevo, client).
+- **`dashboard-client.tsx`**: encabezado (nombre del local de `/api/settings` + fecha ART +
+  botón "Abrir comanda"); chips de estado del local (abierto/cerrado, delivery, takeaway — solo
+  lectura, se togglean en `/comanda`); fila de 4 KPIs de hoy de `GET /api/admin/metrics`
+  (Pedidos hoy, Facturado hoy, A cobrar efvo/transf con acento ámbar, Pendientes sin aceptar
+  que linkea a `/comanda` + "N activos en total"); refresca cada 60 s. Abajo, accesos como
+  **lista compacta agrupada** (no tarjetas grandes) en 4 secciones: Pedidos (Comanda,
+  Finalizados) · Mi menú (Categorías, Productos, Adicionales) · Métricas · Configuración
+  (Repartidores, Datos del local). Sin endpoints ni schema nuevos.
+- **"Finalizados"** → `/admin/pedidos?ver=todos`. `pedidos-client.tsx` ahora lee
+  `useSearchParams().get("ver")` y arranca en la vista "todos" (entregados + cancelados +
+  historial) si vale `todos`; `pedidos/page.tsx` se envolvió en `<Suspense>` (requerido por
+  `useSearchParams`).
+- `tsc` + `build` limpios (`/admin` ○ ~2.4 kB; `/admin/pedidos` ○ ~2.6 kB). **Pendiente**:
+  commitear + pushear (el usuario), sin `db push`.
+
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
