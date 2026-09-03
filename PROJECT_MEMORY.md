@@ -1144,9 +1144,11 @@ archivo; lo trae después) y solo 3 acciones.
   (`dashboard-client.tsx`), y `/comanda` desde el botón "Abrir comanda".
 - Orden final del header: **Rowlys (logo) … Dashboard · Configuración · Cerrar sesión**.
 - **Header de `/comanda` (mismo pase)**: la campanita pasó a un botón chico solo-ícono
-  (🔔/🔕, sin el texto "Sonido activado"); se sacó el link "Admin"; se agregaron "Dashboard"
-  (→ `/admin`) y "Configuración" (→ `/admin/configuracion`) con el estilo del nav del admin,
-  antes de "Cerrar sesión". Orden: `Actualizado HH:MM · Actualizar · 🔔 · Dashboard ·
+  (🔔/🔕, sin el texto "Sonido activado"); se sacó el link "Admin"; se agregaron "Dashboard" y
+  "Configuración". Iteración siguiente: "Dashboard"/"Configuración" se renderizan reusando el
+  componente `<AdminNav />` (misma estética exacta que el header del admin, se mantienen en
+  sync), y el botón "Actualizar" pasó a un **botón-ícono de refrescar** (SVG inline) del
+  tamaño de la campanita para ganar espacio. Orden: `Actualizado HH:MM · ↻ · 🔔 · Dashboard ·
   Configuración · Cerrar sesión`.
 - `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
 

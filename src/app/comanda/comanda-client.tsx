@@ -7,6 +7,7 @@ import { normalizeArPhone, whatsappLink } from "@/lib/phone";
 import { playDoorbell, unlockDoorbell } from "@/lib/doorbell";
 import { buildDriverMessage } from "@/lib/driver-message";
 import LogoutButton from "@/components/LogoutButton";
+import AdminNav from "@/components/AdminNav";
 import NewOrderModal from "./new-order-modal";
 import {
   ORDER_STATUS_LABELS,
@@ -477,9 +478,23 @@ export default function ComandaClient() {
             </span>
             <button
               onClick={load}
-              className="rounded-lg border border-neutral-300 px-3 py-1.5 font-medium text-neutral-600 hover:bg-neutral-100"
+              aria-label="Actualizar"
+              title="Actualizar ahora"
+              className="rounded-lg border border-neutral-300 p-1.5 text-neutral-600 hover:bg-neutral-100"
             >
-              Actualizar
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
             </button>
             <button
               onClick={toggleSound}
@@ -499,18 +514,7 @@ export default function ComandaClient() {
             >
               <span aria-hidden="true">{soundOn ? "🔔" : "🔕"}</span>
             </button>
-            <Link
-              href="/admin"
-              className="rounded-lg px-3 py-1.5 font-medium text-neutral-600 hover:bg-brand-50 hover:text-brand-700"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/admin/configuracion"
-              className="rounded-lg px-3 py-1.5 font-medium text-neutral-600 hover:bg-brand-50 hover:text-brand-700"
-            >
-              Configuración
-            </Link>
+            <AdminNav />
             <LogoutButton />
           </div>
         </div>
