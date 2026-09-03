@@ -459,14 +459,18 @@ export default function ComandaClient() {
   return (
     <div className="min-h-screen bg-neutral-50">
       <header className="border-b border-neutral-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+        {/* max-w-5xl como el header del admin, para que Dashboard /
+            Configuración / Cerrar sesión queden SIEMPRE en la misma posición
+            al navegar entre /admin y /comanda. El tablero de abajo sigue en
+            max-w-7xl. */}
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-baseline gap-3">
             <h1 className="text-xl font-bold text-brand-600">Rowlys · Comanda</h1>
             <span className="text-sm text-neutral-500">
               {totalActive} {totalActive === 1 ? "pedido activo" : "pedidos activos"}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
             <span className="text-neutral-400">
               {lastSync
                 ? `Actualizado ${new Date(lastSync).toLocaleTimeString("es-AR", {

@@ -1149,7 +1149,10 @@ archivo; lo trae después) y solo 3 acciones.
   componente `<AdminNav />` (misma estética exacta que el header del admin, se mantienen en
   sync), y el botón "Actualizar" pasó a un **botón-ícono de refrescar** (SVG inline) del
   tamaño de la campanita para ganar espacio. Orden: `Actualizado HH:MM · ↻ · 🔔 · Dashboard ·
-  Configuración · Cerrar sesión`.
+  Configuración · Cerrar sesión`. Para que esos 3 botones no cambien de posición al navegar
+  entre `/admin` y `/comanda`, el **header** de `/comanda` pasó a `max-w-5xl` (igual que el
+  del admin; el tablero de abajo sigue en `max-w-7xl`) y el grupo derecho del header lleva
+  `justify-end`.
 - `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
