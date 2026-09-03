@@ -1,60 +1,42 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import {
-  ORDER_STATUS_FLOW,
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
   PAYMENT_PROVIDER_LABELS,
   formatCurrency,
   type OrderDTO,
-  type OrderStatus,
   type OrderType,
 } from "@/types";
 
-const ALL_STATUSES: OrderStatus[] = [
-  "PENDING",
-  "CONFIRMED",
-  "IN_PROGRESS",
-  "READY",
-  "DELIVERED",
-  "CANCELLED",
-];
+// Este panel es solo historial: pedidos ya entregados o cancelados. La gestión
+// de los pedidos en curso vive en /comanda.
+type HistTab = "DELIVERED" | "CANCELLED";
 
 export default function PedidosClient() {
-  const searchParams = useSearchParams();
-  const [view, setView] = useState<"activos" | "todos">(
-    searchParams.get("ver") === "todos" ? "todos" : "activos"
-  );
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [statusTab, setStatusTab] = useState<OrderStatus | "ALL">("ALL");
+  const [tab, setTab] = useState<HistTab>("DELIVERED");
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderType | "ALL">(
     "ALL"
   );
   const [search, setSearch] = useState("");
 
-  function load(currentView: "activos" | "todos") {
-    const query =
-      currentView === "todos" ? `?status=${ALL_STATUSES.join(",")}` : "";
-    apiFetch<OrderDTO[]>(`/api/orders${query}`)
+  function load() {
+    apiFetch<OrderDTO[]>("/api/orders?status=DELIVERED,CANCELLED")
       .then(setOrders)
       .catch((err: ApiError) => setError(err.message));
   }
+  useEffect(load, []);
 
-  useEffect(() => load(view), [view]);
-
-  async function updateOrder(
-    id: string,
-    body: { status?: OrderStatus; markPaid?: boolean }
-  ) {
+  async function markPaid(id: string) {
     setError(null);
     try {
       const updated = await apiFetch<OrderDTO>(`/api/admin/orders/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ markPaid: true }),
       });
       setOrders((prev) =>
         prev ? prev.map((o) => (o.id === id ? updated : o)) : prev
@@ -64,85 +46,49 @@ export default function PedidosClient() {
     }
   }
 
+  const counts = useMemo(() => {
+    let delivered = 0;
+    let cancelled = 0;
+    for (const o of orders ?? []) {
+      if (o.status === "DELIVERED") delivered++;
+      else if (o.status === "CANCELLED") cancelled++;
+    }
+    return { delivered, cancelled };
+  }, [orders]);
+
   const filtered = useMemo(() => {
     if (!orders) return [];
     const term = search.trim().toLowerCase();
     return orders.filter((order) => {
-      if (statusTab !== "ALL" && order.status !== statusTab) return false;
+      if (order.status !== tab) return false;
       if (orderTypeFilter !== "ALL" && order.orderType !== orderTypeFilter)
         return false;
       if (term) {
-        const haystack = `${order.customerFirstName} ${order.customerLastName} ${order.customerPhone}`.toLowerCase();
+        const haystack =
+          `${order.customerFirstName} ${order.customerLastName} ${order.customerPhone}`.toLowerCase();
         if (!haystack.includes(term)) return false;
       }
       return true;
     });
-  }, [orders, statusTab, orderTypeFilter, search]);
-
-  const counts = useMemo(() => {
-    const map = new Map<OrderStatus, number>();
-    for (const order of orders ?? []) {
-      map.set(order.status, (map.get(order.status) ?? 0) + 1);
-    }
-    return map;
-  }, [orders]);
+  }, [orders, tab, orderTypeFilter, search]);
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold text-neutral-900">Pedidos</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setView("activos")}
-            className={
-              "rounded-lg px-3 py-2 text-sm font-medium " +
-              (view === "activos"
-                ? "bg-brand-600 text-white"
-                : "border border-neutral-300 text-neutral-600")
-            }
-          >
-            Activos
-          </button>
-          <button
-            onClick={() => setView("todos")}
-            className={
-              "rounded-lg px-3 py-2 text-sm font-medium " +
-              (view === "todos"
-                ? "bg-brand-600 text-white"
-                : "border border-neutral-300 text-neutral-600")
-            }
-          >
-            Todos
-          </button>
-        </div>
-      </div>
+      <h2 className="mb-1 text-2xl font-bold text-neutral-900">
+        Historial de pedidos
+      </h2>
+      <p className="mb-6 text-sm text-neutral-500">
+        Pedidos ya entregados y cancelados. Los pedidos en curso se gestionan
+        desde la comanda.
+      </p>
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <button
-          onClick={() => setStatusTab("ALL")}
-          className={
-            "rounded-lg px-3 py-1.5 text-sm font-medium " +
-            (statusTab === "ALL"
-              ? "bg-brand-100 text-brand-700"
-              : "text-neutral-500 hover:bg-neutral-100")
-          }
-        >
-          Todos ({orders?.length ?? 0})
-        </button>
-        {ALL_STATUSES.map((status) => (
-          <button
-            key={status}
-            onClick={() => setStatusTab(status)}
-            className={
-              "rounded-lg px-3 py-1.5 text-sm font-medium " +
-              (statusTab === status
-                ? "bg-brand-100 text-brand-700"
-                : "text-neutral-500 hover:bg-neutral-100")
-            }
-          >
-            {ORDER_STATUS_LABELS[status]} ({counts.get(status) ?? 0})
-          </button>
-        ))}
+        <TabBtn active={tab === "DELIVERED"} onClick={() => setTab("DELIVERED")}>
+          Finalizados ({counts.delivered})
+        </TabBtn>
+        <TabBtn active={tab === "CANCELLED"} onClick={() => setTab("CANCELLED")}>
+          Cancelados ({counts.cancelled})
+        </TabBtn>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-3">
@@ -177,11 +123,6 @@ export default function PedidosClient() {
       ) : (
         <ul className="flex flex-col gap-4">
           {filtered.map((order) => {
-            const nextStatuses = ORDER_STATUS_FLOW.slice(
-              ORDER_STATUS_FLOW.indexOf(order.status) + 1
-            );
-            const canCancel =
-              order.status !== "DELIVERED" && order.status !== "CANCELLED";
             const canMarkPaid =
               order.payment &&
               order.payment.status !== "CONFIRMED" &&
@@ -243,28 +184,9 @@ export default function PedidosClient() {
                   <span className="rounded-lg bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-700">
                     {ORDER_STATUS_LABELS[order.status]}
                   </span>
-                  {nextStatuses.map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => updateOrder(order.id, { status })}
-                      className="rounded-lg border border-brand-300 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-50"
-                    >
-                      Pasar a {ORDER_STATUS_LABELS[status]}
-                    </button>
-                  ))}
-                  {canCancel && (
-                    <button
-                      onClick={() =>
-                        updateOrder(order.id, { status: "CANCELLED" })
-                      }
-                      className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Cancelar
-                    </button>
-                  )}
                   {canMarkPaid && (
                     <button
-                      onClick={() => updateOrder(order.id, { markPaid: true })}
+                      onClick={() => markPaid(order.id)}
                       className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
                     >
                       Marcar cobrado
@@ -277,5 +199,29 @@ export default function PedidosClient() {
         </ul>
       )}
     </div>
+  );
+}
+
+function TabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "rounded-lg px-3 py-1.5 text-sm font-medium " +
+        (active
+          ? "bg-brand-100 text-brand-700"
+          : "text-neutral-500 hover:bg-neutral-100")
+      }
+    >
+      {children}
+    </button>
   );
 }

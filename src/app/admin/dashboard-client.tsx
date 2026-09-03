@@ -27,9 +27,9 @@ const GROUPS = [
         desc: "Tablero de cocina en vivo",
       },
       {
-        href: "/admin/pedidos?ver=todos",
-        label: "Finalizados",
-        desc: "Entregados, cancelados e historial",
+        href: "/admin/pedidos",
+        label: "Historial",
+        desc: "Pedidos finalizados y cancelados",
       },
     ],
   },

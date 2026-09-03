@@ -1086,6 +1086,23 @@ y `summary.revenue` del mes en curso, pedidos aceptados). El 4º KPI dejó de se
 `/admin/metricas` ni ningún endpoint. `tsc`/`build` limpios. **Pendiente**: commitear +
 pushear (el usuario).
 
+### Fase 16c — `/admin/pedidos` pasa a ser solo historial (2026-09-03)
+
+El usuario quiere que `/admin/pedidos` deje de mostrar los estados activos y sea puro
+historial. `pedidos-client.tsx` reescrito:
+- Fuera el toggle "Activos / Todos" y las 7 pestañas de estado. Ahora **2 pestañas**:
+  **Finalizados** (`DELIVERED`) y **Cancelados** (`CANCELLED`), con contador. Fetch fijo
+  `GET /api/orders?status=DELIVERED,CANCELLED`.
+- Se mantienen el filtro por canal y el buscador. En cada tarjeta se sacaron los botones
+  "Pasar a…" y "Cancelar" (estados terminales); queda solo "Marcar cobrado" para un pedido
+  entregado con pago manual sin confirmar.
+- Título de la página: "Historial de pedidos". `AdminNav` y el acceso del tablero: "Pedidos"
+  → **"Historial"**.
+- Se revirtió el plumbing de Fase 16 (`?ver=todos` + `useSearchParams` + `<Suspense>` en
+  `pedidos/page.tsx`): ya no hace falta, la página siempre muestra historial.
+- Sin schema ni endpoints nuevos (`/api/orders` ya aceptaba `?status=` con lista). `tsc` +
+  `build` limpios. **Pendiente**: commitear + pushear (el usuario).
+
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
 "Rowly'S" de Venado Tuerto, Santa Fe). Gitignoreado (`capturas row.pdf` + `*.pdf`). Cosas
 nuevas o que refinan lo ya sabido:
