@@ -933,8 +933,8 @@ canal + extraDelayMinutes)` minutos, formateado `HH:MM` con
 dice `⏱️ Entrega estimada 19:45 hs` (delivery) / `⏱️ Listo estimado 19:45 hs` (pickup), y
 mantiene el "(incluye +N min de demora)". Se basa en `createdAt`, no en `now`, para que la hora
 no se mueva en cada poll. Formato 24 h forzado con `hour12: false` (el `es-AR` del navegador
-del usuario mostraba am/pm). Sin schema ni API. `tsc`/`build` limpios. **Pendiente**: commitear
-+ pushear (el usuario), no requiere `db push`.
+del usuario mostraba am/pm). Sin schema ni API. **Deployada el 2026-09-03** (commits `8772907`
++ `c9b56f0`, sin `db push`).
 
 ## Fase 13: barra de métricas del día en `/comanda` (en código, 2026-09-02)
 
@@ -1029,7 +1029,7 @@ vendieron, con opción de mirar un día puntual.
   lista de categorías con unidades + $ + % (barra `brand-400`), y tabla Producto · Categoría ·
   Cant. · Facturado.
 - `tsc` + `build` limpios (`/admin/metricas` ○ 4.11 kB; `/api/admin/metrics/products` ƒ). Sin
-  schema. **Pendiente**: commitear + pushear (el usuario), sin `db push`.
+  schema. **Deployada el 2026-09-03** (commit `9878b3f`, sin `db push`).
 
 ## Fase 15: tarjetas de `/comanda` más compactas (en código, 2026-09-02)
 
@@ -1073,8 +1073,8 @@ CONFIGURACIÓN). El login ya redirige a `/admin`, así que basta con rehacer esa
   `useSearchParams().get("ver")` y arranca en la vista "todos" (entregados + cancelados +
   historial) si vale `todos`; `pedidos/page.tsx` se envolvió en `<Suspense>` (requerido por
   `useSearchParams`).
-- `tsc` + `build` limpios (`/admin` ○ ~2.4 kB; `/admin/pedidos` ○ ~2.6 kB). **Pendiente**:
-  commitear + pushear (el usuario), sin `db push`.
+- `tsc` + `build` limpios (`/admin` ○ ~2.4 kB; `/admin/pedidos` ○ ~2.6 kB). **Deployada el
+  2026-09-03** (commit `50d1c59`, sin `db push`).
 
 ## Segunda tanda de capturas de RestoSimple (PDF `capturas row.pdf`, 2026-08-28)
 
@@ -1146,3 +1146,4 @@ nuevas o que refinan lo ya sabido:
 - **2026-09-01** — El usuario eligió como próxima feature la **carga manual de pedidos desde `/comanda`** (cliente que pide en el local o por teléfono), con un botón flotante "+". Implementado como **Fase 9** (ver sección): se extrajo la creación de pedidos a `src/lib/orders.ts` (`createOrder(body, opts)`), `POST /api/orders` ahora delega ahí, nuevo `POST /api/admin/orders` (protegido) con `enforceStoreStatus:false` + `initialStatus:"CONFIRMED"`, y un modal `new-order-modal.tsx` con estado local propio (menú + adicionales + datos del cliente + pago). FAB `+` en `comanda-client.tsx`. Sin schema. Probado end-to-end contra Neon con curl (validaciones + creación OK + visible en `GET /api/orders`, pedido de prueba borrado). `tsc`/`build` limpios. Falta commitear/pushear y probar en navegador.
 - **2026-09-02** — El usuario pidió **ampliar las métricas** con un apartado de seguimiento e historial, porque el servicio se va a cobrar por pedidos mensuales. Implementado como **Fase 14** (ver sección): nueva `GET /api/admin/metrics/history?month=YYYY-MM` (12 meses en un query + agregado en memoria, horario de Argentina) y pantalla `/admin/metricas` con selector de mes, 4 KPIs, gráfico de barras por día (CSS, sin librería), desglose por canal y por medio de pago, y tabla de historial mensual (fila clickeable). "Pedido facturable" = aceptado por el local (CONFIRMED/IN_PROGRESS/READY/DELIVERED), sin PENDING ni CANCELLED — decisión del usuario. Links en el nav del admin, el dashboard y la barra de `/comanda`. Sin schema. `tsc`/`build` limpios. Commit `6fd1c70`, deployado y probado en prod OK. El usuario pidió un ajuste: el historial mensual ahora arranca en el mes del primer pedido del negocio (no 12 meses fijos) — ajustado, falta commitear ese cambio y pushear.
 - **2026-09-02** — Fase 14 (sección `/admin/metricas` con seguimiento e historial: endpoint `GET /api/admin/metrics/history`, KPIs del mes, gráfico de "Ventas por día" como SVG de línea dibujado a mano, desglose por canal/medio de pago, tabla de historial mensual desde el primer pedido del negocio). Commits `6fd1c70`+`6e232d7`+`7f9d3b8`. + Fase 15 (tarjetas de `/comanda` más compactas: layout apretado + menú `⋯` por tarjeta para demora/WhatsApp-repartidor/cancelar). Commit `9086c31`. Todo pusheado por el usuario, Vercel auto-deployó, verificado en prod y aprobado ("listo, genial"). Sin cambios de schema en ninguna de las dos.
+- **2026-09-03** — Tres cambios pedidos y deployados por el usuario en el día: (1) ETA de `/pedido/[id]` de "Llega en ~N min" a "Entrega estimada HH:MM hs" (24 h, hora absoluta = createdAt + prep del canal + demora extra) — commits `8772907`+`c9b56f0` (Fase 12d). (2) Panel "Ventas por categoría" en `/admin/metricas` con `GET /api/admin/metrics/products` (agrega OrderItem por día/categoría/producto) y selector "Todo el mes / Día N" — commit `9878b3f` (Fase 14b). (3) `/admin` deja de ser grilla de links y pasa a tablero: KPIs de hoy (de `/api/admin/metrics`, refresco 60s) + accesos en lista agrupada Pedidos/Mi menú/Métricas/Configuración; "Finalizados" abre `/admin/pedidos?ver=todos` (pedidos-client lee el query param, page envuelta en Suspense) — commit `50d1c59` (Fase 16). Ninguno tocó schema. Todo en `origin/main`, auto-deploy OK.
