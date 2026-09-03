@@ -119,6 +119,9 @@ model Order {
   // suma al tiempo de preparación del canal (Settings.prepTime*Minutes).
   extraDelayMinutes Int         @default(0)
   notes             String?
+  // Motivo que el local escribe al cancelar un pedido desde la comanda.
+  // Obligatorio en la transición a CANCELLED; interno (no se muestra al cliente).
+  cancelReason      String?
   items             OrderItem[]
   payment           Payment?
   // Repartidor asignado (solo pedidos de envío). Si se borra el repartidor,

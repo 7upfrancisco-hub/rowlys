@@ -180,6 +180,12 @@ export default function PedidosClient() {
                   </p>
                 )}
 
+                {order.status === "CANCELLED" && order.cancelReason && (
+                  <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                    Motivo de cancelación: {order.cancelReason}
+                  </p>
+                )}
+
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-lg bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-700">
                     {ORDER_STATUS_LABELS[order.status]}

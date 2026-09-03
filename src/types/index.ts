@@ -154,6 +154,9 @@ export interface OrderDTO {
   status: OrderStatus;
   extraDelayMinutes: number;
   notes: string | null;
+  // Motivo de cancelación que carga el local (solo si status === "CANCELLED").
+  // Interno: no viaja en el endpoint público /api/orders/[id].
+  cancelReason: string | null;
   items: OrderItemDTO[];
   payment: PaymentDTO | null;
   driverId: string | null;

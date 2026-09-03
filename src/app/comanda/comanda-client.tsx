@@ -24,6 +24,8 @@ type OrderPatch = {
   markPaid?: boolean;
   driverId?: string | null;
   extraDelayMinutes?: number;
+  // Obligatorio cuando status === "CANCELLED".
+  cancelReason?: string;
 };
 
 // Opciones del selector de demora por pedido.
@@ -193,6 +195,9 @@ export default function ComandaClient() {
   >(null);
   const [soundOn, setSoundOn] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
+  // Pedido que el trabajador está por cancelar + el motivo que escribe.
+  const [rejectTarget, setRejectTarget] = useState<OrderDTO | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [drivers, setDrivers] = useState<DriverDTO[]>([]);
   const suppressPollUntil = useRef(0);
   // Ids de pedidos ya vistos; null hasta la primera carga (que no hace sonar nada).
@@ -423,14 +428,20 @@ export default function ComandaClient() {
     }
   }
 
+  // Abre el modal de cancelación. El motivo es obligatorio (anti-abuso: se
+  // factura por pedido, así que cancelar tiene que dejar rastro).
   function reject(order: OrderDTO) {
-    if (
-      !window.confirm(
-        `¿Rechazar el pedido de ${order.customerFirstName} ${order.customerLastName}? El cliente lo verá como cancelado.`
-      )
-    )
-      return;
-    mutate(order.id, { status: "CANCELLED" });
+    setRejectReason("");
+    setRejectTarget(order);
+  }
+
+  function confirmReject() {
+    if (!rejectTarget) return;
+    const reason = rejectReason.trim();
+    if (reason.length < 3) return;
+    const id = rejectTarget.id;
+    setRejectTarget(null);
+    mutate(id, { status: "CANCELLED", cancelReason: reason });
   }
 
   const byStatus = useMemo(() => {
@@ -761,6 +772,48 @@ export default function ComandaClient() {
             loadMetrics();
           }}
         />
+      )}
+
+      {rejectTarget && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="font-semibold text-neutral-900">
+              Cancelar pedido #{rejectTarget.number}
+            </h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              {rejectTarget.customerFirstName} {rejectTarget.customerLastName}. El
+              cliente lo verá como cancelado.
+            </p>
+            <label className="mt-3 block text-xs font-medium text-neutral-600">
+              Motivo de la cancelación (obligatorio)
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              autoFocus
+              placeholder="Ej: el cliente se arrepintió, sin stock, dirección fuera de zona…"
+              className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRejectTarget(null)}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 hover:bg-neutral-100"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={confirmReject}
+                disabled={rejectReason.trim().length < 3}
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Cancelar pedido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

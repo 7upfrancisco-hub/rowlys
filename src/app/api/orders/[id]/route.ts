@@ -26,5 +26,7 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(order);
+  // El motivo de cancelación es interno: no se expone en el seguimiento público.
+  const { cancelReason: _cancelReason, ...publicOrder } = order;
+  return NextResponse.json(publicOrder);
 }

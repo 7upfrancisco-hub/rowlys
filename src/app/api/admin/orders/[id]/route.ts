@@ -24,6 +24,8 @@ const patchOrderSchema = z
     driverId: z.string().nullable().optional(),
     // Demora extra en minutos para este pedido (0 = sin demora).
     extraDelayMinutes: z.number().int().min(0).max(240).optional(),
+    // Motivo de cancelación. Obligatorio al pasar a CANCELLED (ver refine abajo).
+    cancelReason: z.string().trim().min(3).max(300).optional(),
   })
   .refine(
     (data) =>
@@ -32,6 +34,13 @@ const patchOrderSchema = z
       data.driverId !== undefined ||
       data.extraDelayMinutes !== undefined,
     { message: "No hay nada para actualizar." }
+  )
+  .refine(
+    (data) => data.status !== "CANCELLED" || !!data.cancelReason,
+    {
+      message: "Indicá un motivo para cancelar el pedido.",
+      path: ["cancelReason"],
+    }
   );
 
 const ORDER_INCLUDE = {
@@ -53,7 +62,8 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  const { status, markPaid, driverId, extraDelayMinutes } = parsed.data;
+  const { status, markPaid, driverId, extraDelayMinutes, cancelReason } =
+    parsed.data;
 
   const existing = await prisma.order.findUnique({
     where: { id: params.id },
@@ -116,6 +126,8 @@ export async function PATCH(
             ...(status ? { status } : {}),
             ...(driverId !== undefined ? { driverId } : {}),
             ...(extraDelayMinutes !== undefined ? { extraDelayMinutes } : {}),
+            // El motivo solo se guarda junto con la cancelación.
+            ...(status === "CANCELLED" ? { cancelReason } : {}),
           },
         });
       }

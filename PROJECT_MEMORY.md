@@ -1103,6 +1103,30 @@ historial. `pedidos-client.tsx` reescrito:
 - Sin schema ni endpoints nuevos (`/api/orders` ya aceptaba `?status=` con lista). `tsc` +
   `build` limpios. **Pendiente**: commitear + pushear (el usuario).
 
+## Fase 17: motivo obligatorio al cancelar un pedido (en código, 2026-09-03)
+
+Anti-abuso: como se factura por pedido, un trabajador podría cancelar pedidos para bajar el
+número. Ahora cancelar desde `/comanda` exige escribir un motivo.
+
+- **Schema**: `Order.cancelReason String?` (interno; no se muestra al cliente). **Requiere
+  `prisma db push`** ANTES de deployar el código (si el código sale primero, `GET`/`PATCH` de
+  pedidos rompe por columna inexistente). `prisma generate` ya corrió.
+- **`PATCH /api/admin/orders/[id]`**: el schema zod suma `cancelReason` (`trim().min(3).max(300)`
+  opcional) + un `.refine` que exige `cancelReason` cuando `status === "CANCELLED"` (400
+  "Indicá un motivo para cancelar el pedido."). Solo se persiste junto con la transición a
+  CANCELLED.
+- **`GET /api/orders/[id]`** (público): se saca `cancelReason` del objeto antes de responder
+  (destructuring), para que no llegue a la página de seguimiento del cliente. `GET /api/orders`
+  (protegido, historial) sí lo devuelve.
+- **`/comanda`**: `reject()` ya no usa `window.confirm`; abre un modal (`rejectTarget` +
+  `rejectReason`) con un `<textarea>` obligatorio (botón deshabilitado hasta 3+ caracteres).
+  Cubre las dos entradas: "Rechazar" en PENDING y "Cancelar pedido" del menú `⋯`. `OrderPatch`
+  suma `cancelReason?`.
+- **`/admin/pedidos`** (historial): en la pestaña Cancelados, cada tarjeta muestra
+  "Motivo de cancelación: …" en un recuadro rojo. `OrderDTO` suma `cancelReason: string | null`.
+- `tsc` + `build` limpios. **Orden de deploy**: `prisma db push` (lo corre el usuario) →
+  después pushear el código.
+
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
 "Rowly'S" de Venado Tuerto, Santa Fe). Gitignoreado (`capturas row.pdf` + `*.pdf`). Cosas
 nuevas o que refinan lo ya sabido:
