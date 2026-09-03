@@ -1143,6 +1143,11 @@ archivo; lo trae después) y solo 3 acciones.
   dentro del de layout. El resto de las secciones se navegan desde el tablero del dashboard
   (`dashboard-client.tsx`), y `/comanda` desde el botón "Abrir comanda".
 - Orden final del header: **Rowlys (logo) … Dashboard · Configuración · Cerrar sesión**.
+- **Header de `/comanda` (mismo pase)**: la campanita pasó a un botón chico solo-ícono
+  (🔔/🔕, sin el texto "Sonido activado"); se sacó el link "Admin"; se agregaron "Dashboard"
+  (→ `/admin`) y "Configuración" (→ `/admin/configuracion`) con el estilo del nav del admin,
+  antes de "Cerrar sesión". Orden: `Actualizado HH:MM · Actualizar · 🔔 · Dashboard ·
+  Configuración · Cerrar sesión`.
 - `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
 
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local

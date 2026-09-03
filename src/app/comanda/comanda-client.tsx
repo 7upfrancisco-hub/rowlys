@@ -483,26 +483,33 @@ export default function ComandaClient() {
             </button>
             <button
               onClick={toggleSound}
+              aria-label={soundOn ? "Silenciar timbre" : "Activar timbre"}
+              aria-pressed={soundOn}
               title={
                 soundOn
                   ? "Timbre activado: suena al entrar un pedido nuevo. Click para silenciar."
                   : "Timbre silenciado. Click para que suene al entrar un pedido nuevo."
               }
               className={
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-medium " +
+                "rounded-lg border px-2 py-1.5 text-base leading-none " +
                 (soundOn
-                  ? "border-brand-300 bg-brand-50 text-brand-700"
-                  : "border-neutral-300 text-neutral-500 hover:bg-neutral-100")
+                  ? "border-brand-300 bg-brand-50"
+                  : "border-neutral-300 hover:bg-neutral-100")
               }
             >
               <span aria-hidden="true">{soundOn ? "🔔" : "🔕"}</span>
-              {soundOn ? "Sonido activado" : "Sonido"}
             </button>
             <Link
               href="/admin"
-              className="font-medium text-neutral-500 hover:text-brand-600 hover:underline"
+              className="rounded-lg px-3 py-1.5 font-medium text-neutral-600 hover:bg-brand-50 hover:text-brand-700"
             >
-              Admin
+              Dashboard
+            </Link>
+            <Link
+              href="/admin/configuracion"
+              className="rounded-lg px-3 py-1.5 font-medium text-neutral-600 hover:bg-brand-50 hover:text-brand-700"
+            >
+              Configuración
             </Link>
             <LogoutButton />
           </div>
