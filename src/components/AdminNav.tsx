@@ -3,23 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// El resto de las secciones se navegan desde el tablero del dashboard.
 const LINKS = [
   { href: "/admin", label: "Dashboard" },
-  { href: "/admin/categorias", label: "Categorías" },
-  { href: "/admin/productos", label: "Productos" },
-  { href: "/admin/adicionales", label: "Adicionales" },
-  { href: "/admin/pedidos", label: "Historial" },
-  { href: "/admin/metricas", label: "Métricas" },
-  { href: "/admin/repartidores", label: "Repartidores" },
   { href: "/admin/configuracion", label: "Configuración" },
-  { href: "/comanda", label: "Comanda" },
 ];
 
 export default function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1">
       {LINKS.map((link) => {
         const active =
           link.href === "/admin"
@@ -40,6 +34,6 @@ export default function AdminNav() {
           </Link>
         );
       })}
-    </nav>
+    </div>
   );
 }

@@ -1129,6 +1129,22 @@ número. Ahora cancelar desde `/comanda` exige escribir un motivo.
   contra Neon ("Your database is now in sync", columna `cancelReason` agregada sin prompt de
   pérdida de datos) y después `git push origin main`. Vercel auto-deployó.
 
+### Fase 17b — header del admin: logo + nav mínima (2026-09-03)
+
+El usuario quiere el header del `AdminLayout` con el **logo de la app** (todavía no hay
+archivo; lo trae después) y solo 3 acciones.
+
+- **`src/app/admin/layout.tsx`**: el `<h1>Rowlys · Admin</h1>` pasó a un `<Link href="/admin">`
+  con el wordmark "Rowlys" (`text-brand-600` extrabold). Comentario en el código: reemplazar
+  por `<img src="/logo.svg" alt="Rowlys">` cuando esté el logo. El wrapper de la derecha es un
+  `<nav>`.
+- **`src/components/AdminNav.tsx`**: `LINKS` recortado a **Dashboard** y **Configuración**
+  (antes tenía las 9 secciones). Su contenedor pasó de `<nav>` a `<div>` para no anidar `<nav>`
+  dentro del de layout. El resto de las secciones se navegan desde el tablero del dashboard
+  (`dashboard-client.tsx`), y `/comanda` desde el botón "Abrir comanda".
+- Orden final del header: **Rowlys (logo) … Dashboard · Configuración · Cerrar sesión**.
+- `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
+
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
 "Rowly'S" de Venado Tuerto, Santa Fe). Gitignoreado (`capturas row.pdf` + `*.pdf`). Cosas
 nuevas o que refinan lo ya sabido:
