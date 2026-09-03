@@ -924,6 +924,17 @@ El usuario quiere que Delivery y Takeaway tengan **cada uno su propia demora**.
   parcial de uno solo no pisa el otro (d:25/p:10 → d:25/p:8), fuera de rango 400. Vercel
   auto-deployó; en prod el usuario ya dejó delivery=120 / pickup=10 probándolo desde la UI.
 
+### Fase 12d — ETA de `/pedido/[id]` como hora absoluta (2026-09-03)
+
+El usuario no quería "Llega en ~30 min aprox." sino **"Entrega estimada" + la hora aproximada**
+ya con la demora sumada. En `pedido-client.tsx`: `etaClock` = `order.createdAt + (demora del
+canal + extraDelayMinutes)` minutos, formateado `HH:MM` con
+`toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })`. El cartel ahora
+dice `⏱️ Entrega estimada 19:45 hs` (delivery) / `⏱️ Listo estimado 19:45 hs` (pickup), y
+mantiene el "(incluye +N min de demora)". Se basa en `createdAt`, no en `now`, para que la hora
+no se mueva en cada poll. Sin schema ni API. `tsc`/`build` limpios. **Pendiente**: commitear +
+pushear (el usuario), no requiere `db push`.
+
 ## Fase 13: barra de métricas del día en `/comanda` (en código, 2026-09-02)
 
 RestoSimple tiene una barra con las métricas del día arriba del tablero. El usuario la pidió.

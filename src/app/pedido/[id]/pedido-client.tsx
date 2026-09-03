@@ -102,6 +102,15 @@ export default function PedidoClient({ id }: { id: string }) {
   const etaMinutes =
     (order.orderType === "DELIVERY" ? prepTimes.delivery : prepTimes.pickup) +
     order.extraDelayMinutes;
+  // Hora aproximada de entrega/retiro: cuando entró el pedido + preparación +
+  // demora extra. Se muestra en horario de Argentina.
+  const etaClock = new Date(
+    new Date(order.createdAt).getTime() + etaMinutes * 60000
+  ).toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
 
   return (
     <div className="storefront">
@@ -117,8 +126,8 @@ export default function PedidoClient({ id }: { id: string }) {
 
         {showEta && (
           <p className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg">
-            ⏱️ {order.orderType === "DELIVERY" ? "Llega" : "Listo"} en ~
-            {etaMinutes} min aprox.
+            ⏱️ {order.orderType === "DELIVERY" ? "Entrega estimada" : "Listo estimado"}{" "}
+            <span className="font-semibold">{etaClock} hs</span>
             {order.extraDelayMinutes > 0 && (
               <span className="text-muted">
                 {" "}
