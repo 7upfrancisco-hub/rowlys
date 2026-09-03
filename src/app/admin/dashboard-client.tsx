@@ -3,13 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
-import { formatCurrency, type OrderStatus } from "@/types";
+import { formatCurrency } from "@/types";
 
 type Metrics = {
   orders: number;
   revenue: number;
-  cashPending: number;
-  byStatus: Record<OrderStatus, number>;
 };
 
 type Settings = {
@@ -85,11 +83,17 @@ const GROUPS = [
 export default function DashboardClient() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // Facturado del mes en curso, del mismo endpoint que usa /admin/metricas
+  // (pedidos aceptados). Solo se muestra acá; no cambia esa pantalla.
+  const [monthRevenue, setMonthRevenue] = useState<number | null>(null);
 
   useEffect(() => {
     function load() {
       apiFetch<Metrics>("/api/admin/metrics").then(setMetrics).catch(() => {});
       apiFetch<Settings>("/api/settings").then(setSettings).catch(() => {});
+      apiFetch<{ summary: { revenue: number } }>("/api/admin/metrics/history")
+        .then((h) => setMonthRevenue(h.summary.revenue))
+        .catch(() => {});
     }
     load();
     const id = setInterval(load, 60000);
@@ -103,13 +107,11 @@ export default function DashboardClient() {
     timeZone: "America/Argentina/Buenos_Aires",
   });
 
-  const pendientes = metrics?.byStatus.PENDING ?? 0;
-  const activos = metrics
-    ? metrics.byStatus.PENDING +
-      metrics.byStatus.CONFIRMED +
-      metrics.byStatus.IN_PROGRESS +
-      metrics.byStatus.READY
-    : 0;
+  // Ticket medio de hoy = facturado de hoy / pedidos de hoy.
+  const avgToday =
+    metrics && metrics.orders > 0
+      ? Math.round(metrics.revenue / metrics.orders)
+      : 0;
 
   return (
     <div className="space-y-6">
@@ -147,29 +149,13 @@ export default function DashboardClient() {
           value={metrics ? formatCurrency(metrics.revenue) : "—"}
         />
         <Kpi
-          label="A cobrar (efvo/transf)"
-          value={metrics ? formatCurrency(metrics.cashPending) : "—"}
-          accent={(metrics?.cashPending ?? 0) > 0}
+          label="Ticket medio hoy"
+          value={metrics ? formatCurrency(avgToday) : "—"}
         />
-        <Link
-          href="/comanda"
-          className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:border-brand-300 hover:shadow-md"
-        >
-          <p className="text-xs uppercase tracking-wide text-neutral-400">
-            Pendientes sin aceptar
-          </p>
-          <p
-            className={
-              "mt-1 text-2xl font-bold " +
-              (pendientes > 0 ? "text-amber-600" : "text-neutral-900")
-            }
-          >
-            {metrics ? pendientes : "—"}
-          </p>
-          <p className="mt-0.5 text-xs text-neutral-500">
-            {metrics ? `${activos} activos en total` : " "}
-          </p>
-        </Link>
+        <Kpi
+          label="Facturado mes"
+          value={monthRevenue !== null ? formatCurrency(monthRevenue) : "—"}
+        />
       </div>
 
       <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
