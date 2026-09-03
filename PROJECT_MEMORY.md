@@ -1010,6 +1010,27 @@ el día). **Sin cambios de schema.**
 - **Deployada el 2026-09-02** (commits `6fd1c70` + `6e232d7` + `7f9d3b8`, sin `db push`). El
   usuario pusheó, Vercel auto-deployó y confirmó en prod que le gusta ("listo, genial").
 
+### Fase 14b — panel "Ventas por categoría" (2026-09-03)
+
+El usuario quiere ver, dentro de `/admin/metricas`, qué categorías y qué productos se
+vendieron, con opción de mirar un día puntual.
+
+- **`GET /api/admin/metrics/products?month=YYYY-MM`** (nuevo, protegido). Trae los `OrderItem`
+  de los pedidos facturables del mes (mismo `BILLABLE` que history), los agrega **día por día**
+  por categoría y por producto. Revenue de línea = `(item.price + Σ options.price) ×
+  item.quantity` (mismo criterio que el total del pedido). Categoría vía
+  `item.product.category.name`; si el producto se borró (`productId` null) o no tiene categoría
+  viva → `"Sin categoría"`. Devuelve `{ month, daysInMonth, days: [{day, units, revenue,
+  categories[], products[]}], monthTotal }`. `categories` ordenado por revenue desc, `products`
+  por unidades desc.
+- **`/admin/metricas`**: `load()` ahora hace `Promise.all` de history + products. Panel nuevo
+  `CategorySales` (entre los `Breakdown` de canal/pago y la tabla de historial): selector
+  "Todo el mes / Día 1…N" (estado local, se resetea al cambiar de mes por `key={products.month}`),
+  lista de categorías con unidades + $ + % (barra `brand-400`), y tabla Producto · Categoría ·
+  Cant. · Facturado.
+- `tsc` + `build` limpios (`/admin/metricas` ○ 4.11 kB; `/api/admin/metrics/products` ƒ). Sin
+  schema. **Pendiente**: commitear + pushear (el usuario), sin `db push`.
+
 ## Fase 15: tarjetas de `/comanda` más compactas (en código, 2026-09-02)
 
 Con varios pedidos en una columna la tarjeta quedaba muy alta. El usuario eligió el enfoque

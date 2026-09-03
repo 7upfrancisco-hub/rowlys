@@ -40,6 +40,21 @@ type MetricsHistory = {
   monthlyHistory: HistoryRow[];
 };
 
+type ItemAgg = { name: string; units: number; revenue: number };
+type ProductAgg = ItemAgg & { category: string };
+type SalesBucket = {
+  units: number;
+  revenue: number;
+  categories: ItemAgg[];
+  products: ProductAgg[];
+};
+type ProductMetrics = {
+  month: string;
+  daysInMonth: number;
+  days: (SalesBucket & { day: number })[];
+  monthTotal: SalesBucket;
+};
+
 function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
@@ -48,6 +63,7 @@ function shiftMonth(month: string, delta: number): string {
 
 export default function MetricasClient() {
   const [data, setData] = useState<MetricsHistory | null>(null);
+  const [products, setProducts] = useState<ProductMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,8 +71,14 @@ export default function MetricasClient() {
     setLoading(true);
     setError(null);
     const qs = month ? `?month=${month}` : "";
-    apiFetch<MetricsHistory>(`/api/admin/metrics/history${qs}`)
-      .then(setData)
+    Promise.all([
+      apiFetch<MetricsHistory>(`/api/admin/metrics/history${qs}`),
+      apiFetch<ProductMetrics>(`/api/admin/metrics/products${qs}`),
+    ])
+      .then(([h, p]) => {
+        setData(h);
+        setProducts(p);
+      })
       .catch((err: ApiError) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -151,6 +173,10 @@ export default function MetricasClient() {
                 .filter((r) => r.pair.orders > 0)}
             />
           </div>
+
+          {products && (
+            <CategorySales key={products.month} data={products} />
+          )}
 
           <MonthlyTable
             rows={data.monthlyHistory}
@@ -407,6 +433,99 @@ function Breakdown({
             );
           })}
         </ul>
+      )}
+    </section>
+  );
+}
+
+function CategorySales({ data }: { data: ProductMetrics }) {
+  const [day, setDay] = useState<number | null>(null);
+  const bucket: SalesBucket | undefined = day
+    ? data.days[day - 1]
+    : data.monthTotal;
+  const cats = bucket?.categories ?? [];
+  const prods = bucket?.products ?? [];
+  const totalRev = cats.reduce((s, c) => s + c.revenue, 0);
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold text-neutral-800">Ventas por categoría</h3>
+        <select
+          value={day ?? ""}
+          onChange={(e) =>
+            setDay(e.target.value ? Number(e.target.value) : null)
+          }
+          className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+        >
+          <option value="">Todo el mes</option>
+          {Array.from({ length: data.daysInMonth }, (_, i) => i + 1).map((d) => (
+            <option key={d} value={d}>
+              Día {d}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {!bucket || bucket.units === 0 ? (
+        <p className="text-sm text-neutral-400">
+          {day
+            ? "Sin ventas facturables ese día."
+            : "Sin ventas facturables este mes."}
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-2.5">
+            {cats.map((c) => {
+              const pct =
+                totalRev > 0 ? Math.round((c.revenue / totalRev) * 100) : 0;
+              return (
+                <li key={c.name}>
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-neutral-700">{c.name}</span>
+                    <span className="text-neutral-500">
+                      {c.units} u · {formatCurrency(c.revenue)}{" "}
+                      <span className="text-neutral-400">({pct}%)</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded bg-neutral-100">
+                    <div
+                      className="h-full rounded bg-brand-400"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
+                  <th className="py-2 pr-3 font-medium">Producto</th>
+                  <th className="py-2 pr-3 font-medium">Categoría</th>
+                  <th className="py-2 pr-3 text-right font-medium">Cant.</th>
+                  <th className="py-2 text-right font-medium">Facturado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prods.map((p) => (
+                  <tr key={p.name} className="border-t border-neutral-100">
+                    <td className="py-1.5 pr-3 text-neutral-800">{p.name}</td>
+                    <td className="py-1.5 pr-3 text-neutral-500">{p.category}</td>
+                    <td className="py-1.5 pr-3 text-right text-neutral-900">
+                      {p.units}
+                    </td>
+                    <td className="py-1.5 text-right text-neutral-600">
+                      {formatCurrency(p.revenue)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );
