@@ -1155,6 +1155,25 @@ archivo; lo trae después) y solo 3 acciones.
   `justify-end`.
 - `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
 
+### Fase 17c — header compartido admin ↔ comanda (2026-09-03)
+
+El usuario quiere que el header del panel y el de la comanda sean **iguales**, salvo los
+extras propios de la comanda.
+
+- **`src/components/AdminHeader.tsx`** (nuevo): el `<header>` completo — contenedor `max-w-5xl
+  px-6 py-4 justify-between`, marca "Rowlys" (`text-xl font-extrabold tracking-tight
+  text-brand-600`, `<Link href="/admin">`) a la izquierda, y a la derecha un cluster fijo
+  `<AdminNav />` + `<LogoutButton />` (gap-1). Props opcionales `subtitle` (nodo al lado de la
+  marca) y `extras` (nodos antes del cluster de nav).
+- **`admin/layout.tsx`**: usa `<AdminHeader />` pelado (antes tenía su propio `<header>` con el
+  wordmark inline).
+- **`comanda-client.tsx`**: reemplazó su `<header>` propio por
+  `<AdminHeader subtitle={<span>Comanda · N pedidos activos</span>} extras={<>Actualizado HH:MM
+  + botón ↻ + botón 🔔</>} />`. Se sacaron los imports de `AdminNav`/`LogoutButton` (ahora solo
+  viven dentro de `AdminHeader`). El título dejó de ser "Rowlys · Comanda" en `font-bold`: la
+  marca "Rowlys" es idéntica a la del admin y "Comanda · …" es el `subtitle` gris.
+- `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
+
 El usuario dejó un PDF de 19 páginas con capturas del panel y del storefront reales (local
 "Rowly'S" de Venado Tuerto, Santa Fe). Gitignoreado (`capturas row.pdf` + `*.pdf`). Cosas
 nuevas o que refinan lo ya sabido:

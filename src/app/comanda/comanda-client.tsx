@@ -6,8 +6,7 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { normalizeArPhone, whatsappLink } from "@/lib/phone";
 import { playDoorbell, unlockDoorbell } from "@/lib/doorbell";
 import { buildDriverMessage } from "@/lib/driver-message";
-import LogoutButton from "@/components/LogoutButton";
-import AdminNav from "@/components/AdminNav";
+import AdminHeader from "@/components/AdminHeader";
 import NewOrderModal from "./new-order-modal";
 import {
   ORDER_STATUS_LABELS,
@@ -458,19 +457,16 @@ export default function ComandaClient() {
 
   return (
     <div className="min-h-screen bg-neutral-50">
-      <header className="border-b border-neutral-200 bg-white">
-        {/* max-w-5xl como el header del admin, para que Dashboard /
-            Configuración / Cerrar sesión queden SIEMPRE en la misma posición
-            al navegar entre /admin y /comanda. El tablero de abajo sigue en
-            max-w-7xl. */}
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-baseline gap-3">
-            <h1 className="text-xl font-bold text-brand-600">Rowlys · Comanda</h1>
-            <span className="text-sm text-neutral-500">
-              {totalActive} {totalActive === 1 ? "pedido activo" : "pedidos activos"}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
+      <AdminHeader
+        subtitle={
+          <span className="text-sm text-neutral-500">
+            Comanda ·{" "}
+            {totalActive}{" "}
+            {totalActive === 1 ? "pedido activo" : "pedidos activos"}
+          </span>
+        }
+        extras={
+          <>
             <span className="text-neutral-400">
               {lastSync
                 ? `Actualizado ${new Date(lastSync).toLocaleTimeString("es-AR", {
@@ -518,11 +514,9 @@ export default function ComandaClient() {
             >
               <span aria-hidden="true">{soundOn ? "🔔" : "🔕"}</span>
             </button>
-            <AdminNav />
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {metrics && (
         <div className="border-b border-neutral-200 bg-brand-50/40">
