@@ -12,9 +12,6 @@ type Metrics = {
 
 type Settings = {
   storeName: string;
-  storeOpen: boolean;
-  deliveryEnabled: boolean;
-  pickupEnabled: boolean;
 };
 
 const GROUPS = [
@@ -135,18 +132,6 @@ export default function DashboardClient() {
         </Link>
       </div>
 
-      {settings && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Chip
-            on={settings.storeOpen}
-            label={settings.storeOpen ? "Local abierto" : "Local cerrado"}
-          />
-          <Chip on={settings.deliveryEnabled} label="Delivery" />
-          <Chip on={settings.pickupEnabled} label="Takeaway" />
-          <span className="text-neutral-400">· se cambia desde la comanda</span>
-        </div>
-      )}
-
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Pedidos hoy" value={metrics ? metrics.orders : "—"} />
         <Kpi
@@ -217,22 +202,3 @@ function Kpi({
   );
 }
 
-function Chip({ on, label }: { on: boolean; label: string }) {
-  return (
-    <span
-      className={
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium " +
-        (on
-          ? "border-green-300 bg-green-50 text-green-700"
-          : "border-neutral-300 bg-neutral-100 text-neutral-500")
-      }
-    >
-      <span
-        className={
-          "h-1.5 w-1.5 rounded-full " + (on ? "bg-green-500" : "bg-neutral-400")
-        }
-      />
-      {label}
-    </span>
-  );
-}

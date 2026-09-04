@@ -1155,6 +1155,14 @@ archivo; lo trae después) y solo 3 acciones.
   `justify-end`.
 - `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
 
+### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
+
+El usuario pidió sacar del tablero de `/admin` la fila de chips "Local abierto · Delivery ·
+Takeaway · se cambia desde la comanda" — ese control ya vive en `/comanda` (barra "Estado del
+local") y no hace falta duplicarlo. En `dashboard-client.tsx` se borró ese bloque + el
+componente `Chip` + los campos `storeOpen/deliveryEnabled/pickupEnabled` del tipo `Settings`
+(sigue trayendo `/api/settings` solo por `storeName`). Sin cambios en `/comanda`.
+
 ### Fase 17c — header compartido admin ↔ comanda (2026-09-03)
 
 El usuario quiere que el header del panel y el de la comanda sean **iguales**, salvo los
