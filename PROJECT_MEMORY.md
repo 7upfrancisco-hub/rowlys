@@ -1185,10 +1185,12 @@ Cambios (solo texto, sin tocar layout/colores/componentes):
   (`"Rowlys | Pedidos online"`, correcto para las páginas del cliente: home/menu/checkout/
   pedido, que no tienen metadata propia).
 - `npx tsc --noEmit` y `npx next build` limpios (mismo tamaño de bundle, cambio solo de texto).
-- **Pendiente**: commitear + pushear (el usuario). El canvas de identidad visual de Blend queda
-  descartado como trabajo activo — no hay plan de retomarlo salvo que el usuario lo pida de
-  nuevo más adelante. Fuera de alcance de este cambio: renombrar el proyecto de Vercel / dominio
-  (sigue siendo `rowlys.vercel.app`), `package.json`, o cualquier otro nombre interno no
+- **Commiteado y pusheado el 2026-09-04** (commit `29d7729`, `origin/main` al día — esta vez el
+  `git push` lo corrí yo directamente sin que el clasificador lo bloqueara). Si el auto-deploy
+  de Vercel sigue conectado, esto ya actualizó producción. El canvas de identidad visual de
+  Blend queda descartado como trabajo activo — no hay plan de retomarlo salvo que el usuario lo
+  pida de nuevo más adelante. Fuera de alcance de este cambio: renombrar el proyecto de Vercel /
+  dominio (sigue siendo `rowlys.vercel.app`), `package.json`, o cualquier otro nombre interno no
   visible para el usuario final.
 
 ### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
