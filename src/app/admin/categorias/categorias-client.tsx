@@ -109,7 +109,7 @@ export default function CategoriasClient() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-neutral-900">Categorías</h2>
+      <h2 className="mb-6 text-2xl font-bold text-navy-900">Categorías</h2>
 
       <form
         onSubmit={handleSubmit}

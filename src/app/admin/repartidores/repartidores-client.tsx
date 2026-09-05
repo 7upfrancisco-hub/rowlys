@@ -131,7 +131,7 @@ export default function RepartidoresClient() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-neutral-900">Repartidores</h2>
+      <h2 className="mb-6 text-2xl font-bold text-navy-900">Repartidores</h2>
 
       <form
         onSubmit={handleSubmit}

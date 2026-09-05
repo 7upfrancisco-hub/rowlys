@@ -119,7 +119,7 @@ export default function DashboardClient() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-neutral-900">
+          <h2 className="text-2xl font-bold text-navy-900">
             {settings?.storeName ?? "Panel"}
           </h2>
           <p className="text-sm capitalize text-neutral-500">{today}</p>

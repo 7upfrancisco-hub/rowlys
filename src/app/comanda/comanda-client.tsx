@@ -456,7 +456,7 @@ export default function ComandaClient() {
   const totalActive = orders?.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="min-h-screen bg-white">
       <AdminHeader
         subtitle={
           <span className="text-sm text-neutral-500">

@@ -92,7 +92,7 @@ export default function MetricasClient() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold text-neutral-900">
+        <h2 className="text-2xl font-bold text-navy-900">
           Métricas e historial
         </h2>
         {data && (

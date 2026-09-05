@@ -91,7 +91,7 @@ export default function ProductosClient() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-neutral-900">Productos</h2>
+        <h2 className="text-2xl font-bold text-navy-900">Productos</h2>
         {!formOpen && categories.length > 0 && (
           <button
             onClick={startCreate}

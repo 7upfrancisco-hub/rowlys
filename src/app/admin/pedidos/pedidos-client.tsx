@@ -74,7 +74,7 @@ export default function PedidosClient() {
 
   return (
     <div>
-      <h2 className="mb-1 text-2xl font-bold text-neutral-900">
+      <h2 className="mb-1 text-2xl font-bold text-navy-900">
         Historial de pedidos
       </h2>
       <p className="mb-6 text-sm text-neutral-500">

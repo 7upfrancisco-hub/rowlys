@@ -8,6 +8,8 @@ import LogoutButton from "@/components/LogoutButton";
 // (campanita, botón de refrescar, hora de sincronización) son solo de la comanda.
 // Nota: "Blend" es la marca del producto/panel — no confundir con el nombre
 // del local (tenant) que se ve en el storefront del cliente, ej. "Rowlys".
+// Paleta Blend: el wordmark usa navy (color estructural/texto de marca); el
+// rojo (`brand-*`) queda reservado para botones, nav activo y links.
 export default function AdminHeader({
   subtitle,
   extras,
@@ -22,7 +24,7 @@ export default function AdminHeader({
           <Link
             href="/admin"
             aria-label="Blend — ir al panel"
-            className="text-xl font-extrabold tracking-tight text-brand-600"
+            className="text-xl font-extrabold tracking-tight text-navy-800"
           >
             Blend
           </Link>

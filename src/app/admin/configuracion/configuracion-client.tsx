@@ -105,7 +105,7 @@ export default function ConfiguracionClient() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-neutral-900">
+      <h2 className="mb-6 text-2xl font-bold text-navy-900">
         Configuración
       </h2>
       <form

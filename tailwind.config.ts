@@ -8,18 +8,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Acento del panel interno (admin / comanda): naranja. Sin cambios.
+        // Acento del panel interno (admin / comanda): rojo — color principal
+        // de acción (botones, nav activo, links). Aproximado de la paleta
+        // Blend (navy + rojo) que pasó el usuario, fondo blanco.
         brand: {
-          50: "#fff7ed",
-          100: "#ffedd5",
-          200: "#fed7aa",
-          300: "#fdba74",
-          400: "#fb923c",
-          500: "#f97316",
-          600: "#ea580c",
-          700: "#c2410c",
-          800: "#9a3412",
-          900: "#7c2d12",
+          50: "#fdf1ef",
+          100: "#fbdfda",
+          200: "#f5c0b6",
+          300: "#ec9686",
+          400: "#dd6b57",
+          500: "#c94631",
+          600: "#b3291b",
+          700: "#8f2116",
+          800: "#721a11",
+          900: "#59140d",
+        },
+        // Acento secundario de Blend: navy — color estructural (títulos,
+        // wordmark), no se usa para acciones/botones.
+        navy: {
+          50: "#f2f4f7",
+          100: "#e1e6ed",
+          200: "#c3ccda",
+          300: "#9ba9c0",
+          400: "#6e7f9e",
+          500: "#4c5d80",
+          600: "#374765",
+          700: "#29354c",
+          800: "#1e293b",
+          900: "#141b29",
         },
         // Acento del storefront del cliente (marca "Rowly'S"): rojo.
         store: {

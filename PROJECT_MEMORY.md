@@ -1193,6 +1193,39 @@ Cambios (solo texto, sin tocar layout/colores/componentes):
   dominio (sigue siendo `rowlys.vercel.app`), `package.json`, o cualquier otro nombre interno no
   visible para el usuario final.
 
+### Fase 18b — el usuario sí quiere cambiar la paleta: navy + rojo sobre blanco (2026-09-04)
+
+Al ver el commit del rename, el usuario volvió con una muestra de imagen propia (dos rectángulos
+navy + rojo) y pidió usar esa paleta con **fondo blanco**. Roles confirmados por el usuario:
+**rojo = color principal de acción** (botones, nav activo, links — reemplaza el naranja `brand`
+de siempre) y **navy = color estructural de texto** (no se usa en botones/acciones). Los hex no
+los tiene el usuario a mano — se **aproximaron visualmente** de la muestra; son fácilmente
+ajustables si no matchean exacto.
+
+- **`tailwind.config.ts`**: la escala `brand` (antes naranja, usada en ~17 archivos de
+  `/admin`+`/comanda`+`/login`+`/mock/mp`) se **redefinió con los mismos 10 tonos pero en
+  rojo** (`50` `#fdf1ef` … `600` `#b3291b` … `900` `#59140d`) — como todo el código ya usaba
+  clases `brand-*`, el cambio de paleta fue automático en toda esa superficie sin tocar
+  componente por componente. Se agregó una escala nueva `navy` (`50` `#f2f4f7` … `800`
+  `#1e293b` … `900` `#141b29`) para uso estructural.
+- **Fondo blanco**: `body` en `globals.css` (antes `bg-neutral-50`), `admin/layout.tsx` y el
+  wrapper raíz de `comanda-client.tsx` pasaron de `bg-neutral-50` a `bg-white`. No se tocaron los
+  `bg-neutral-50` que son estados de hover/fila-inactiva (esos siguen igual, son detalle de UI no
+  el "fondo" que pidió el usuario).
+- **Uso de `navy`**: wordmark "Blend" del `AdminHeader` (antes heredaba el rojo de `brand-600`,
+  ahora `text-navy-800` explícito) y los 8 títulos `<h2>` de sección del admin (Categorías,
+  Productos, Adicionales, Repartidores, Configuración, Métricas e historial, Historial de
+  pedidos, y el nombre del local en el dashboard) — todos pasaron de `text-neutral-900` a
+  `text-navy-900`. El resto del texto/cuerpo sigue en la escala `neutral` de Tailwind sin tocar.
+- El storefront del cliente (`store`/tokens `--s-*`, tema del local "Rowlys") **no se tocó** —
+  esto es solo la paleta del panel/producto Blend.
+- `npx tsc --noEmit` y `npx next build` limpios. **No se pudo verificar visualmente en
+  navegador** (sin `chromium-cli` ni navegador disponible en esta sesión, mismo aviso que todas
+  las fases anteriores) — verificación solo de compilación/build.
+- **Pendiente**: que el usuario lo vea corrido en local o en prod y confirme si el rojo/navy
+  aproximados matchean su muestra (si no, es un ajuste de 2 líneas en `tailwind.config.ts`), y
+  commitear + pushear.
+
 ### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
 
 El usuario pidió sacar del tablero de `/admin` la fila de chips "Local abierto · Delivery ·

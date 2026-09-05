@@ -52,7 +52,7 @@ export default function AdicionalesClient() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-neutral-900">Adicionales</h2>
+        <h2 className="text-2xl font-bold text-navy-900">Adicionales</h2>
         {!formOpen && (
           <button
             onClick={() => {
