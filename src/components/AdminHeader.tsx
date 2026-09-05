@@ -2,10 +2,12 @@ import Link from "next/link";
 import AdminNav from "@/components/AdminNav";
 import LogoutButton from "@/components/LogoutButton";
 
-// Header compartido por el panel (/admin/*) y la comanda. La marca "Rowlys" y
+// Header compartido por el panel (/admin/*) y la comanda. La marca "Blend" y
 // los accesos Dashboard / Configuración / Cerrar sesión se ven IGUAL en las dos
 // pantallas. `subtitle` (ej. "Comanda · N pedidos activos") y `extras`
 // (campanita, botón de refrescar, hora de sincronización) son solo de la comanda.
+// Nota: "Blend" es la marca del producto/panel — no confundir con el nombre
+// del local (tenant) que se ve en el storefront del cliente, ej. "Rowlys".
 export default function AdminHeader({
   subtitle,
   extras,
@@ -19,10 +21,10 @@ export default function AdminHeader({
         <div className="flex items-baseline gap-2">
           <Link
             href="/admin"
-            aria-label="Rowlys — ir al panel"
+            aria-label="Blend — ir al panel"
             className="text-xl font-extrabold tracking-tight text-brand-600"
           >
-            Rowlys
+            Blend
           </Link>
           {subtitle}
         </div>

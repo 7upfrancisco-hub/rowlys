@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import AdminHeader from "@/components/AdminHeader";
+
+export const metadata: Metadata = {
+  title: "Blend | Panel",
+};
 
 export default function AdminLayout({
   children,

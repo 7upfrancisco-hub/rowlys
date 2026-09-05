@@ -1155,6 +1155,42 @@ archivo; lo trae después) y solo 3 acciones.
   `justify-end`.
 - `tsc`/`build` limpios. Sin schema. **Pendiente**: commitear + pushear (el usuario).
 
+## Fase 18: decisión de branding "Blend" — solo cambia el nombre del panel, no el diseño (2026-09-04)
+
+Contexto: se había arrancado un pase visual de re-branding del panel a "Blend" (ver memoria
+persistente fuera del repo, `blend_rebrand_ui`), con un primer canvas de diseño (paleta
+rojo/azul/navy) que el usuario **rechazó** por genérico, y un segundo canvas con 3 identidades
+completas desde cero (Espresso/Ink/Graphite Light) que quedó sin elegir. El usuario cortó por
+lo sano: **se queda con el diseño/paleta actual del panel** (naranja `brand`, sin tocar
+`tailwind.config.ts` ni ningún componente visual) y **solo cambia el nombre** — confirma
+formalmente lo que ya estaba latente en el proyecto: **"Blend" es la marca del producto/SaaS**
+(lo que se vendería a otros locales a futuro) y **"Rowlys" queda como el nombre del local
+(tenant) con el que se prueba el sistema** — no se toca el storefront del cliente, que sigue
+mostrando "Rowlys" (viene de `Settings.storeName`, dinámico por tenant).
+
+Cambios (solo texto, sin tocar layout/colores/componentes):
+- **`src/components/AdminHeader.tsx`**: el wordmark del header compartido (`/admin/*` y
+  `/comanda`) pasó de "Rowlys" a "**Blend**" (texto + `aria-label`). Comentario del archivo
+  actualizado para aclarar la distinción marca-de-producto vs. nombre-del-local.
+- **`src/app/admin/layout.tsx`**: agregó `export const metadata` propio (`title: "Blend |
+  Panel"`) — antes heredaba el título del storefront (`"Rowlys | Pedidos online"` del layout
+  raíz) también en el pestañeo de `/admin/*`.
+- **`src/app/comanda/page.tsx`**: mismo fix, `title: "Blend | Comanda"`.
+- **Deliberadamente NO tocado** (son el nombre del *local*, no del producto, y siguen siendo
+  correctos): `src/app/page.tsx` (home del storefront, `<h1>Rowlys</h1>`), `menu-client.tsx`
+  (fallback de `storeName`), `comanda-client.tsx` (estado inicial de `storeName` para el mensaje
+  de WhatsApp), `/api/settings` y `/api/admin/settings` (fallback `storeName: "Rowlys"` cuando
+  no hay fila de `Settings` todavía), las claves de `localStorage` con prefijo `rowlys-`
+  (tema/sonido/bypass — internas, no user-facing), y el título raíz `src/app/layout.tsx`
+  (`"Rowlys | Pedidos online"`, correcto para las páginas del cliente: home/menu/checkout/
+  pedido, que no tienen metadata propia).
+- `npx tsc --noEmit` y `npx next build` limpios (mismo tamaño de bundle, cambio solo de texto).
+- **Pendiente**: commitear + pushear (el usuario). El canvas de identidad visual de Blend queda
+  descartado como trabajo activo — no hay plan de retomarlo salvo que el usuario lo pida de
+  nuevo más adelante. Fuera de alcance de este cambio: renombrar el proyecto de Vercel / dominio
+  (sigue siendo `rowlys.vercel.app`), `package.json`, o cualquier otro nombre interno no
+  visible para el usuario final.
+
 ### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
 
 El usuario pidió sacar del tablero de `/admin` la fila de chips "Local abierto · Delivery ·
@@ -1251,4 +1287,13 @@ nuevas o que refinan lo ya sabido:
 - **2026-09-02** — El usuario pidió **ampliar las métricas** con un apartado de seguimiento e historial, porque el servicio se va a cobrar por pedidos mensuales. Implementado como **Fase 14** (ver sección): nueva `GET /api/admin/metrics/history?month=YYYY-MM` (12 meses en un query + agregado en memoria, horario de Argentina) y pantalla `/admin/metricas` con selector de mes, 4 KPIs, gráfico de barras por día (CSS, sin librería), desglose por canal y por medio de pago, y tabla de historial mensual (fila clickeable). "Pedido facturable" = aceptado por el local (CONFIRMED/IN_PROGRESS/READY/DELIVERED), sin PENDING ni CANCELLED — decisión del usuario. Links en el nav del admin, el dashboard y la barra de `/comanda`. Sin schema. `tsc`/`build` limpios. Commit `6fd1c70`, deployado y probado en prod OK. El usuario pidió un ajuste: el historial mensual ahora arranca en el mes del primer pedido del negocio (no 12 meses fijos) — ajustado, falta commitear ese cambio y pushear.
 - **2026-09-02** — Fase 14 (sección `/admin/metricas` con seguimiento e historial: endpoint `GET /api/admin/metrics/history`, KPIs del mes, gráfico de "Ventas por día" como SVG de línea dibujado a mano, desglose por canal/medio de pago, tabla de historial mensual desde el primer pedido del negocio). Commits `6fd1c70`+`6e232d7`+`7f9d3b8`. + Fase 15 (tarjetas de `/comanda` más compactas: layout apretado + menú `⋯` por tarjeta para demora/WhatsApp-repartidor/cancelar). Commit `9086c31`. Todo pusheado por el usuario, Vercel auto-deployó, verificado en prod y aprobado ("listo, genial"). Sin cambios de schema en ninguna de las dos.
 - **2026-09-03** — Tres cambios pedidos y deployados por el usuario en el día: (1) ETA de `/pedido/[id]` de "Llega en ~N min" a "Entrega estimada HH:MM hs" (24 h, hora absoluta = createdAt + prep del canal + demora extra) — commits `8772907`+`c9b56f0` (Fase 12d). (2) Panel "Ventas por categoría" en `/admin/metricas` con `GET /api/admin/metrics/products` (agrega OrderItem por día/categoría/producto) y selector "Todo el mes / Día N" — commit `9878b3f` (Fase 14b). (3) `/admin` deja de ser grilla de links y pasa a tablero: KPIs de hoy (de `/api/admin/metrics`, refresco 60s) + accesos en lista agrupada Pedidos/Mi menú/Métricas/Configuración; "Finalizados" abre `/admin/pedidos?ver=todos` (pedidos-client lee el query param, page envuelta en Suspense) — commit `50d1c59` (Fase 16). Ninguno tocó schema. Todo en `origin/main`, auto-deploy OK.
+- **2026-09-04** — El usuario vio el segundo canvas de identidad Blend (Espresso/Ink/Graphite
+  Light) y cortó el pase visual: **se queda con el diseño/paleta naranja actual del panel, sin
+  cambios visuales**, y define que "Blend" es solo el **nombre** del producto — "Rowlys" queda
+  como el local/tenant de prueba. Implementado como **Fase 18**: wordmark del `AdminHeader`
+  ("Rowlys"→"Blend") y `<title>` propio de `/admin` y `/comanda` ("Blend | Panel" / "Blend |
+  Comanda"); el storefront del cliente y los fallbacks de `storeName` siguen diciendo "Rowlys"
+  a propósito (es el nombre real del local). `tsc`/`build` limpios. Pendiente: commitear +
+  pushear (el usuario). El trabajo de identidad visual (canvas, paletas nuevas) queda
+  descartado, no hay plan de retomarlo salvo pedido explícito.
 - **2026-09-03** — Deployados: (a) Fase 16b/16c — KPIs del tablero pasan a "Ticket medio mes" + "Facturado mes" (de `/api/admin/metrics/history`), y `/admin/pedidos` deja de ser gestión de estados y pasa a "Historial de pedidos" con dos pestañas Finalizados/Cancelados (nav y acceso del tablero renombrados "Pedidos" → "Historial"; se revirtió el plumbing `?ver=todos`). Commits `a048a6f`, `cda9b21`, `c10a9f0`. (b) Fase 17 — motivo obligatorio al cancelar un pedido desde `/comanda` (modal con textarea en vez de `window.confirm`; `Order.cancelReason` nuevo; `PATCH /api/admin/orders/[id]` exige el motivo al pasar a CANCELLED; el motivo no viaja al cliente; se ve en Historial → Cancelados). Commit `3fbb149`, con `prisma db push` corrido por el usuario antes del push. Todo en `origin/main`, auto-deploy OK.
