@@ -1279,6 +1279,41 @@ auditar el número de cobro. **Sin cambios de schema.**
 - **Pusheado** (commit `23205a8`, `origin/main` al día, `git push` corrido por Claude sin
   bloqueo del clasificador). Auto-deploy de Vercel debería tomarlo.
 
+### Fase 19b — el usuario prefiere PDF, no CSV (2026-09-07, commit `b6cfb35`)
+
+El usuario abrió el CSV en Excel (locale ES) y salió todo en la columna A — Excel-ES no separa
+por coma. Pidió que sea **PDF** directamente. Se reemplazó el CSV por un PDF tabular prolijo.
+
+- **`src/lib/csv.ts` eliminado.** Nuevo **`src/lib/pdf-report.ts`**: `downloadPdfReport({filename,
+  title, subtitle, summary[], columns[], rows[][], numericCols[], wideCol})`. Usa **`jspdf@2.5.2`
+  + `jspdf-autotable@3.8.4`** (deps nuevas). Landscape A4, header navy (`#1e293b`) con
+  título/subtítulo/línea de totales + regla, filas alternadas, `numericCols` alineadas a la
+  derecha, `wideCol` (Ítems) con `cellWidth:200`, pie "Generado DD/MM/AAAA, HH:MM · Blend" +
+  "Pagina N". **Import por efecto** (`import "jspdf-autotable"` + `doc.autoTable(...)`, tipado con
+  un cast `AutoTableDoc`) — la forma funcional `autoTable(doc, ...)` rompe bajo ESM nativo.
+- **jsPDF se carga con `await import("@/lib/pdf-report")` dentro del handler del botón**, no en
+  el top-level → `/admin/pedidos` y `/admin/metricas` no engordan (siguen ~91 kB First Load; con
+  import estático subían a ~215 kB).
+- **`GET /api/admin/metrics/export`** ahora devuelve **JSON listo para el PDF**
+  (`{monthTag, monthLabel, columns, rows, numericCols, summary}`, montos ya formateados con
+  `formatCurrency`, filas display-ready) en vez de `text/csv`. Se le sacaron las columnas Email y
+  Dirección (ensanchaban de más); quedan 13 col. Mismo `?month=YYYY-MM`, mismo 400 en mes
+  inválido, sigue protegido por el matcher `/api/admin/*` (401 sin cookie). Canal abreviado
+  "Envío"/"Retiro".
+- **`/admin/pedidos`**: `exportPdf()` async, arma el PDF 100% client-side desde `filtered`
+  (respeta pestaña/canal/buscador). Columnas: Nº, Fecha (fecha+hora en una), Estado, Canal,
+  Cliente, Teléfono, **Ítems** (o **Motivo** en la pestaña Cancelados) como `wideCol`, Medio de
+  pago, Estado de pago, Total. Resumen: "N pedidos · Total: $ …". Nombre
+  `blend-pedidos-<finalizados|cancelados>-YYYY-MM-DD.pdf`.
+- **`/admin/metricas`**: botón "Exportar PDF" (`<button>`, con estado `pdfLoading` → "Generando…").
+  Fetchea el JSON del endpoint y arma el PDF `blend-metricas-YYYY-MM.pdf`.
+- **Verificado end-to-end** con dev server + Chrome headless (CDP `Browser.setDownloadBehavior`):
+  los dos botones descargan el PDF y renderiza bien (header navy, tabla con filas alternadas,
+  Total a la derecha, Ítems multilínea con adicionales, pie con fecha/página). `tsc` + `build`
+  limpios. Smoke test aparte de jspdf en Node: `%PDF-`, multipágina con page-break OK.
+- **Pusheado** (commit `b6cfb35`, `origin/main` al día). Sigue pendiente el pase de estética (el
+  gráfico "Ventas por día" con la línea naranja vieja).
+
 ### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
 
 El usuario pidió sacar del tablero de `/admin` la fila de chips "Local abierto · Delivery ·
