@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { toCsv } from "@/lib/csv";
 import {
   ORDER_STATUS_LABELS,
-  ORDER_TYPE_LABELS,
   PAYMENT_PROVIDER_LABELS,
+  formatCurrency,
   type OrderStatus,
 } from "@/types";
 
@@ -47,15 +46,30 @@ function arDateTime(d: Date): { date: string; time: string } {
   return { date: `${dd}/${mm}/${s.getUTCFullYear()}`, time: `${hh}:${mi}` };
 }
 
+const MONTH_NAMES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
 function payStatusLabel(status: string): string {
   if (status === "CONFIRMED") return "Pagado";
   if (status === "FAILED") return "Fallido";
   return "Pendiente";
 }
 
-// Exporta a CSV todos los pedidos de un mes (?month=YYYY-MM, default: mes actual
-// de Argentina), con una columna "Facturable" para poder auditar el número por
-// el que se cobra. Horario de Argentina.
+// Devuelve, listo para armar el PDF, el detalle de todos los pedidos de un mes
+// (?month=YYYY-MM, default: mes actual de Argentina). La columna "Facturable"
+// permite auditar el número por el que se cobra. Horario de Argentina.
 export async function GET(request: NextRequest) {
   const current = arParts(new Date());
   let sy = current.year;
@@ -86,15 +100,13 @@ export async function GET(request: NextRequest) {
       customerFirstName: true,
       customerLastName: true,
       customerPhone: true,
-      customerEmail: true,
-      deliveryAddress: true,
       deliveryFee: true,
       total: true,
       payment: { select: { provider: true, status: true } },
     },
   });
 
-  const headers = [
+  const columns = [
     "Nº",
     "Fecha",
     "Hora",
@@ -103,8 +115,6 @@ export async function GET(request: NextRequest) {
     "Canal",
     "Cliente",
     "Teléfono",
-    "Email",
-    "Dirección",
     "Medio de pago",
     "Estado de pago",
     "Subtotal",
@@ -112,32 +122,47 @@ export async function GET(request: NextRequest) {
     "Total",
   ];
 
+  let billable = 0;
+  let cancelled = 0;
+  let revenue = 0;
+
   const rows = orders.map((o) => {
     const { date, time } = arDateTime(o.createdAt);
+    const isBillable = BILLABLE.includes(o.status);
+    if (isBillable) {
+      billable++;
+      revenue += o.total;
+    } else if (o.status === "CANCELLED") {
+      cancelled++;
+    }
     return [
       o.number,
       date,
       time,
       ORDER_STATUS_LABELS[o.status],
-      BILLABLE.includes(o.status) ? "Sí" : "No",
-      ORDER_TYPE_LABELS[o.orderType],
+      isBillable ? "Sí" : "No",
+      o.orderType === "DELIVERY" ? "Envío" : "Retiro",
       `${o.customerFirstName} ${o.customerLastName}`.trim(),
       o.customerPhone,
-      o.customerEmail ?? "",
-      o.deliveryAddress ?? "",
-      o.payment ? PAYMENT_PROVIDER_LABELS[o.payment.provider] : "",
-      o.payment ? payStatusLabel(o.payment.status) : "",
-      Math.round(o.total - o.deliveryFee),
-      Math.round(o.deliveryFee),
-      Math.round(o.total),
+      o.payment ? PAYMENT_PROVIDER_LABELS[o.payment.provider] : "—",
+      o.payment ? payStatusLabel(o.payment.status) : "—",
+      formatCurrency(Math.round(o.total - o.deliveryFee)),
+      formatCurrency(Math.round(o.deliveryFee)),
+      formatCurrency(Math.round(o.total)),
     ];
   });
 
-  const monthTag = `${sy}-${String(sm + 1).padStart(2, "0")}`;
-  return new NextResponse(toCsv(headers, rows), {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="blend-metricas-${monthTag}.csv"`,
-    },
+  return NextResponse.json({
+    monthTag: `${sy}-${String(sm + 1).padStart(2, "0")}`,
+    monthLabel: `${MONTH_NAMES[sm]} ${sy}`,
+    columns,
+    rows,
+    numericCols: [10, 11, 12],
+    summary: [
+      `Pedidos: ${orders.length}`,
+      `Facturables: ${billable}`,
+      `Facturado: ${formatCurrency(revenue)}`,
+      `Cancelados: ${cancelled}`,
+    ],
   });
 }

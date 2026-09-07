@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { toCsv, downloadCsv } from "@/lib/csv";
 import {
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
@@ -81,65 +80,80 @@ export default function PedidosClient() {
     });
   }, [orders, tab, orderTypeFilter, search]);
 
-  // Exporta a CSV la lista que se está viendo (respeta pestaña, canal y buscador).
-  function exportCsv() {
-    const headers = [
+  // Exporta a PDF la lista que se está viendo (respeta pestaña, canal y buscador).
+  async function exportPdf() {
+    const { downloadPdfReport } = await import("@/lib/pdf-report");
+    const isCancelled = tab === "CANCELLED";
+    const detailCol = isCancelled ? "Motivo" : "Ítems";
+    const columns = [
       "Nº",
       "Fecha",
-      "Hora",
       "Estado",
       "Canal",
       "Cliente",
       "Teléfono",
-      "Email",
-      "Dirección",
-      "Ítems",
-      "Nota",
-      "Motivo de cancelación",
+      detailCol,
       "Medio de pago",
       "Estado de pago",
-      "Subtotal",
-      "Envío",
       "Total",
     ];
     const rows = filtered.map((o) => {
       const dt = new Date(o.createdAt);
-      const items = o.items
-        .map((it) => {
-          const opts = it.options.length
-            ? ` (${it.options.map((op) => op.name).join(", ")})`
-            : "";
-          return `${it.quantity}× ${it.productName}${opts}`;
-        })
-        .join("; ");
-      return [
-        o.number,
-        dt.toLocaleDateString("es-AR", { timeZone: AR_TZ }),
+      const fecha =
+        dt.toLocaleDateString("es-AR", { timeZone: AR_TZ }) +
+        " " +
         dt.toLocaleTimeString("es-AR", {
           timeZone: AR_TZ,
           hour: "2-digit",
           minute: "2-digit",
           hour12: false,
-        }),
+        });
+      const detail = isCancelled
+        ? o.cancelReason ?? "—"
+        : o.items
+            .map((it) => {
+              const opts = it.options.length
+                ? ` (${it.options.map((op) => op.name).join(", ")})`
+                : "";
+              return `${it.quantity}× ${it.productName}${opts}`;
+            })
+            .join(", ");
+      return [
+        o.number,
+        fecha,
         ORDER_STATUS_LABELS[o.status],
-        ORDER_TYPE_LABELS[o.orderType],
+        o.orderType === "DELIVERY" ? "Envío" : "Retiro",
         `${o.customerFirstName} ${o.customerLastName}`.trim(),
         o.customerPhone,
-        o.customerEmail ?? "",
-        o.deliveryAddress ?? "",
-        items,
-        o.notes ?? "",
-        o.cancelReason ?? "",
-        o.payment ? PAYMENT_PROVIDER_LABELS[o.payment.provider] : "",
-        o.payment ? payStatusLabel(o.payment.status) : "",
-        Math.round(o.total - o.deliveryFee),
-        Math.round(o.deliveryFee),
-        Math.round(o.total),
+        detail,
+        o.payment ? PAYMENT_PROVIDER_LABELS[o.payment.provider] : "—",
+        o.payment ? payStatusLabel(o.payment.status) : "—",
+        formatCurrency(Math.round(o.total)),
       ];
     });
-    const tag = tab === "DELIVERED" ? "finalizados" : "cancelados";
+    const total = filtered.reduce((s, o) => s + o.total, 0);
+    const chan =
+      orderTypeFilter === "ALL"
+        ? "todos los canales"
+        : ORDER_TYPE_LABELS[orderTypeFilter].toLowerCase();
+    const term = search.trim();
+    const tag = isCancelled ? "cancelados" : "finalizados";
     const today = new Date().toISOString().slice(0, 10);
-    downloadCsv(`blend-pedidos-${tag}-${today}.csv`, toCsv(headers, rows));
+    downloadPdfReport({
+      filename: `blend-pedidos-${tag}-${today}.pdf`,
+      title: "Blend · Historial de pedidos",
+      subtitle:
+        `${isCancelled ? "Cancelados" : "Finalizados"} · ${chan}` +
+        (term ? ` · buscando "${term}"` : ""),
+      summary: [
+        `${filtered.length} pedido${filtered.length === 1 ? "" : "s"}`,
+        `Total: ${formatCurrency(total)}`,
+      ],
+      columns,
+      rows,
+      numericCols: [9],
+      wideCol: 6,
+    });
   }
 
   return (
@@ -160,11 +174,11 @@ export default function PedidosClient() {
           Cancelados ({counts.cancelled})
         </TabBtn>
         <button
-          onClick={exportCsv}
+          onClick={exportPdf}
           disabled={filtered.length === 0}
           className="ml-auto rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Exportar CSV ({filtered.length})
+          Exportar PDF ({filtered.length})
         </button>
       </div>
 

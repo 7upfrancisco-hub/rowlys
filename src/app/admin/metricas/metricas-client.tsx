@@ -10,6 +10,15 @@ import {
   type PaymentProvider,
 } from "@/types";
 
+type MetricsExport = {
+  monthTag: string;
+  monthLabel: string;
+  columns: string[];
+  rows: (string | number)[][];
+  numericCols: number[];
+  summary: string[];
+};
+
 type Pair = { orders: number; revenue: number };
 
 type HistoryRow = {
@@ -66,6 +75,31 @@ export default function MetricasClient() {
   const [products, setProducts] = useState<ProductMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function exportPdf(month: string) {
+    setPdfLoading(true);
+    setError(null);
+    try {
+      const x = await apiFetch<MetricsExport>(
+        `/api/admin/metrics/export?month=${month}`
+      );
+      const { downloadPdfReport } = await import("@/lib/pdf-report");
+      downloadPdfReport({
+        filename: `blend-metricas-${x.monthTag}.pdf`,
+        title: "Blend · Métricas del mes",
+        subtitle: `${x.monthLabel} · pedidos aceptados = facturables`,
+        summary: x.summary,
+        columns: x.columns,
+        rows: x.rows,
+        numericCols: x.numericCols,
+      });
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   const load = useCallback((month: string | null) => {
     setLoading(true);
@@ -97,13 +131,14 @@ export default function MetricasClient() {
         </h2>
         {data && (
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={`/api/admin/metrics/export?month=${data.month}`}
-              download
-              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-600 transition hover:border-brand-300 hover:text-brand-700"
+            <button
+              type="button"
+              onClick={() => exportPdf(data.month)}
+              disabled={pdfLoading}
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-600 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Exportar CSV
-            </a>
+              {pdfLoading ? "Generando…" : "Exportar PDF"}
+            </button>
             <div className="flex items-center gap-1">
               <NavBtn
                 label="‹"
