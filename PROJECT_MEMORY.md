@@ -1226,6 +1226,59 @@ ajustables si no matchean exacto.
   aproximados matchean su muestra (si no, es un ajuste de 2 líneas en `tailwind.config.ts`), y
   commitear + pushear.
 
+### Fase 18c — logo/isotipo "B": tema cerrado, lo hace el usuario (2026-09-07)
+
+El usuario insistió mucho (5-6 vueltas) con una "B" que es el logo de PepsiCo reversionado
+(globo rojo/azul partido por el swoosh blanco), incluso pidiendo "invertí los colores para que
+no parezca Pepsi" y mandando un brand board entero armado alrededor de esa forma. Rechazado en
+cada caso — es marca registrada ajena y cambiar colores/detalles no lo resuelve. Se le
+propusieron ~7 isotipos originales en dos canvas de Claude Design (última URL
+https://claude.ai/code/artifact/2b5176dd-4e45-4b71-a56d-d05c4e3ed048, conceptos Encastre / Flujo
+/ Mitades), ninguno le gustó. **Decisión final: el usuario se encarga de crear la marca él mismo
+y va a pasar el material visual (SVG/PNG del símbolo, tipografía, colores) para que se aplique.**
+Del brand board que mostró se puede reusar sin problema: tipografía **Plus Jakarta Sans**,
+colores `#0B2D5B` (azul marino) / `#B91C1C` (rojo torino), wordmark "blend" en minúscula — pero
+solo cuando el usuario confirme que quiere avanzar con eso. Por ahora el panel queda con el
+wordmark "Blend" en `AdminHeader` y la paleta de la Fase 18b. **No generar ni recrear la "B"
+tipo Pepsi bajo ninguna forma.**
+
+### Fase 19 — exportar pedidos y métricas a CSV (2026-09-07, commit `23205a8`)
+
+El usuario lo eligió (entre descuento por medio de pago / Modo / envío por zonas / export CSV)
+porque el servicio se cobra por pedidos mensuales y necesita el dato para contabilidad y para
+auditar el número de cobro. **Sin cambios de schema.**
+
+- **`src/lib/csv.ts`** (nuevo): `toCsv(headers, rows)` — arma el CSV, escapa comillas/comas/
+  saltos, antepone **BOM UTF-8** (`String.fromCharCode(0xFEFF)`) para que Excel abra bien los
+  acentos/ñ. `downloadCsv(filename, csv)` — descarga vía Blob + `<a download>`, no-op en SSR.
+- **`GET /api/admin/metrics/export?month=YYYY-MM`** (nuevo, protegido por el matcher
+  `/api/admin/*`): baja **TODOS los pedidos del mes** (no solo los facturables) con una columna
+  `Facturable` (Sí/No) para poder auditar el número por el que se cobra. Mismo `BILLABLE` que
+  `metrics/history` (CONFIRMED/IN_PROGRESS/READY/DELIVERED). Horario de Argentina (helpers
+  `arMidnight`/`arParts`/`arDateTime` inline, mismo patrón que las otras rutas de métricas).
+  Columnas: Nº, Fecha, Hora, Estado, Facturable, Canal, Cliente, Teléfono, Email, Dirección,
+  Medio de pago, Estado de pago, Subtotal, Envío, Total. Montos como enteros pelados (ARS sin
+  centavos). `Content-Disposition: attachment; filename="blend-metricas-YYYY-MM.csv"`. Mes
+  inválido → 400.
+- **`/admin/metricas`**: botón `<a download>` "Exportar CSV" junto al selector de mes (baja el
+  mes que se está viendo).
+- **`/admin/pedidos`**: botón "Exportar CSV (N)" en la fila de pestañas (`ml-auto`). Export
+  **100% client-side** desde el array `filtered` que ya está en memoria — respeta pestaña
+  (Finalizados/Cancelados), filtro de canal y buscador. No hace falta endpoint nuevo porque la
+  página ya trae todos los DELIVERED+CANCELLED. Columnas: Nº, Fecha, Hora, Estado, Canal,
+  Cliente, Teléfono, Email, Dirección, Ítems (con adicionales, `2× X (op1, op2); 1× Y`), Nota,
+  Motivo de cancelación, Medio de pago, Estado de pago, Subtotal, Envío, Total. Fechas con
+  `toLocaleDateString/TimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })`.
+  Nombre: `blend-pedidos-<finalizados|cancelados>-YYYY-MM-DD.csv`.
+- **Verificado**: `npx tsc --noEmit` y `npx next build` limpios (`/api/admin/metrics/export` =
+  ƒ dynamic). Probado contra Neon con dev server + curl con sesión: `GET .../export` → 200
+  `text/csv; charset=utf-8` con el BOM y filas reales; `?month=2026-13` → 400; sin cookie →
+  401; `Content-Disposition` correcto. Capturas de las dos pantallas con el botón (el gráfico
+  "Ventas por día" sigue con la línea naranja `#f97316` vieja — no se tocó, queda para el pase
+  de estética).
+- **Pusheado** (commit `23205a8`, `origin/main` al día, `git push` corrido por Claude sin
+  bloqueo del clasificador). Auto-deploy de Vercel debería tomarlo.
+
 ### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
 
 El usuario pidió sacar del tablero de `/admin` la fila de chips "Local abierto · Delivery ·
