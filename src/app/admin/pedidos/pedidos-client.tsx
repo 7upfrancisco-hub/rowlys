@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { toCsv, downloadCsv } from "@/lib/csv";
 import {
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
@@ -10,6 +11,14 @@ import {
   type OrderDTO,
   type OrderType,
 } from "@/types";
+
+const AR_TZ = "America/Argentina/Buenos_Aires";
+
+function payStatusLabel(status: string): string {
+  if (status === "CONFIRMED") return "Pagado";
+  if (status === "FAILED") return "Fallido";
+  return "Pendiente";
+}
 
 // Este panel es solo historial: pedidos ya entregados o cancelados. La gestión
 // de los pedidos en curso vive en /comanda.
@@ -72,6 +81,67 @@ export default function PedidosClient() {
     });
   }, [orders, tab, orderTypeFilter, search]);
 
+  // Exporta a CSV la lista que se está viendo (respeta pestaña, canal y buscador).
+  function exportCsv() {
+    const headers = [
+      "Nº",
+      "Fecha",
+      "Hora",
+      "Estado",
+      "Canal",
+      "Cliente",
+      "Teléfono",
+      "Email",
+      "Dirección",
+      "Ítems",
+      "Nota",
+      "Motivo de cancelación",
+      "Medio de pago",
+      "Estado de pago",
+      "Subtotal",
+      "Envío",
+      "Total",
+    ];
+    const rows = filtered.map((o) => {
+      const dt = new Date(o.createdAt);
+      const items = o.items
+        .map((it) => {
+          const opts = it.options.length
+            ? ` (${it.options.map((op) => op.name).join(", ")})`
+            : "";
+          return `${it.quantity}× ${it.productName}${opts}`;
+        })
+        .join("; ");
+      return [
+        o.number,
+        dt.toLocaleDateString("es-AR", { timeZone: AR_TZ }),
+        dt.toLocaleTimeString("es-AR", {
+          timeZone: AR_TZ,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }),
+        ORDER_STATUS_LABELS[o.status],
+        ORDER_TYPE_LABELS[o.orderType],
+        `${o.customerFirstName} ${o.customerLastName}`.trim(),
+        o.customerPhone,
+        o.customerEmail ?? "",
+        o.deliveryAddress ?? "",
+        items,
+        o.notes ?? "",
+        o.cancelReason ?? "",
+        o.payment ? PAYMENT_PROVIDER_LABELS[o.payment.provider] : "",
+        o.payment ? payStatusLabel(o.payment.status) : "",
+        Math.round(o.total - o.deliveryFee),
+        Math.round(o.deliveryFee),
+        Math.round(o.total),
+      ];
+    });
+    const tag = tab === "DELIVERED" ? "finalizados" : "cancelados";
+    const today = new Date().toISOString().slice(0, 10);
+    downloadCsv(`blend-pedidos-${tag}-${today}.csv`, toCsv(headers, rows));
+  }
+
   return (
     <div>
       <h2 className="mb-1 text-2xl font-bold text-navy-900">
@@ -82,13 +152,20 @@ export default function PedidosClient() {
         desde la comanda.
       </p>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <TabBtn active={tab === "DELIVERED"} onClick={() => setTab("DELIVERED")}>
           Finalizados ({counts.delivered})
         </TabBtn>
         <TabBtn active={tab === "CANCELLED"} onClick={() => setTab("CANCELLED")}>
           Cancelados ({counts.cancelled})
         </TabBtn>
+        <button
+          onClick={exportCsv}
+          disabled={filtered.length === 0}
+          className="ml-auto rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Exportar CSV ({filtered.length})
+        </button>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-3">

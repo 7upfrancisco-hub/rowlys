@@ -96,16 +96,28 @@ export default function MetricasClient() {
           Métricas e historial
         </h2>
         {data && (
-          <div className="flex items-center gap-1">
-            <NavBtn label="‹" onClick={() => load(shiftMonth(data.month, -1))} />
-            <span className="min-w-[10rem] text-center font-semibold capitalize text-neutral-800">
-              {data.monthLabel}
-            </span>
-            <NavBtn
-              label="›"
-              disabled={atCurrent}
-              onClick={() => load(shiftMonth(data.month, 1))}
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/api/admin/metrics/export?month=${data.month}`}
+              download
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-600 transition hover:border-brand-300 hover:text-brand-700"
+            >
+              Exportar CSV
+            </a>
+            <div className="flex items-center gap-1">
+              <NavBtn
+                label="‹"
+                onClick={() => load(shiftMonth(data.month, -1))}
+              />
+              <span className="min-w-[10rem] text-center font-semibold capitalize text-neutral-800">
+                {data.monthLabel}
+              </span>
+              <NavBtn
+                label="›"
+                disabled={atCurrent}
+                onClick={() => load(shiftMonth(data.month, 1))}
+              />
+            </div>
           </div>
         )}
       </div>
