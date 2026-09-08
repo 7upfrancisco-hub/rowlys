@@ -44,6 +44,9 @@ export async function GET() {
   for (const o of orders) {
     byStatus[o.status]++;
     if (o.status === "CANCELLED") continue;
+    // Un pedido con pago de Mercado Pago sin acreditar todavía no cuenta: no
+    // llegó a la cocina (mismo criterio que el listado de /comanda).
+    if (o.payment?.provider === "MP" && o.payment.status !== "CONFIRMED") continue;
     orderCount++;
     revenue += o.total;
     const manualPayment =

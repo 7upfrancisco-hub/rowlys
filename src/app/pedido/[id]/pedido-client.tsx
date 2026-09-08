@@ -95,10 +95,16 @@ export default function PedidoClient({ id }: { id: string }) {
   }
 
   const currentIndex = ORDER_STATUS_FLOW.indexOf(order.status);
+  // Pago con Mercado Pago sin acreditar: el local todavía NO recibió el pedido.
+  const awaitingPayment =
+    order.payment?.provider === "MP" &&
+    order.payment.status !== "CONFIRMED" &&
+    order.status !== "CANCELLED";
   const showEta =
-    order.status === "PENDING" ||
-    order.status === "CONFIRMED" ||
-    order.status === "IN_PROGRESS";
+    !awaitingPayment &&
+    (order.status === "PENDING" ||
+      order.status === "CONFIRMED" ||
+      order.status === "IN_PROGRESS");
   const etaMinutes =
     (order.orderType === "DELIVERY" ? prepTimes.delivery : prepTimes.pickup) +
     order.extraDelayMinutes;
@@ -141,6 +147,14 @@ export default function PedidoClient({ id }: { id: string }) {
         {order.status === "CANCELLED" ? (
           <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-500">
             Este pedido fue cancelado.
+          </div>
+        ) : awaitingPayment ? (
+          <div className="mb-6 rounded-2xl border border-line bg-surface p-4 text-sm text-fg">
+            <p className="font-semibold text-accent">Esperando el pago</p>
+            <p className="mt-1 text-muted">
+              El local recibe tu pedido apenas se acredita el pago en Mercado
+              Pago. Si ya pagaste, puede tardar unos minutos en confirmarse.
+            </p>
           </div>
         ) : (
           <div className="mb-6 flex items-center justify-between">
@@ -189,24 +203,30 @@ export default function PedidoClient({ id }: { id: string }) {
             <h2 className="mb-1 font-semibold text-fg">Pago</h2>
             <p className="text-sm text-muted">
               {PAYMENT_PROVIDER_LABELS[order.payment.provider]} ·{" "}
-              {order.payment.status === "CONFIRMED" ? "Pagado" : "Pendiente"}
+              {order.payment.status === "CONFIRMED"
+                ? "Pagado"
+                : order.payment.status === "FAILED"
+                  ? "Rechazado"
+                  : "Pendiente"}
             </p>
-            {order.payment.provider === "MP" &&
-              order.payment.status !== "CONFIRMED" &&
-              order.status !== "CANCELLED" && (
-                <>
-                  <button
-                    onClick={payWithMp}
-                    disabled={paying}
-                    className="mt-3 rounded-lg bg-store-600 px-4 py-2 text-sm font-semibold text-white hover:bg-store-500 disabled:opacity-60"
-                  >
-                    {paying ? "Redirigiendo..." : "Pagar con Mercado Pago"}
-                  </button>
-                  {payError && (
-                    <p className="mt-2 text-sm text-red-500">{payError}</p>
-                  )}
-                </>
-              )}
+            {awaitingPayment && (
+              <>
+                <button
+                  onClick={payWithMp}
+                  disabled={paying}
+                  className="mt-3 rounded-lg bg-store-600 px-4 py-2 text-sm font-semibold text-white hover:bg-store-500 disabled:opacity-60"
+                >
+                  {paying
+                    ? "Redirigiendo..."
+                    : order.payment.status === "FAILED"
+                      ? "Reintentar el pago"
+                      : "Pagar con Mercado Pago"}
+                </button>
+                {payError && (
+                  <p className="mt-2 text-sm text-red-500">{payError}</p>
+                )}
+              </>
+            )}
           </section>
         )}
       </main>

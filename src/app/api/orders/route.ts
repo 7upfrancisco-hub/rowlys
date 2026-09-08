@@ -35,6 +35,10 @@ export async function GET(request: Request) {
   const orders = await prisma.order.findMany({
     where: {
       status: statuses ? { in: statuses } : { notIn: ["DELIVERED", "CANCELLED"] },
+      // Un pedido que se paga con Mercado Pago no llega a la comanda hasta que
+      // el webhook confirma el pago. Si el cliente no termina de pagar, queda
+      // oculto para la cocina (sigue accesible en /pedido/[id] para reintentar).
+      NOT: { payment: { provider: "MP", status: { not: "CONFIRMED" } } },
     },
     include: {
       items: { include: { options: true } },

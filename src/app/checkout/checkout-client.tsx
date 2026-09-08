@@ -23,12 +23,14 @@ interface PublicSettings {
   prepTimePickupMinutes: number;
 }
 
-type PaymentMethod = "CASH" | "BANK_TRANSFER" | "MP";
+// Lo que elige el cliente. "TRANSFER" se resuelve al confirmar: si el local
+// tiene Mercado Pago activo, va por MP (redirección + confirmación automática por
+// webhook); si no, cae a transferencia bancaria manual (alias/CBU).
+type PaymentMethod = "CASH" | "TRANSFER";
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CASH: "Efectivo",
-  BANK_TRANSFER: "Transferencia",
-  MP: "Mercado Pago",
+  TRANSFER: "Transferencia",
 };
 
 // Código de país para el teléfono. Argentina por defecto; el resto cubre los
@@ -72,6 +74,9 @@ export default function CheckoutClient() {
   const deliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
   const total = itemsSubtotal + deliveryFee;
 
+  // "Transferencia" va por Mercado Pago solo si el local lo tiene activo.
+  const mpTransfer = paymentMethod === "TRANSFER" && !!settings?.mpEnabled;
+
   // Pedir queda bloqueado si el local está cerrado o el canal elegido pausado.
   const storeClosed = !!settings && !settings.storeOpen;
   const channelPaused =
@@ -104,6 +109,15 @@ export default function CheckoutClient() {
       return;
     }
 
+    // Transferencia con Mercado Pago activo => pago MP (redirección + webhook).
+    // Sin MP configurado => transferencia bancaria manual (alias/CBU).
+    const provider =
+      paymentMethod === "CASH"
+        ? "CASH"
+        : mpTransfer
+          ? "MP"
+          : "BANK_TRANSFER";
+
     setSubmitting(true);
     try {
       const order = await apiFetch<OrderDTO>("/api/orders", {
@@ -116,7 +130,7 @@ export default function CheckoutClient() {
           customerEmail: email.trim() || undefined,
           deliveryAddress: orderType === "DELIVERY" ? address.trim() : undefined,
           notes: notes.trim() || undefined,
-          paymentMethod,
+          paymentMethod: provider,
           changeFor:
             paymentMethod === "CASH" && changeFor.trim()
               ? Number(changeFor)
@@ -129,16 +143,21 @@ export default function CheckoutClient() {
           })),
         }),
       });
-      if (paymentMethod === "MP") {
-        // El pedido ya existe (pendiente). Pedimos el link de pago y mandamos
-        // al cliente a Mercado Pago; si abandona, puede reintentar desde
-        // /pedido/[id]. El webhook confirma el pago despues.
-        const { initPoint } = await apiFetch<{ initPoint: string }>(
-          "/api/payments/mercadopago",
-          { method: "POST", body: JSON.stringify({ orderId: order.id }) }
-        );
+      if (provider === "MP") {
+        // El pedido ya existe (pendiente y oculto para la cocina). Pedimos el
+        // link de pago y mandamos al cliente a Mercado Pago. Si la creación del
+        // link falla, lo llevamos al seguimiento para que reintente. El webhook
+        // confirma el pago y recién ahí el pedido llega a la comanda.
         clear();
-        window.location.href = initPoint;
+        try {
+          const { initPoint } = await apiFetch<{ initPoint: string }>(
+            "/api/payments/mercadopago",
+            { method: "POST", body: JSON.stringify({ orderId: order.id }) }
+          );
+          window.location.href = initPoint;
+        } catch {
+          router.push(`/pedido/${order.id}`);
+        }
         return;
       }
 
@@ -273,20 +292,11 @@ export default function CheckoutClient() {
               </button>
               <button
                 type="button"
-                onClick={() => setPaymentMethod("BANK_TRANSFER")}
-                className={pillClass(paymentMethod === "BANK_TRANSFER")}
+                onClick={() => setPaymentMethod("TRANSFER")}
+                className={pillClass(paymentMethod === "TRANSFER")}
               >
                 Transferencia
               </button>
-              {settings?.mpEnabled && (
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("MP")}
-                  className={pillClass(paymentMethod === "MP")}
-                >
-                  Mercado Pago
-                </button>
-              )}
             </div>
             {paymentMethod === "CASH" && (
               <input
@@ -297,20 +307,20 @@ export default function CheckoutClient() {
                 className={inputClass}
               />
             )}
-            {paymentMethod === "BANK_TRANSFER" && (
+            {paymentMethod === "TRANSFER" && mpTransfer && (
+              <p className="rounded-lg bg-surface-2 p-3 text-sm text-fg">
+                Al confirmar te llevamos a Mercado Pago para pagar por
+                transferencia, billetera o tarjeta. El pedido entra a la cocina
+                recién cuando se acredita el pago.
+              </p>
+            )}
+            {paymentMethod === "TRANSFER" && !mpTransfer && (
               <div className="rounded-lg bg-surface-2 p-3 text-sm text-fg">
                 Transferí a este alias/CBU y aclaralo con tu nombre:
                 <p className="mt-1 font-mono font-semibold text-accent">
                   {settings?.bankAlias ?? "Consultá el alias al confirmar"}
                 </p>
               </div>
-            )}
-            {paymentMethod === "MP" && (
-              <p className="rounded-lg bg-surface-2 p-3 text-sm text-fg">
-                Al confirmar te llevamos a Mercado Pago para pagar con tu
-                billetera, tarjeta o transferencia. El pedido queda registrado
-                apenas confirmás.
-              </p>
             )}
           </section>
 
@@ -367,7 +377,7 @@ export default function CheckoutClient() {
             {orderBlocked
               ? "Pedidos pausados"
               : submitting
-                ? paymentMethod === "MP"
+                ? mpTransfer
                   ? "Redirigiendo a Mercado Pago..."
                   : "Enviando..."
                 : `Pagar ${formatCurrency(total)} (${PAYMENT_METHOD_LABELS[paymentMethod]})`}
