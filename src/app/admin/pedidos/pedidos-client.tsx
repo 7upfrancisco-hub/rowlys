@@ -186,6 +186,13 @@ export default function PedidosClient() {
     kind: "details" | "contact";
     order: OrderDTO;
   } | null>(null);
+  // Pedidos MP sin pagar (fantasma): { pending, stale, hours }.
+  const [unpaid, setUnpaid] = useState<{
+    pending: number;
+    stale: number;
+    hours: number;
+  } | null>(null);
+  const [cleaning, setCleaning] = useState(false);
 
   function load() {
     apiFetch<OrderDTO[]>("/api/orders?status=DELIVERED,CANCELLED")
@@ -193,6 +200,32 @@ export default function PedidosClient() {
       .catch((err: ApiError) => setError(err.message));
   }
   useEffect(load, []);
+
+  function loadUnpaid() {
+    apiFetch<{ pending: number; stale: number; hours: number }>(
+      "/api/admin/orders/cleanup-unpaid"
+    )
+      .then(setUnpaid)
+      .catch(() => setUnpaid(null));
+  }
+  useEffect(loadUnpaid, []);
+
+  async function cleanupUnpaid() {
+    setCleaning(true);
+    setError(null);
+    try {
+      await apiFetch<{ cancelled: number }>(
+        "/api/admin/orders/cleanup-unpaid",
+        { method: "POST" }
+      );
+      load();
+      loadUnpaid();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setCleaning(false);
+    }
+  }
 
   useEffect(() => {
     apiFetch<{
@@ -339,6 +372,33 @@ export default function PedidosClient() {
         Pedidos ya entregados y cancelados. Los pedidos en curso se gestionan
         desde la comanda.
       </p>
+
+      {unpaid && unpaid.pending > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>
+            {unpaid.pending}{" "}
+            {unpaid.pending === 1
+              ? "pedido con pago sin confirmar"
+              : "pedidos con pago sin confirmar"}
+            {unpaid.stale > 0 && (
+              <>
+                {" "}
+                · <strong>{unpaid.stale}</strong> de más de {unpaid.hours} h
+              </>
+            )}
+            . Se cancelan solos pasadas las {unpaid.hours} h.
+          </span>
+          {unpaid.stale > 0 && (
+            <button
+              onClick={cleanupUnpaid}
+              disabled={cleaning}
+              className="ml-auto rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              {cleaning ? "Cancelando..." : `Cancelar los ${unpaid.stale} vencidos`}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TabBtn active={tab === "DELIVERED"} onClick={() => setTab("DELIVERED")}>

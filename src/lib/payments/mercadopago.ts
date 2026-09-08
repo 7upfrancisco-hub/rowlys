@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { baseUrl } from "@/lib/base-url";
+import { PHANTOM_ORDER_HOURS } from "@/lib/phantom-orders";
 import type { PaymentStatus } from "@/types";
 
 // Capa del proveedor Mercado Pago (Checkout Pro: billetera + tarjetas +
@@ -35,6 +36,13 @@ export interface PreferenceInput {
 export interface PreferenceResult {
   id: string;
   initPoint: string;
+}
+
+// Fecha de expiración de la preferencia en el formato que espera MP
+// (ISO 8601 con offset explícito, p. ej. 2025-01-01T12:00:00.000+00:00).
+function expirationDateTo(): string {
+  const ms = Date.now() + PHANTOM_ORDER_HOURS * 60 * 60 * 1000;
+  return new Date(ms).toISOString().replace("Z", "+00:00");
 }
 
 export async function createPreference(
@@ -73,6 +81,10 @@ export async function createPreference(
       notification_url: `${baseUrl()}/api/webhooks/mercadopago`,
       back_urls: { success: trackUrl, failure: trackUrl, pending: trackUrl },
       auto_return: "approved",
+      // Pasada esta ventana el cliente ya no puede pagar; el pedido sin pagar
+      // se auto-cancela (ver src/lib/phantom-orders.ts).
+      expires: true,
+      expiration_date_to: expirationDateTo(),
       payer: input.payer
         ? {
             name: input.payer.name,

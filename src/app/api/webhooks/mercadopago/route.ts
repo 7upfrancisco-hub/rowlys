@@ -5,6 +5,7 @@ import {
   mapMpStatus,
   verifyWebhookSignature,
 } from "@/lib/payments/mercadopago";
+import { PHANTOM_CANCEL_REASON } from "@/lib/phantom-orders";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -97,5 +98,26 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true, status: nextStatus });
+  // Blindaje: si el pago se confirma pero el pedido ya lo habíamos
+  // auto-cancelado por "fantasma" (pago tardío, sobre el límite de las horas),
+  // lo revivimos a PENDING para que la cocina lo vea.
+  let revived = false;
+  if (nextStatus === "CONFIRMED") {
+    const order = await prisma.order.findUnique({
+      where: { id: info.externalReference },
+      select: { status: true, cancelReason: true },
+    });
+    if (
+      order?.status === "CANCELLED" &&
+      order.cancelReason === PHANTOM_CANCEL_REASON
+    ) {
+      await prisma.order.update({
+        where: { id: info.externalReference },
+        data: { status: "PENDING", cancelReason: null },
+      });
+      revived = true;
+    }
+  }
+
+  return NextResponse.json({ ok: true, status: nextStatus, revived });
 }

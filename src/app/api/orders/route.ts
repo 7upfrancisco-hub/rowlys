@@ -2,8 +2,26 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createOrder, createOrderSchema } from "@/lib/orders";
+import { sweepPhantomOrders } from "@/lib/phantom-orders";
 
 export const dynamic = "force-dynamic";
+
+// Barrido oportunista de pedidos MP abandonados. La comanda consulta este
+// endpoint cada 5s, así que con este throttle el barrido corre ~cada 10 min sin
+// necesidad de un cron. No bloquea la respuesta.
+const SWEEP_EVERY_MS = 10 * 60 * 1000;
+let lastSweepAt = 0;
+
+function maybeSweepPhantomOrders() {
+  const now = Date.now();
+  if (now - lastSweepAt < SWEEP_EVERY_MS) return;
+  lastSweepAt = now;
+  sweepPhantomOrders()
+    .then((n) => {
+      if (n > 0) console.log(`Pedidos fantasma cancelados: ${n}`);
+    })
+    .catch((err) => console.error("Barrido de pedidos fantasma falló:", err));
+}
 
 const orderStatusSchema = z.enum([
   "PENDING",
@@ -15,6 +33,8 @@ const orderStatusSchema = z.enum([
 ]);
 
 export async function GET(request: Request) {
+  maybeSweepPhantomOrders();
+
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status");
 

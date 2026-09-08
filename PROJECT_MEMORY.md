@@ -1531,8 +1531,38 @@ cuentan **solo facturables** (CONFIRMED/IN_PROGRESS/READY/DELIVERED, mismo crite
 - **Falta**: prueba visual en `/admin/clientes` y un pedido nuevo de punta a punta para ver el
   link automático del cliente.
 
+## Fase 23: limpieza de pedidos fantasma (en código, 2026-09-08)
+
+Cierra el "gap conocido" de Fase 20: un cliente elige pagar con MP, nunca paga, y el
+pedido queda `PENDING` oculto para siempre (invisible en `/comanda` por el filtro
+`NOT: { payment: { provider: "MP", status: { not: "CONFIRMED" } } }`). **Sin cambios de
+schema** — usa `status`/`cancelReason` que ya existen.
+
+- **`src/lib/phantom-orders.ts`** (nuevo, server-only): `PHANTOM_ORDER_HOURS = 3`,
+  `PHANTOM_CANCEL_REASON`. `sweepPhantomOrders()` → `order.updateMany` que pasa a
+  `CANCELLED` los pedidos `PENDING` + pago MP no `CONFIRMED` + `createdAt` de más de 3 h
+  (idempotente, devuelve `count`). `countUnpaidOrders()` → `{ pending, stale }` para la UI.
+- **`GET /api/orders`**: barrido oportunista con throttle de 10 min (`lastSweepAt` a nivel
+  de módulo). La comanda consulta este endpoint cada 5 s, así que el barrido corre solo
+  ~cada 10 min sin cron ni `vercel.json`. No bloquea la respuesta (fire-and-forget).
+- **`GET/POST /api/admin/orders/cleanup-unpaid`** (nuevo, protegido por middleware):
+  GET = contador `{ pending, stale, hours }`; POST = corre el barrido ahora, `{ cancelled }`.
+- **`/admin/pedidos`**: banner ámbar arriba de las pestañas cuando hay pagos sin confirmar
+  ("N pedidos con pago sin confirmar · M de más de 3 h · se cancelan solos…") con botón
+  "Cancelar los M vencidos". Los cancelados quedan en la pestaña Cancelados con el motivo.
+- **`src/lib/payments/mercadopago.ts`**: la preferencia ahora manda `expires: true` +
+  `expiration_date_to` = ahora + `PHANTOM_ORDER_HOURS` (ISO con offset `+00:00`, formato que
+  pide MP). Pasada esa ventana el cliente ya no puede pagar → cancelar es seguro.
+- **`/api/webhooks/mercadopago`**: blindaje — si llega un pago `CONFIRMED` para un pedido
+  que ya auto-cancelamos (status `CANCELLED` + `cancelReason === PHANTOM_CANCEL_REASON`), lo
+  revive a `PENDING` para que la cocina lo vea. Devuelve `revived: true`.
+- `tsc` + `next build` limpios. Sin schema → se puede pushear directo (deploy normal).
+- **Nota**: `BANK_TRANSFER` manual NO entra en el barrido — esos pedidos SÍ se ven en la
+  comanda y el local los rechaza a mano. Solo aplica a MP.
+
 ## Historial de decisiones (log)
 
+- **2026-09-08** — El usuario eligió **limpieza de pedidos fantasma** (pedidos MP que nunca se pagan y quedan PENDING ocultos). Se implementó la **Fase 23** sin schema: `src/lib/phantom-orders.ts` (`sweepPhantomOrders` cancela los MP sin pagar de +3 h), barrido oportunista con throttle 10 min dentro de `GET /api/orders` (sin cron), `GET/POST /api/admin/orders/cleanup-unpaid` + banner con botón en `/admin/pedidos`, expiración de la preferencia de MP a 3 h (`expires`/`expiration_date_to`), y blindaje en el webhook (revive a PENDING si entra un pago confirmado a un pedido ya auto-cancelado). `tsc`/`build` limpios. Se puede pushear directo (sin `db push`).
 - **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). **Deployado** (`be57715`+`94beb9a`): el usuario corrió `npx.cmd prisma db push` + `npx.cmd tsx prisma/backfill-customers.ts` → 2 clientes desde 26 pedidos. (`npx` pelado falla por ExecutionPolicy de PowerShell, usar `npx.cmd`.)
 - **2026-09-08** — El usuario quiere conectar comanderas a Blend. Mostró que RestoSimple usa QZ Tray y pidió 2 tickets por pedido (comanda para el local + ticket para el cliente con "¡Gracias por su compra!"), ambos con el nombre del local grande arriba y "Blend" como pie. Setup: PC Windows siempre encendida, comandera aún sin comprar, "camino más rápido". Se implementó la **Fase 21** con QZ Tray (sin agente propio ni cola en DB): `src/lib/escpos.ts` (builder ESC/POS + las 3 plantillas), `src/lib/qz-print.ts` (puente con `qz-tray` npm, impresora en localStorage por-PC), `POST/GET /api/admin/print/sign` (firma con `QZ_CERT`/`QZ_PRIVATE_KEY`), UI en `/comanda` (ícono 🖨️ + modal + auto-impresión al aceptar + "Imprimir tickets" en el ⋯), `/admin/pedidos` reimprime por QZ con fallback al popup, `PRINTING_SETUP.md`. Dep nueva `qz-tray`. `tsc`/`build` limpios. Antes de esta fase se deployaron dos ajustes chicos del historial: orden por Nº de pedido descendente (más reciente arriba, commits `cd09872`+`6a4932c`) y menú ⋯ por pedido en `/admin/pedidos` con Ver detalles / Contactar cliente / Imprimir comanda (commit `3731d11`). **Fase 21 sin deployar**: falta commitear+pushear, cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray en la PC y elegir impresora.
 
