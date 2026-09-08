@@ -7,8 +7,33 @@
 // pedidos por teléfono normalizado, crea/actualiza el Customer y linkea cada
 // Order a su cliente. Los pedidos sin teléfono normalizable quedan sin linkear.
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { normalizeArPhone } from "../src/lib/phone";
+
+// Carga .env / .env.local a mano (tsx no lo hace solo, y no hay dotenv en el
+// proyecto). Solo setea claves que no estén ya en el entorno.
+for (const file of [".env", ".env.local"]) {
+  try {
+    const text = readFileSync(resolve(process.cwd(), file), "utf8");
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (!m) continue;
+      const key = m[1];
+      let val = m[2].trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = val;
+    }
+  } catch {
+    /* el archivo puede no existir */
+  }
+}
 
 const prisma = new PrismaClient();
 
