@@ -1523,14 +1523,17 @@ cuentan **solo facturables** (CONFIRMED/IN_PROGRESS/READY/DELIVERED, mismo crite
   `createdAt` = primer pedido) y setea `Order.customerId`. Correr **una vez** después del
   `db push`: `npx tsx prisma/backfill-customers.ts`.
 - `tsc` + `next build` limpios (`/admin/clientes` 3.3 kB, rutas `/api/admin/customers[/[id]]`).
-- **Falta**: `prisma db push` (lo corre el usuario — agrega la tabla `Customer` y la columna
-  `Order.customerId` a Neon), después `npx tsx prisma/backfill-customers.ts`, después
-  commit + push. Sin probar en navegador ni contra Neon (no se pudo pushear el schema en la
-  sesión).
+- **Deployado** (2026-09-08, commits `be57715` + `94beb9a`). El usuario corrió `npx.cmd prisma
+  db push` (Neon en sync) y `npx.cmd tsx prisma/backfill-customers.ts` → **2 clientes** creados
+  desde 26 pedidos, 0 sin teléfono válido. Gotcha de la sesión: `npx` pelado falla por la
+  ExecutionPolicy de PowerShell (`npx.ps1` bloqueado) — hay que usar `npx.cmd`. El script de
+  backfill carga `.env` a mano porque `tsx` no lo hace y no hay `dotenv` en el proyecto.
+- **Falta**: prueba visual en `/admin/clientes` y un pedido nuevo de punta a punta para ver el
+  link automático del cliente.
 
 ## Historial de decisiones (log)
 
-- **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). `tsc`/`build` limpios. **Sin deployar**: falta `prisma db push` + `npx tsx prisma/backfill-customers.ts` (los corre el usuario) + commit + push.
+- **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). **Deployado** (`be57715`+`94beb9a`): el usuario corrió `npx.cmd prisma db push` + `npx.cmd tsx prisma/backfill-customers.ts` → 2 clientes desde 26 pedidos. (`npx` pelado falla por ExecutionPolicy de PowerShell, usar `npx.cmd`.)
 - **2026-09-08** — El usuario quiere conectar comanderas a Blend. Mostró que RestoSimple usa QZ Tray y pidió 2 tickets por pedido (comanda para el local + ticket para el cliente con "¡Gracias por su compra!"), ambos con el nombre del local grande arriba y "Blend" como pie. Setup: PC Windows siempre encendida, comandera aún sin comprar, "camino más rápido". Se implementó la **Fase 21** con QZ Tray (sin agente propio ni cola en DB): `src/lib/escpos.ts` (builder ESC/POS + las 3 plantillas), `src/lib/qz-print.ts` (puente con `qz-tray` npm, impresora en localStorage por-PC), `POST/GET /api/admin/print/sign` (firma con `QZ_CERT`/`QZ_PRIVATE_KEY`), UI en `/comanda` (ícono 🖨️ + modal + auto-impresión al aceptar + "Imprimir tickets" en el ⋯), `/admin/pedidos` reimprime por QZ con fallback al popup, `PRINTING_SETUP.md`. Dep nueva `qz-tray`. `tsc`/`build` limpios. Antes de esta fase se deployaron dos ajustes chicos del historial: orden por Nº de pedido descendente (más reciente arriba, commits `cd09872`+`6a4932c`) y menú ⋯ por pedido en `/admin/pedidos` con Ver detalles / Contactar cliente / Imprimir comanda (commit `3731d11`). **Fase 21 sin deployar**: falta commitear+pushear, cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray en la PC y elegir impresora.
 
 - **2026-08-26** — Usuario define el proyecto: copiar funcionalidad de app.restosimple.com (carta + comandas) para su propio local, con intención de venderlo después si sale bien.
