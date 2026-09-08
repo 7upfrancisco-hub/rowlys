@@ -1348,10 +1348,30 @@ Pago" aparte). Toda la integración MP (Fase 4) ya existía; esto solo la cablea
   Prisma: MP pending/failed → oculto; MP confirmed / CASH / BANK_TRANSFER pending → visible; al
   pasar el pago de PENDING a CONFIRMED el pedido pasa a visible. 5 pedidos de prueba borrados.
   No se pudo sacar captura del checkout (Chrome headless no arrancó en esta sesión).
-- **Pendiente para que funcione de verdad**: el usuario tiene que **crear la cuenta de developer
-  de MP** y cargar `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` en Vercel, configurar la
-  `notification_url` (`<BASE>/api/webhooks/mercadopago`) y `NEXT_PUBLIC_BASE_URL`. Hasta
-  entonces, en prod `mpEnabled` es `false` y "Transferencia" muestra el alias manual.
+### Fase 20b — Mercado Pago ACTIVADO en producción (2026-09-08, commit `51afa63`)
+
+El usuario creó la app en el panel de developers de MP (app "Rowlys", id `1743825793784377`,
+cuenta de Valentin Adan) y cargó en Vercel Production, por CLI (`npx.cmd vercel env add ... production`):
+`MP_ACCESS_TOKEN` (producción, `APP_USR-...`), `MP_WEBHOOK_SECRET` (la "Clave secreta" del webhook
+en Modo productivo) y `NEXT_PUBLIC_BASE_URL=https://rowlys.vercel.app`. No había `MP_MOCK` en prod.
+Redeploy con commit vacío `51afa63`. En el panel de MP configuró el webhook en **Modo productivo**
+con la URL `https://rowlys.vercel.app/api/webhooks/mercadopago` y el evento **"Pagos (legacy)"**
+(el correcto: manda `type=payment`, que es lo que lee nuestro handler; el código igual manda
+`notification_url` por preferencia). La **Public Key NO se usa** (es para tarjeta embebida; nosotros
+redirigimos a Checkout Pro).
+- Notas de la sesión: PowerShell 5.1 no soporta `&&` (correr comandos de a uno). El
+  `WARNING! Failed to install the official Vercel Claude plugin` de `vercel env add` es ruido, no
+  afecta nada. El campo "Clave secreta" del webhook aparece deshabilitado hasta que la URL de
+  producción está completa (con la ruta `/api/webhooks/mercadopago`, no solo el dominio).
+- **Verificado en prod** (2026-09-08): `GET /api/settings` → `mpEnabled: true`; `GET
+  /api/webhooks/mercadopago` → `{"ok":true}` 200; se creó un pedido de prueba (`POST /api/orders`
+  con `paymentMethod: MP`) y `POST /api/payments/mercadopago` devolvió un `initPoint` REAL
+  (`https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=616290761-...`) → el token de
+  producción es válido y crea preferencias contra la API real. El pedido de prueba quedó **oculto
+  de la comanda** (gate verificado con Prisma contra Neon) y se borró después.
+- **Falta la prueba con plata real**: un pago real chico para confirmar que el webhook llega,
+  valida la firma y flipea el pedido a visible + pago en verde. Queda a criterio del usuario.
+
 - **Gap conocido**: si un cliente elige Transferencia/MP y nunca paga, queda un pedido fantasma
   `PENDING` oculto para siempre (existe en la DB, invisible salvo por el link de seguimiento).
   No molesta a la cocina; si acumula, sumar un cleanup (cancelar pedidos MP sin pagar de +X
