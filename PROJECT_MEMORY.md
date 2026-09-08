@@ -1433,7 +1433,61 @@ nuevas o que refinan lo ya sabido:
 - El grupo de adicionales "Arma tu promoción" usa **productos como opciones** ($0 c/u, min 1
   max 2) — o sea, el sistema de modificadores también sirve para armar combos.
 
+## Fase 21: impresión de comandas por QZ Tray (en código, 2026-09-08)
+
+El usuario quiere conectar comanderas térmicas a Blend. Mostró que RestoSimple usa **QZ Tray**
+y pidió **dos tickets por pedido**: uno para el local (comanda completa) y uno para el cliente
+(nombre del local arriba, detalle de lo comprado, "¡Gracias por su compra!"). Definió que en
+ambos aparezcan **los dos nombres**: el del local (grande arriba, de `Settings.storeName`) y la
+marca **Blend** (pie chico "gestionado con Blend"). Setup del local: PC Windows siempre
+encendida (ya corre `/comanda`), comandera **todavía no comprada**, "camino más rápido".
+
+Arquitectura elegida: **QZ Tray** (no agente propio ni cola en DB). La página `/comanda`, que
+ya está abierta en la PC, conecta al WebSocket local de QZ Tray (`wss://localhost:8181`) y le
+manda los tickets ESC/POS. Sin cambios de schema, sin endpoints de cola.
+
+- **`src/lib/escpos.ts`** (nuevo, puro, se usa en el cliente): builder ESC/POS mínimo (sin
+  deps) + `buildComandaTicket(order, store)`, `buildClienteTicket(order, store)`,
+  `buildTestTicket(store)`. `fold()` saca acentos/símbolos que las térmicas genéricas no
+  mapean (normaliza a ASCII, solo el texto, nunca los bytes de control). Ancho 48 col (80mm).
+  `BRAND = "Blend"`. `StoreInfo = { name, address?, phone? }`.
+- **`src/lib/qz-print.ts`** (nuevo, cliente): carga `qz-tray` (npm, `import()` diferido para no
+  romper SSR), configura la firma vía `/api/admin/print/sign`, `qzConnect/qzListPrinters/
+  qzPrintRaw/qzIsConnected`, y helpers `getStoredPrinter()/getStoredAuto()`. La impresora
+  elegida vive en `localStorage` (`blend-print-printer` / `blend-print-auto`) — es **por-PC**,
+  no una preferencia global del local.
+- **`POST/GET /api/admin/print/sign`** (nuevo, runtime nodejs, protegido por middleware
+  `/api/admin/*`): GET devuelve `QZ_CERT`; POST firma el payload de QZ con `QZ_PRIVATE_KEY`
+  (`RSA-SHA512`, base64). Sin esas env vars responde vacío y QZ cae al modo con confirmación
+  manual (cartel "Permitir/Bloquear" en cada impresión).
+- **`comanda-client.tsx`**: ícono 🖨️ en el header (punto verde/ámbar/gris = QZ conectado / hay
+  impresora pero sin conectar / sin configurar) que abre el modal "Impresión de comandas"
+  (estado de QZ + Reintentar, selector de impresora con botón Buscar, toggle "Imprimir
+  automáticamente al aceptar un pedido", botón "Imprimir prueba"). Auto-impresión: dentro de
+  `mutate`, en la **transición a CONFIRMED** (aceptar ✓) y solo si `autoPrint && printer`.
+  El menú `⋯` de cada tarjeta suma "🖨️ Imprimir tickets" (manual, cubre los pedidos cargados a
+  mano que ya nacen CONFIRMED y no pasan por `mutate`). `/api/settings` ahora también se lee
+  por `storeAddress`/`storePhone` (van al ticket del cliente).
+- **`admin/pedidos/pedidos-client.tsx`**: el `⋯ → Imprimir comanda` del historial pasa a
+  `printOrder(order, store)`: si hay comandera configurada en esa PC (`getStoredPrinter()`)
+  manda los 2 tickets por QZ; si no, cae al popup `window.print()` de antes (renombrado
+  `printComandaPopup`). Trae `storeAddress`/`storePhone` de `/api/settings`.
+- **`src/types/index.ts`**: `PAYMENT_STATUS_LABELS` (PENDING/CONFIRMED/FAILED → es/Pagado/...).
+- **`src/types/qz-tray.d.ts`**: `declare module "qz-tray"` (el paquete no trae tipos).
+- **`PRINTING_SETUP.md`** (nuevo): guía para el local — comandera 80mm ESC/POS, instalar QZ
+  Tray, generar el par cert/clave con OpenSSL (`QZ_CERT` + `QZ_PRIVATE_KEY` en Vercel, cert en
+  el override de QZ Tray), elegir la impresora en `/comanda`.
+- Dependencia nueva: `qz-tray@^2.2.6`. `tsc` + `next build` limpios (`/comanda` 11.9→14.9 kB,
+  nueva ruta `/api/admin/print/sign`). Los avisos de `npm audit` (jspdf/dompurify/next/postcss)
+  son previos, no los trae qz-tray.
+- **Sin probar en navegador / hardware** (no hay comandera todavía). **Sin deployar.** Falta:
+  commitear + pushear, generar y cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray
+  en la PC del local y elegir la impresora. La auto-impresión NO cubre pedidos nuevos que
+  entran ya CONFIRMED sin pasar por el botón ✓ (los de carga manual) — para esos, botón manual.
+
 ## Historial de decisiones (log)
+
+- **2026-09-08** — El usuario quiere conectar comanderas a Blend. Mostró que RestoSimple usa QZ Tray y pidió 2 tickets por pedido (comanda para el local + ticket para el cliente con "¡Gracias por su compra!"), ambos con el nombre del local grande arriba y "Blend" como pie. Setup: PC Windows siempre encendida, comandera aún sin comprar, "camino más rápido". Se implementó la **Fase 21** con QZ Tray (sin agente propio ni cola en DB): `src/lib/escpos.ts` (builder ESC/POS + las 3 plantillas), `src/lib/qz-print.ts` (puente con `qz-tray` npm, impresora en localStorage por-PC), `POST/GET /api/admin/print/sign` (firma con `QZ_CERT`/`QZ_PRIVATE_KEY`), UI en `/comanda` (ícono 🖨️ + modal + auto-impresión al aceptar + "Imprimir tickets" en el ⋯), `/admin/pedidos` reimprime por QZ con fallback al popup, `PRINTING_SETUP.md`. Dep nueva `qz-tray`. `tsc`/`build` limpios. Antes de esta fase se deployaron dos ajustes chicos del historial: orden por Nº de pedido descendente (más reciente arriba, commits `cd09872`+`6a4932c`) y menú ⋯ por pedido en `/admin/pedidos` con Ver detalles / Contactar cliente / Imprimir comanda (commit `3731d11`). **Fase 21 sin deployar**: falta commitear+pushear, cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray en la PC y elegir impresora.
 
 - **2026-08-26** — Usuario define el proyecto: copiar funcionalidad de app.restosimple.com (carta + comandas) para su propio local, con intención de venderlo después si sale bien.
 - **2026-08-26** — Se relevó la landing de app.restosimple.com (sin acceso al sistema real, solo la página pública): menú, comandas, roles mozo/cocina/admin, cobros.

@@ -6,6 +6,20 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { normalizeArPhone, whatsappLink } from "@/lib/phone";
 import { playDoorbell, unlockDoorbell } from "@/lib/doorbell";
 import { buildDriverMessage } from "@/lib/driver-message";
+import {
+  buildComandaTicket,
+  buildClienteTicket,
+  buildTestTicket,
+  type StoreInfo,
+} from "@/lib/escpos";
+import {
+  AUTO_KEY,
+  PRINTER_KEY,
+  qzConnect,
+  qzIsConnected,
+  qzListPrinters,
+  qzPrintRaw,
+} from "@/lib/qz-print";
 import AdminHeader from "@/components/AdminHeader";
 import NewOrderModal from "./new-order-modal";
 import {
@@ -195,6 +209,17 @@ export default function ComandaClient() {
   >(null);
   const [soundOn, setSoundOn] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
+  // Impresión por QZ Tray. La impresora es por-PC (localStorage).
+  const [storeContact, setStoreContact] = useState<{
+    address: string | null;
+    phone: string | null;
+  }>({ address: null, phone: null });
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printer, setPrinter] = useState<string | null>(null);
+  const [autoPrint, setAutoPrint] = useState(false);
+  const [qzOn, setQzOn] = useState(false);
+  const [printerList, setPrinterList] = useState<string[]>([]);
+  const [printBusy, setPrintBusy] = useState(false);
   // Pedido que el trabajador está por cancelar + el motivo que escribe.
   const [rejectTarget, setRejectTarget] = useState<OrderDTO | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -303,6 +328,8 @@ export default function ComandaClient() {
   useEffect(() => {
     apiFetch<{
       storeName?: string;
+      storeAddress?: string | null;
+      storePhone?: string | null;
       storeOpen: boolean;
       deliveryEnabled: boolean;
       pickupEnabled: boolean;
@@ -311,6 +338,10 @@ export default function ComandaClient() {
     }>("/api/settings")
       .then((s) => {
         if (s?.storeName) setStoreName(s.storeName);
+        setStoreContact({
+          address: s.storeAddress ?? null,
+          phone: s.storePhone ?? null,
+        });
         setStoreStatus({
           storeOpen: s.storeOpen,
           deliveryEnabled: s.deliveryEnabled,
@@ -323,6 +354,110 @@ export default function ComandaClient() {
       })
       .catch(() => {});
   }, []);
+
+  // Config de impresión guardada en esta PC + intento de conexión con QZ Tray.
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(PRINTER_KEY);
+      setAutoPrint(localStorage.getItem(AUTO_KEY) === "1");
+    } catch {
+      /* localStorage no disponible */
+    }
+    if (stored) {
+      setPrinter(stored);
+      qzConnect()
+        .then(() => setQzOn(qzIsConnected()))
+        .catch(() => setQzOn(false));
+    }
+  }, []);
+
+  const storeInfo: StoreInfo = {
+    name: storeName,
+    address: storeContact.address,
+    phone: storeContact.phone,
+  };
+
+  // Imprime los dos tickets (comanda + cliente) de un pedido.
+  async function printTickets(order: OrderDTO) {
+    if (!printer) throw new Error("Elegí una impresora en Impresión.");
+    await qzPrintRaw(printer, [
+      buildComandaTicket(order, storeInfo),
+      buildClienteTicket(order, storeInfo),
+    ]);
+  }
+
+  async function manualPrint(order: OrderDTO) {
+    try {
+      await printTickets(order);
+      showNotice({ kind: "ok", text: `Tickets del pedido #${order.number} enviados a la impresora.` });
+    } catch (err) {
+      showNotice({
+        kind: "warn",
+        text: `No se pudo imprimir: ${(err as Error)?.message ?? err}`,
+      });
+    }
+  }
+
+  async function retryQz() {
+    setPrintBusy(true);
+    try {
+      await qzConnect();
+      setQzOn(qzIsConnected());
+      if (qzIsConnected()) {
+        setPrinterList(await qzListPrinters());
+      }
+    } catch {
+      setQzOn(false);
+      showNotice({
+        kind: "warn",
+        text: "No se pudo conectar con QZ Tray. ¿Está instalado y abierto en esta PC?",
+      });
+    } finally {
+      setPrintBusy(false);
+    }
+  }
+
+  function choosePrinter(name: string) {
+    setPrinter(name || null);
+    try {
+      if (name) localStorage.setItem(PRINTER_KEY, name);
+      else localStorage.removeItem(PRINTER_KEY);
+    } catch {
+      /* ignora */
+    }
+  }
+
+  function toggleAutoPrint() {
+    setAutoPrint((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(AUTO_KEY, next ? "1" : "0");
+      } catch {
+        /* ignora */
+      }
+      return next;
+    });
+  }
+
+  async function printTest() {
+    if (!printer) {
+      showNotice({ kind: "warn", text: "Elegí una impresora primero." });
+      return;
+    }
+    setPrintBusy(true);
+    try {
+      await qzPrintRaw(printer, [buildTestTicket(storeInfo)]);
+      showNotice({ kind: "ok", text: "Ticket de prueba enviado." });
+    } catch (err) {
+      showNotice({
+        kind: "warn",
+        text: `No se pudo imprimir: ${(err as Error)?.message ?? err}`,
+      });
+    } finally {
+      setPrintBusy(false);
+    }
+  }
 
   async function savePrepTime(channel: "delivery" | "pickup") {
     if (!prepTimes) return;
@@ -399,6 +534,7 @@ export default function ComandaClient() {
   async function mutate(id: string, body: OrderPatch) {
     setBusyId(id);
     setError(null);
+    const prevStatus = orders?.find((o) => o.id === id)?.status;
     suppressPollUntil.current = Date.now() + SUPPRESS_POLL_MS;
     try {
       const updated = await apiFetch<
@@ -419,6 +555,21 @@ export default function ComandaClient() {
         return prev.map((o) => (o.id === id ? updated : o));
       });
       loadMetrics();
+
+      // Impresión automática: solo en la transición a Confirmado (aceptar).
+      if (
+        autoPrint &&
+        printer &&
+        body.status === "CONFIRMED" &&
+        prevStatus !== "CONFIRMED"
+      ) {
+        printTickets(updated).catch((e) =>
+          showNotice({
+            kind: "warn",
+            text: `No se pudo imprimir: ${(e as Error)?.message ?? e}`,
+          })
+        );
+      }
     } catch (err) {
       setError((err as ApiError).message);
       // Si falló, dejamos que el poll vuelva a mandar cuanto antes.
@@ -513,6 +664,38 @@ export default function ComandaClient() {
               }
             >
               <span aria-hidden="true">{soundOn ? "🔔" : "🔕"}</span>
+            </button>
+            <button
+              onClick={() => {
+                setPrintOpen(true);
+                retryQz();
+              }}
+              aria-label="Impresión"
+              title={
+                printer
+                  ? qzOn
+                    ? `Impresión: ${printer}${autoPrint ? " · automática" : ""}`
+                    : "Impresión configurada, QZ Tray sin conectar"
+                  : "Configurar impresión de comandas"
+              }
+              className={
+                "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-base leading-none " +
+                (printer && qzOn
+                  ? "border-brand-300 bg-brand-50"
+                  : "border-neutral-300 hover:bg-neutral-100")
+              }
+            >
+              <span aria-hidden="true">🖨️</span>
+              <span
+                className={
+                  "h-1.5 w-1.5 rounded-full " +
+                  (qzOn
+                    ? "bg-green-500"
+                    : printer
+                      ? "bg-amber-400"
+                      : "bg-neutral-300")
+                }
+              />
             </button>
           </>
         }
@@ -752,6 +935,8 @@ export default function ComandaClient() {
                           busy={busyId === order.id}
                           onMutate={mutate}
                           onReject={reject}
+                          onPrint={manualPrint}
+                          canPrint={!!printer}
                         />
                       ))
                     )}
@@ -781,6 +966,119 @@ export default function ComandaClient() {
             loadMetrics();
           }}
         />
+      )}
+
+      {printOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setPrintOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-neutral-900">
+              Impresión de comandas
+            </h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              Imprime dos tickets por pedido: la comanda para la cocina y el
+              ticket para el cliente. Necesitás{" "}
+              <span className="font-medium">QZ Tray</span> instalado y abierto en
+              esta PC.
+            </p>
+
+            <div className="mt-4 flex items-center gap-2 text-sm">
+              <span
+                className={
+                  "h-2 w-2 rounded-full " +
+                  (qzOn ? "bg-green-500" : "bg-neutral-400")
+                }
+              />
+              <span className="text-neutral-600">
+                {qzOn ? "QZ Tray conectado" : "QZ Tray sin conectar"}
+              </span>
+              <button
+                type="button"
+                onClick={retryQz}
+                disabled={printBusy}
+                className="ml-auto rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                {printBusy ? "..." : "Reintentar"}
+              </button>
+            </div>
+
+            <label className="mt-4 block text-xs font-medium text-neutral-600">
+              Impresora
+            </label>
+            <div className="mt-1 flex gap-2">
+              <select
+                value={printer ?? ""}
+                onChange={(e) => choosePrinter(e.target.value)}
+                className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+              >
+                <option value="">— Elegir impresora —</option>
+                {(printer && !printerList.includes(printer)
+                  ? [printer, ...printerList]
+                  : printerList
+                ).map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={async () => {
+                  setPrintBusy(true);
+                  try {
+                    await qzConnect();
+                    setQzOn(qzIsConnected());
+                    setPrinterList(await qzListPrinters());
+                  } catch {
+                    showNotice({
+                      kind: "warn",
+                      text: "No se pudieron listar las impresoras (¿QZ Tray abierto?).",
+                    });
+                  } finally {
+                    setPrintBusy(false);
+                  }
+                }}
+                disabled={printBusy}
+                className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                Buscar
+              </button>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-neutral-700">
+              <input
+                type="checkbox"
+                checked={autoPrint}
+                onChange={toggleAutoPrint}
+                className="h-4 w-4 rounded border-neutral-300"
+              />
+              Imprimir automáticamente al aceptar un pedido
+            </label>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                onClick={printTest}
+                disabled={printBusy || !printer}
+                className="flex-1 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+              >
+                Imprimir prueba
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintOpen(false)}
+                className="flex-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {rejectTarget && (
@@ -836,6 +1134,8 @@ function OrderCard({
   busy,
   onMutate,
   onReject,
+  onPrint,
+  canPrint,
 }: {
   order: OrderDTO;
   storeName: string;
@@ -844,6 +1144,8 @@ function OrderCard({
   busy: boolean;
   onMutate: (id: string, body: OrderPatch) => void;
   onReject: (order: OrderDTO) => void;
+  onPrint: (order: OrderDTO) => void;
+  canPrint: boolean;
 }) {
   const canWhatsApp = normalizeArPhone(order.customerPhone) !== null;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -980,6 +1282,23 @@ function OrderCard({
                     </select>
                   </label>
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onPrint(order);
+                    }}
+                    disabled={!canPrint}
+                    title={
+                      canPrint
+                        ? undefined
+                        : "Configurá la impresora en el ícono 🖨️ del encabezado"
+                    }
+                    className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    🖨️ Imprimir tickets
+                  </button>
+
                   {isDelivery && order.driver && (
                     <button
                       type="button"
@@ -988,7 +1307,7 @@ function OrderCard({
                         openDriverWhatsApp();
                       }}
                       disabled={!driverPhoneOk}
-                      className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
                       WhatsApp al repartidor

@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { normalizeArPhone, whatsappLink } from "@/lib/phone";
 import {
+  buildComandaTicket,
+  buildClienteTicket,
+  type StoreInfo,
+} from "@/lib/escpos";
+import { getStoredPrinter, qzPrintRaw } from "@/lib/qz-print";
+import {
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
   PAYMENT_PROVIDER_LABELS,
@@ -61,9 +67,29 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Imprime un pedido: si hay una comandera configurada en esta PC (QZ Tray),
+// manda los dos tickets ESC/POS (comanda + cliente). Si no, cae al popup del
+// navegador con la comanda de cocina.
+async function printOrder(order: OrderDTO, store: StoreInfo): Promise<void> {
+  const printer = getStoredPrinter();
+  if (printer) {
+    try {
+      await qzPrintRaw(printer, [
+        buildComandaTicket(order, store),
+        buildClienteTicket(order, store),
+      ]);
+      return;
+    } catch {
+      /* QZ Tray no disponible: seguimos con el popup */
+    }
+  }
+  printComandaPopup(order, store);
+}
+
 // Abre una ventana con la comanda del pedido y dispara la impresión. El ticket
 // se auto-imprime y se cierra solo (script embebido en el HTML).
-function printComanda(order: OrderDTO, storeName: string): void {
+function printComandaPopup(order: OrderDTO, store: StoreInfo): void {
+  const storeName = store.name;
   const money = (n: number) => formatCurrency(Math.round(n));
   const rows = order.items
     .map((it) => {
@@ -149,7 +175,11 @@ export default function PedidosClient() {
     "ALL"
   );
   const [search, setSearch] = useState("");
-  const [storeName, setStoreName] = useState("Blend");
+  const [store, setStore] = useState<StoreInfo>({
+    name: "Blend",
+    address: null,
+    phone: null,
+  });
   // Menú de 3 puntos abierto (id del pedido) y modal activo.
   const [menuId, setMenuId] = useState<string | null>(null);
   const [modal, setModal] = useState<{
@@ -165,9 +195,17 @@ export default function PedidosClient() {
   useEffect(load, []);
 
   useEffect(() => {
-    apiFetch<{ storeName?: string }>("/api/settings")
+    apiFetch<{
+      storeName?: string;
+      storeAddress?: string | null;
+      storePhone?: string | null;
+    }>("/api/settings")
       .then((s) => {
-        if (s?.storeName) setStoreName(s.storeName);
+        setStore({
+          name: s?.storeName || "Blend",
+          address: s?.storeAddress ?? null,
+          phone: s?.storePhone ?? null,
+        });
       })
       .catch(() => {});
   }, []);
@@ -437,7 +475,7 @@ export default function PedidosClient() {
                               type="button"
                               onClick={() => {
                                 setMenuId(null);
-                                printComanda(order, storeName);
+                                void printOrder(order, store);
                               }}
                               className="block w-full px-3 py-2 text-left text-neutral-700 hover:bg-neutral-50"
                             >

@@ -41,6 +41,12 @@ export const PAYMENT_PROVIDER_LABELS: Record<PaymentProvider, string> = {
 
 export type PaymentStatus = "PENDING" | "CONFIRMED" | "FAILED";
 
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  PENDING: "Pendiente",
+  CONFIRMED: "Pagado",
+  FAILED: "Fallido",
+};
+
 export type ModifierType = "SINGLE" | "MULTIPLE" | "REMOVE";
 
 export interface ModifierOptionDTO {
