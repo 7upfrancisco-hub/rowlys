@@ -67,17 +67,24 @@ export default function PedidosClient() {
   const filtered = useMemo(() => {
     if (!orders) return [];
     const term = search.trim().toLowerCase();
-    return orders.filter((order) => {
-      if (order.status !== tab) return false;
-      if (orderTypeFilter !== "ALL" && order.orderType !== orderTypeFilter)
-        return false;
-      if (term) {
-        const haystack =
-          `${order.customerFirstName} ${order.customerLastName} ${order.customerPhone}`.toLowerCase();
-        if (!haystack.includes(term)) return false;
-      }
-      return true;
-    });
+    return orders
+      .filter((order) => {
+        if (order.status !== tab) return false;
+        if (orderTypeFilter !== "ALL" && order.orderType !== orderTypeFilter)
+          return false;
+        if (term) {
+          const haystack =
+            `${order.customerFirstName} ${order.customerLastName} ${order.customerPhone}`.toLowerCase();
+          if (!haystack.includes(term)) return false;
+        }
+        return true;
+      })
+      // Más reciente arriba.
+      .sort((a, b) => {
+        const diff =
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return diff !== 0 ? diff : b.number - a.number;
+      });
   }, [orders, tab, orderTypeFilter, search]);
 
   // Exporta a PDF la lista que se está viendo (respeta pestaña, canal y buscador).
