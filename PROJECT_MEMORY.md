@@ -1560,8 +1560,48 @@ schema** — usa `status`/`cancelReason` que ya existen.
 - **Nota**: `BANK_TRANSFER` manual NO entra en el barrido — esos pedidos SÍ se ven en la
   comanda y el local los rechaza a mano. Solo aplica a MP.
 
+## Fase 24: editar pedido desde la comanda (en código, 2026-09-08)
+
+El usuario pidió poder cambiar ítems / cantidades / nota de un pedido ya cargado sin
+cancelar y rehacer, recalculando total y monto del pago. **Sin cambios de schema.**
+
+- **`src/lib/orders.ts`** — refactor: se extrajo la validación + pricing de ítems a
+  `resolveItems(items, orderType)` (producto existe / disponible en el canal / adicionales
+  válidos y en min-max → arma el `create` anidado con precios recalculados). `createOrder`
+  ahora la usa (comportamiento idéntico). Nuevo `updateOrderItems(orderId, input)` +
+  `editOrderItemsSchema` (zod): recibe `lines` como unión de `{ keepItemId, quantity }`
+  (conserva el snapshot del ítem, sirve aunque el producto ya no exista) o
+  `{ productId, quantity, notes?, optionIds? }` (revalida contra la base), más `notes`
+  opcional. Reemplaza todos los ítems en una `$transaction`
+  (`items: { deleteMany: {}, create }`, cascada a `OrderItemOption`), recalcula
+  `total = itemsTotal + order.deliveryFee` (el fee del pedido NO se re-lee de Settings) y
+  hace `payment.amount = total` (estado y `changeFor` intactos). Solo estados
+  PENDING/CONFIRMED/IN_PROGRESS/READY.
+- **`POST /api/admin/orders/[id]/items`** (nuevo, protegido): valida y llama a
+  `updateOrderItems`, devuelve el `OrderDTO` actualizado.
+- **`src/app/comanda/order-line-picker.tsx`** (nuevo): piezas compartidas entre "Nuevo
+  pedido" y "Editar pedido" — `DraftLine` (ahora `options[].optionId` es opcional: las
+  líneas que ya estaban en el pedido no lo tienen), `lineKey`, `lineSubtotal`, `MenuColumn`
+  (pestañas de categoría + lista de productos), `ProductOptionsPanel`.
+- **`new-order-modal.tsx`**: refactor para usar el módulo compartido (borró su
+  `ProductOptionsPanel` local y el markup del menú; ~145 líneas menos). Comportamiento igual.
+- **`src/app/comanda/edit-order-modal.tsx`** (nuevo): modal de 2 columnas. Siembra las
+  líneas desde `order.items` (cada una como `keepItemId`), permite +/- cantidad, quitar,
+  agregar del menú (con adicionales), y editar la nota del pedido. Para cambiar los
+  adicionales de una línea existente hay que quitarla y volver a agregarla. Muestra el
+  total nuevo vs. el anterior y un aviso si el pedido ya figura pagado ("ajustá la
+  diferencia con el cliente"). Botón deshabilitado si no hay cambios o el pedido queda sin
+  ítems.
+- **`comanda-client.tsx`**: "✏️ Editar pedido" en el menú ⋯ de cada tarjeta →
+  `EditOrderModal`. Al guardar, `onOrderEdited` mergea el pedido devuelto, refresca métricas
+  y muestra un aviso.
+- `tsc` + `next build` limpios (`/comanda` 14.9 → 15.8 kB). Sin schema → push directo.
+- **Sin probar en navegador.** No editable: tipo de pedido, datos del cliente, dirección,
+  medio de pago (fuera de alcance de esta fase).
+
 ## Historial de decisiones (log)
 
+- **2026-09-08** — El usuario eligió **editar pedido en la comanda**. **Fase 24** sin schema: se extrajo `resolveItems` en `src/lib/orders.ts` (compartido crear/editar), nuevo `updateOrderItems` + `POST /api/admin/orders/[id]/items` (reemplaza ítems en transacción, recalcula total y `payment.amount`), módulo compartido `order-line-picker.tsx` (`MenuColumn` + `ProductOptionsPanel`, refactor de `new-order-modal`), y `edit-order-modal.tsx` abierto desde "✏️ Editar pedido" en el menú ⋯ de la comanda. Editable: ítems/cantidades/adicionales (quitar+re-agregar)/nota. No editable: tipo, cliente, dirección, medio de pago. `tsc`/`build` limpios, push directo.
 - **2026-09-08** — El usuario eligió **limpieza de pedidos fantasma** (pedidos MP que nunca se pagan y quedan PENDING ocultos). Se implementó la **Fase 23** sin schema: `src/lib/phantom-orders.ts` (`sweepPhantomOrders` cancela los MP sin pagar de +3 h), barrido oportunista con throttle 10 min dentro de `GET /api/orders` (sin cron), `GET/POST /api/admin/orders/cleanup-unpaid` + banner con botón en `/admin/pedidos`, expiración de la preferencia de MP a 3 h (`expires`/`expiration_date_to`), y blindaje en el webhook (revive a PENDING si entra un pago confirmado a un pedido ya auto-cancelado). `tsc`/`build` limpios. Se puede pushear directo (sin `db push`).
 - **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). **Deployado** (`be57715`+`94beb9a`): el usuario corrió `npx.cmd prisma db push` + `npx.cmd tsx prisma/backfill-customers.ts` → 2 clientes desde 26 pedidos. (`npx` pelado falla por ExecutionPolicy de PowerShell, usar `npx.cmd`.)
 - **2026-09-08** — El usuario quiere conectar comanderas a Blend. Mostró que RestoSimple usa QZ Tray y pidió 2 tickets por pedido (comanda para el local + ticket para el cliente con "¡Gracias por su compra!"), ambos con el nombre del local grande arriba y "Blend" como pie. Setup: PC Windows siempre encendida, comandera aún sin comprar, "camino más rápido". Se implementó la **Fase 21** con QZ Tray (sin agente propio ni cola en DB): `src/lib/escpos.ts` (builder ESC/POS + las 3 plantillas), `src/lib/qz-print.ts` (puente con `qz-tray` npm, impresora en localStorage por-PC), `POST/GET /api/admin/print/sign` (firma con `QZ_CERT`/`QZ_PRIVATE_KEY`), UI en `/comanda` (ícono 🖨️ + modal + auto-impresión al aceptar + "Imprimir tickets" en el ⋯), `/admin/pedidos` reimprime por QZ con fallback al popup, `PRINTING_SETUP.md`. Dep nueva `qz-tray`. `tsc`/`build` limpios. Antes de esta fase se deployaron dos ajustes chicos del historial: orden por Nº de pedido descendente (más reciente arriba, commits `cd09872`+`6a4932c`) y menú ⋯ por pedido en `/admin/pedidos` con Ver detalles / Contactar cliente / Imprimir comanda (commit `3731d11`). **Fase 21 sin deployar**: falta commitear+pushear, cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray en la PC y elegir impresora.

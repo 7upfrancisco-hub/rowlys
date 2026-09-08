@@ -22,6 +22,7 @@ import {
 } from "@/lib/qz-print";
 import AdminHeader from "@/components/AdminHeader";
 import NewOrderModal from "./new-order-modal";
+import EditOrderModal from "./edit-order-modal";
 import {
   ORDER_STATUS_LABELS,
   PAYMENT_PROVIDER_LABELS,
@@ -223,6 +224,8 @@ export default function ComandaClient() {
   // Pedido que el trabajador está por cancelar + el motivo que escribe.
   const [rejectTarget, setRejectTarget] = useState<OrderDTO | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  // Pedido que se está editando (modal de ítems).
+  const [editTarget, setEditTarget] = useState<OrderDTO | null>(null);
   const [drivers, setDrivers] = useState<DriverDTO[]>([]);
   const suppressPollUntil = useRef(0);
   // Ids de pedidos ya vistos; null hasta la primera carga (que no hace sonar nada).
@@ -595,6 +598,16 @@ export default function ComandaClient() {
     mutate(id, { status: "CANCELLED", cancelReason: reason });
   }
 
+  // El modal de edición devuelve el pedido ya actualizado.
+  function onOrderEdited(updated: OrderDTO) {
+    suppressPollUntil.current = Date.now() + SUPPRESS_POLL_MS;
+    setOrders((prev) =>
+      prev ? prev.map((o) => (o.id === updated.id ? updated : o)) : prev
+    );
+    loadMetrics();
+    showNotice({ kind: "ok", text: `Pedido #${updated.number} actualizado.` });
+  }
+
   const byStatus = useMemo(() => {
     const map = new Map<OrderStatus, OrderDTO[]>();
     for (const col of BOARD_COLUMNS) map.set(col, []);
@@ -935,6 +948,7 @@ export default function ComandaClient() {
                           busy={busyId === order.id}
                           onMutate={mutate}
                           onReject={reject}
+                          onEdit={setEditTarget}
                           onPrint={manualPrint}
                           canPrint={!!printer}
                         />
@@ -1081,6 +1095,14 @@ export default function ComandaClient() {
         </div>
       )}
 
+      {editTarget && (
+        <EditOrderModal
+          order={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={onOrderEdited}
+        />
+      )}
+
       {rejectTarget && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
@@ -1134,6 +1156,7 @@ function OrderCard({
   busy,
   onMutate,
   onReject,
+  onEdit,
   onPrint,
   canPrint,
 }: {
@@ -1144,6 +1167,7 @@ function OrderCard({
   busy: boolean;
   onMutate: (id: string, body: OrderPatch) => void;
   onReject: (order: OrderDTO) => void;
+  onEdit: (order: OrderDTO) => void;
   onPrint: (order: OrderDTO) => void;
   canPrint: boolean;
 }) {
@@ -1286,6 +1310,17 @@ function OrderCard({
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
+                      onEdit(order);
+                    }}
+                    className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50"
+                  >
+                    ✏️ Editar pedido
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
                       onPrint(order);
                     }}
                     disabled={!canPrint}
@@ -1294,7 +1329,7 @@ function OrderCard({
                         ? undefined
                         : "Configurá la impresora en el ícono 🖨️ del encabezado"
                     }
-                    className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     🖨️ Imprimir tickets
                   </button>
