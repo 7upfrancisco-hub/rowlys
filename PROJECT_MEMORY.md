@@ -1314,6 +1314,49 @@ por coma. Pidió que sea **PDF** directamente. Se reemplazó el CSV por un PDF t
 - **Pusheado** (commit `b6cfb35`, `origin/main` al día). Sigue pendiente el pase de estética (el
   gráfico "Ventas por día" con la línea naranja vieja).
 
+## Fase 20: Transferencia = Mercado Pago + el pedido no llega a la cocina sin pago confirmado (2026-09-08, commit `a771d43`)
+
+El usuario eligió trabajar los medios de pago. Pidió que "Transferencia" redirija automáticamente
+a Mercado Pago, y — clave — que **si el pago no se confirma, el pedido NO le llegue al local**
+(revierte para MP la regla de "todos los pedidos entran a Pendiente de una"; para efectivo sigue
+igual). También pidió checkout con solo 2 botones: **Efectivo + Transferencia** (sin "Mercado
+Pago" aparte). Toda la integración MP (Fase 4) ya existía; esto solo la cablea al botón
+"Transferencia" y agrega el gate de visibilidad. **Sin cambios de schema.**
+
+- **`checkout-client.tsx`**: el tipo de UI `PaymentMethod` pasó a `"CASH" | "TRANSFER"` (se
+  fueron `"BANK_TRANSFER"` y `"MP"` como opciones visibles). Nuevo derivado
+  `mpTransfer = paymentMethod === "TRANSFER" && !!settings.mpEnabled`. Al confirmar, `provider`
+  se resuelve: `CASH` → `CASH`; `TRANSFER` con MP activo → `MP` (redirección al initPoint, igual
+  que el viejo pill de MP); `TRANSFER` sin MP configurado → `BANK_TRANSFER` (muestra el alias/CBU,
+  confirmación manual — **cero regresión hasta que se activen las credenciales de MP**). Se sacó
+  el botón "Mercado Pago". Si `createPreference` falla, se limpia el carrito y se manda a
+  `/pedido/[id]` para reintentar (antes quedaba trabado en el checkout).
+- **`GET /api/orders`** (listado que consume `/comanda`): se agregó al `where`
+  `NOT: { payment: { provider: "MP", status: { not: "CONFIRMED" } } }`. Un pedido con pago MP
+  sin acreditar **no aparece en la comanda**. Cuando el webhook de MP marca el pago
+  `CONFIRMED`, el pedido entra a la columna "Pendiente" (su `order.status` sigue siendo
+  `PENDING`, el webhook no lo toca). Efectivo y BANK_TRANSFER manual siguen visibles de una
+  (confirmación a mano como siempre). El endpoint público `GET /api/orders/[id]` NO filtra —
+  la página de seguimiento del cliente sigue mostrando el pedido oculto para que pueda pagar.
+- **`GET /api/admin/metrics`** (barra "HOY" de `/comanda`): mismo criterio, los pedidos MP sin
+  acreditar no cuentan en `orders`/`revenue`.
+- **`pedido-client.tsx`**: mientras el pago MP no se acredita (`awaitingPayment`), en vez del
+  stepper de estados se muestra un bloque "Esperando el pago" ("El local recibe tu pedido apenas
+  se acredita el pago…"); el botón de pago dice "Reintentar el pago" si el estado es `FAILED`, y
+  el badge de pago distingue Pagado / Rechazado / Pendiente.
+- **Verificado**: `tsc` + `build` limpios. El gate se probó contra Neon con un script directo de
+  Prisma: MP pending/failed → oculto; MP confirmed / CASH / BANK_TRANSFER pending → visible; al
+  pasar el pago de PENDING a CONFIRMED el pedido pasa a visible. 5 pedidos de prueba borrados.
+  No se pudo sacar captura del checkout (Chrome headless no arrancó en esta sesión).
+- **Pendiente para que funcione de verdad**: el usuario tiene que **crear la cuenta de developer
+  de MP** y cargar `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` en Vercel, configurar la
+  `notification_url` (`<BASE>/api/webhooks/mercadopago`) y `NEXT_PUBLIC_BASE_URL`. Hasta
+  entonces, en prod `mpEnabled` es `false` y "Transferencia" muestra el alias manual.
+- **Gap conocido**: si un cliente elige Transferencia/MP y nunca paga, queda un pedido fantasma
+  `PENDING` oculto para siempre (existe en la DB, invisible salvo por el link de seguimiento).
+  No molesta a la cocina; si acumula, sumar un cleanup (cancelar pedidos MP sin pagar de +X
+  horas). No se hizo ahora.
+
 ### Fase 17d — sacar los chips de estado del local del dashboard (2026-09-03)
 
 El usuario pidió sacar del tablero de `/admin` la fila de chips "Local abierto · Delivery ·
