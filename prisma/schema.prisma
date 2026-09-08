@@ -101,12 +101,34 @@ enum PaymentStatus {
   FAILED
 }
 
+// Cliente que compró alguna vez. Se deduplica por teléfono normalizado
+// (normalizeArPhone). Los datos de contacto también quedan copiados en cada
+// Order (snapshot histórico); acá se guarda la versión "actual" del cliente.
+model Customer {
+  id        String   @id @default(cuid())
+  // Teléfono normalizado, formato 549XXXXXXXXXX (sin "+"). Clave de dedup.
+  phone     String   @unique
+  firstName String
+  lastName  String   @default("")
+  email     String?
+  orders    Order[]
+  // ~ fecha del primer pedido del cliente.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([firstName])
+}
+
 model Order {
   id                String      @id @default(cuid())
   // Número secuencial legible para nombrar el pedido (comanda, seguimiento,
   // mensaje al repartidor). El id sigue siendo el cuid para los links.
   number            Int         @unique @default(autoincrement())
   orderType         OrderType
+  // Cliente asociado. Se resuelve por teléfono al crear el pedido; null si el
+  // pedido no trae un teléfono normalizable (algunas cargas manuales).
+  customer          Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId        String?
   customerFirstName String
   customerLastName  String
   customerPhone     String
@@ -132,6 +154,7 @@ model Order {
   updatedAt         DateTime    @updatedAt
 
   @@index([status])
+  @@index([customerId])
 }
 
 model Driver {

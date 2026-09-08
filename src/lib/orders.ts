@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { normalizeArPhone } from "@/lib/phone";
 
 // Lógica compartida de creación de pedidos. La usan dos rutas:
 //  - POST /api/orders        (checkout público, respeta el estado del local)
@@ -182,9 +183,35 @@ export async function createOrder(
 
   const total = itemsTotal + deliveryFee;
 
+  // Cliente: se deduplica por teléfono normalizado. Si el pedido no trae un
+  // teléfono normalizable (algunas cargas manuales del staff), no se asocia a
+  // ningún cliente. El nombre se refresca al más reciente; el email solo se
+  // pisa si el pedido trae uno (no borra el guardado).
+  const phoneKey = normalizeArPhone(body.customerPhone);
+  let customerId: string | undefined;
+  if (phoneKey) {
+    const customer = await prisma.customer.upsert({
+      where: { phone: phoneKey },
+      create: {
+        phone: phoneKey,
+        firstName: body.customerFirstName,
+        lastName: body.customerLastName,
+        email: body.customerEmail,
+      },
+      update: {
+        firstName: body.customerFirstName,
+        lastName: body.customerLastName,
+        ...(body.customerEmail ? { email: body.customerEmail } : {}),
+      },
+      select: { id: true },
+    });
+    customerId = customer.id;
+  }
+
   const order = await prisma.order.create({
     data: {
       orderType: body.orderType,
+      ...(customerId ? { customerId } : {}),
       customerFirstName: body.customerFirstName,
       customerLastName: body.customerLastName,
       customerPhone: body.customerPhone,

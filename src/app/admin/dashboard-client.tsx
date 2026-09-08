@@ -28,6 +28,11 @@ const GROUPS = [
         label: "Historial",
         desc: "Pedidos finalizados y cancelados",
       },
+      {
+        href: "/admin/clientes",
+        label: "Clientes",
+        desc: "Quién compró, cuánto y sus direcciones",
+      },
     ],
   },
   {

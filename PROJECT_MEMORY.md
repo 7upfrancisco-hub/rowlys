@@ -1485,8 +1485,52 @@ manda los tickets ESC/POS. Sin cambios de schema, sin endpoints de cola.
   en la PC del local y elegir la impresora. La auto-impresión NO cubre pedidos nuevos que
   entran ya CONFIRMED sin pasar por el botón ✓ (los de carga manual) — para esos, botón manual.
 
+## Fase 22: base de datos de clientes (en código, 2026-09-08)
+
+El usuario pidió una base de todos los clientes que compran. Decisiones que tomó:
+identidad = **teléfono normalizado** (`normalizeArPhone`); ficha con **historial de
+pedidos** + **direcciones de envío usadas**; "total gastado" y "cantidad de pedidos"
+cuentan **solo facturables** (CONFIRMED/IN_PROGRESS/READY/DELIVERED, mismo criterio que
+`/admin/metricas`). NO se pidieron notas internas ni ranking de productos por cliente.
+
+- **Schema**: modelo `Customer` (`id`, `phone @unique` normalizado `549…`, `firstName`,
+  `lastName @default("")`, `email?`, `createdAt` ≈ primer pedido, `updatedAt`,
+  `@@index([firstName])`) + `Order.customerId` FK nullable (`onDelete: SetNull`) +
+  `@@index([customerId])`. Los campos `customerFirstName/LastName/Phone/Email` siguen
+  copiados en cada `Order` (snapshot histórico); `Customer` guarda la versión "actual".
+- **`src/lib/orders.ts`** (`createOrder`, único punto de creación de pedidos — lo usan el
+  checkout público y la carga manual): antes de crear el pedido hace `prisma.customer.upsert`
+  por `phone` normalizado y linkea `customerId`. Si el teléfono no normaliza, el pedido se
+  crea sin cliente. El nombre se refresca al más reciente; el email solo se pisa si el pedido
+  trae uno (no borra el guardado).
+- **`GET /api/admin/customers?search=&sort=`**: lista + stats por cliente
+  (`order.groupBy` por `customerId` con `status in BILLABLE`: `_sum.total`, `_count`,
+  `_min/_max.createdAt`). `search` matchea nombre (insensitive) o dígitos del teléfono.
+  `sort` = `recent` (último pedido, default) | `orders` | `spent` | `name`, ordenado en JS.
+  `take: 500`.
+- **`GET /api/admin/customers/[id]`**: cliente + `orders` (mismo `include` que `GET /api/orders`,
+  desc por fecha, incluye cancelados) + `addresses` (deliveryAddress distintas, más reciente
+  primero) + stats facturables. Devuelve `CustomerDetailDTO`.
+- **`/admin/clientes`** (`page.tsx` + `clientes-client.tsx`): buscador (debounce 250ms) +
+  selector de orden + tabla (Cliente / Teléfono / Pedidos / Total gastado / Último pedido).
+  Fila → modal: contacto + botón WhatsApp/Email, 4 stats (Pedidos, Total gastado, Cliente
+  desde, Último pedido), lista de direcciones usadas, e historial de pedidos (Nº, fecha,
+  canal · estado, total, resumen de ítems). Solo lectura (no hay campos editables en v1).
+- **`dashboard-client.tsx`**: link "Clientes" en el grupo "Pedidos" del tablero.
+- **`src/types/index.ts`**: `CustomerDTO`, `CustomerDetailDTO`.
+- **`prisma/backfill-customers.ts`** (nuevo): script idempotente que recorre los pedidos
+  existentes (asc por fecha), agrupa por teléfono normalizado, upsertea el `Customer` (con
+  `createdAt` = primer pedido) y setea `Order.customerId`. Correr **una vez** después del
+  `db push`: `npx tsx prisma/backfill-customers.ts`.
+- `tsc` + `next build` limpios (`/admin/clientes` 3.3 kB, rutas `/api/admin/customers[/[id]]`).
+- **Falta**: `prisma db push` (lo corre el usuario — agrega la tabla `Customer` y la columna
+  `Order.customerId` a Neon), después `npx tsx prisma/backfill-customers.ts`, después
+  commit + push. Sin probar en navegador ni contra Neon (no se pudo pushear el schema en la
+  sesión).
+
 ## Historial de decisiones (log)
 
+- **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). `tsc`/`build` limpios. **Sin deployar**: falta `prisma db push` + `npx tsx prisma/backfill-customers.ts` (los corre el usuario) + commit + push.
 - **2026-09-08** — El usuario quiere conectar comanderas a Blend. Mostró que RestoSimple usa QZ Tray y pidió 2 tickets por pedido (comanda para el local + ticket para el cliente con "¡Gracias por su compra!"), ambos con el nombre del local grande arriba y "Blend" como pie. Setup: PC Windows siempre encendida, comandera aún sin comprar, "camino más rápido". Se implementó la **Fase 21** con QZ Tray (sin agente propio ni cola en DB): `src/lib/escpos.ts` (builder ESC/POS + las 3 plantillas), `src/lib/qz-print.ts` (puente con `qz-tray` npm, impresora en localStorage por-PC), `POST/GET /api/admin/print/sign` (firma con `QZ_CERT`/`QZ_PRIVATE_KEY`), UI en `/comanda` (ícono 🖨️ + modal + auto-impresión al aceptar + "Imprimir tickets" en el ⋯), `/admin/pedidos` reimprime por QZ con fallback al popup, `PRINTING_SETUP.md`. Dep nueva `qz-tray`. `tsc`/`build` limpios. Antes de esta fase se deployaron dos ajustes chicos del historial: orden por Nº de pedido descendente (más reciente arriba, commits `cd09872`+`6a4932c`) y menú ⋯ por pedido en `/admin/pedidos` con Ver detalles / Contactar cliente / Imprimir comanda (commit `3731d11`). **Fase 21 sin deployar**: falta commitear+pushear, cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray en la PC y elegir impresora.
 
 - **2026-08-26** — Usuario define el proyecto: copiar funcionalidad de app.restosimple.com (carta + comandas) para su propio local, con intención de venderlo después si sale bien.

@@ -171,6 +171,29 @@ export interface OrderDTO {
   updatedAt: string;
 }
 
+// Cliente de la base (deduplicado por teléfono). Las métricas (ordersCount /
+// totalSpent) cuentan solo pedidos facturables: CONFIRMED/IN_PROGRESS/READY/
+// DELIVERED — sin pendientes de aceptar ni cancelados.
+export interface CustomerDTO {
+  id: string;
+  phone: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  ordersCount: number;
+  totalSpent: number;
+  firstOrderAt: string | null;
+  lastOrderAt: string | null;
+  createdAt: string;
+}
+
+export interface CustomerDetailDTO extends CustomerDTO {
+  // Direcciones de envío usadas por el cliente, de la más reciente a la más vieja.
+  addresses: string[];
+  // Historial completo de pedidos del cliente (incluye cancelados), más nuevo primero.
+  orders: OrderDTO[];
+}
+
 // Resultado del intento de aviso por WhatsApp al confirmar un pedido. Lo
 // devuelve PATCH /api/admin/orders/[id] junto con el pedido actualizado.
 export type WhatsAppSendResult =
