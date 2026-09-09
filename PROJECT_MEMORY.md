@@ -1480,10 +1480,26 @@ manda los tickets ESC/POS. Sin cambios de schema, sin endpoints de cola.
 - Dependencia nueva: `qz-tray@^2.2.6`. `tsc` + `next build` limpios (`/comanda` 11.9→14.9 kB,
   nueva ruta `/api/admin/print/sign`). Los avisos de `npm audit` (jspdf/dompurify/next/postcss)
   son previos, no los trae qz-tray.
-- **Sin probar en navegador / hardware** (no hay comandera todavía). **Sin deployar.** Falta:
-  commitear + pushear, generar y cargar `QZ_CERT`/`QZ_PRIVATE_KEY` en Vercel, instalar QZ Tray
-  en la PC del local y elegir la impresora. La auto-impresión NO cubre pedidos nuevos que
-  entran ya CONFIRMED sin pasar por el botón ✓ (los de carga manual) — para esos, botón manual.
+- Dependencia nueva: `qz-tray@^2.2.6`. La auto-impresión NO cubre pedidos que nacen CONFIRMED
+  sin pasar por el botón ✓ (carga manual) — para esos, "🖨️ Imprimir tickets" del menú ⋯.
+- **Deployado y VERIFICADO en la PC del local (2026-09-09)**: el usuario instaló QZ Tray, cargó
+  el cert, eligió la comandera y la impresión de los dos tickets anda bien en hardware real.
+
+### Fase 21b — rediseño de los tickets (jerarquía de tamaños) (2026-09-09)
+
+El usuario pidió cambiar el diseño de ambos tickets, enfocado en tamaños/jerarquía. En
+`escpos.ts` se reescribió el armado con un helper único `line(text, { size, bold, center })`
+(`size`: normal | tall = alto x2 | wide = ancho x2 | big = x2 x2). **Fix real**: la alineación
+ESC/POS es por-línea — hay que setearla ANTES del `\n`, no resetearla después; antes andaba de
+casualidad. Ahora cada `line()`/`rule()`/`cols()` fija su alineación al principio.
+
+- **Comanda**: nombre del local pasa a chico; **`#N` a `big`** (x2 x2); **canal `RETIRO`/`ENVIO`
+  a `wide` + negrita**; **ítems a `tall`** (alto x2) + negrita; nombre del cliente y dirección
+  de envío en negrita; regla `===` bajo el encabezado.
+- **Cliente**: nombre del local sigue `big`; **TOTAL pasa a `big` centrado** con línea en blanco
+  antes (antes era negrita normal en columna); más aire alrededor del "GRACIAS POR SU COMPRA".
+- `tsc`/`build` limpios, sin schema. Deployado para probar en la comandera de Rowlys; si no
+  convence, el usuario manda una foto del ticket que usa el local (RestoSimple) y se replica.
 
 ## Fase 22: base de datos de clientes (en código, 2026-09-08)
 
@@ -1601,6 +1617,7 @@ cancelar y rehacer, recalculando total y monto del pago. **Sin cambios de schema
 
 ## Historial de decisiones (log)
 
+- **2026-09-09** — El usuario confirmó que la **impresión de tickets (Fase 21) anda bien en la comandera del local**. Pidió rediseñar ambos tickets por jerarquía de tamaños → **Fase 21b**: `escpos.ts` reescrito con un helper `line({ size, bold, center })` (size: normal/tall/wide/big), fix de la alineación ESC/POS (es por-línea, se setea antes del `\n`). Comanda: `#N` grande, canal en doble ancho, ítems doble alto. Cliente: TOTAL grande y centrado. Deployado para probar; si no convence, el usuario manda foto del ticket de RestoSimple y se replica. Sin schema.
 - **2026-09-08** — El usuario eligió **editar pedido en la comanda**. **Fase 24** sin schema: se extrajo `resolveItems` en `src/lib/orders.ts` (compartido crear/editar), nuevo `updateOrderItems` + `POST /api/admin/orders/[id]/items` (reemplaza ítems en transacción, recalcula total y `payment.amount`), módulo compartido `order-line-picker.tsx` (`MenuColumn` + `ProductOptionsPanel`, refactor de `new-order-modal`), y `edit-order-modal.tsx` abierto desde "✏️ Editar pedido" en el menú ⋯ de la comanda. Editable: ítems/cantidades/adicionales (quitar+re-agregar)/nota. No editable: tipo, cliente, dirección, medio de pago. `tsc`/`build` limpios, push directo.
 - **2026-09-08** — El usuario eligió **limpieza de pedidos fantasma** (pedidos MP que nunca se pagan y quedan PENDING ocultos). Se implementó la **Fase 23** sin schema: `src/lib/phantom-orders.ts` (`sweepPhantomOrders` cancela los MP sin pagar de +3 h), barrido oportunista con throttle 10 min dentro de `GET /api/orders` (sin cron), `GET/POST /api/admin/orders/cleanup-unpaid` + banner con botón en `/admin/pedidos`, expiración de la preferencia de MP a 3 h (`expires`/`expiration_date_to`), y blindaje en el webhook (revive a PENDING si entra un pago confirmado a un pedido ya auto-cancelado). `tsc`/`build` limpios. Se puede pushear directo (sin `db push`).
 - **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). **Deployado** (`be57715`+`94beb9a`): el usuario corrió `npx.cmd prisma db push` + `npx.cmd tsx prisma/backfill-customers.ts` → 2 clientes desde 26 pedidos. (`npx` pelado falla por ExecutionPolicy de PowerShell, usar `npx.cmd`.)

@@ -3,10 +3,11 @@
 // en `/admin/pedidos`, para armar el texto que después se manda a QZ Tray.
 //
 // Dos tickets por pedido:
-//  - buildComandaTicket: para la cocina/el local. Todo el pedido.
-//  - buildClienteTicket: para el cliente. Nombre del local, lo que compró y un
-//    "¡Gracias por su compra!".
-// En ambos, el nombre del local va grande arriba y "Blend" queda como pie.
+//  - buildComandaTicket: para la cocina. Jerarquía: número de pedido y canal
+//    (retiro/envío) enormes, ítems grandes. El resto, chico.
+//  - buildClienteTicket: para el cliente. Jerarquía: nombre del local arriba y
+//    TOTAL grande. El detalle, tamaño normal.
+// En ambos, "Blend" queda como pie discreto.
 
 import {
   PAYMENT_PROVIDER_LABELS,
@@ -25,16 +26,17 @@ const AR_TZ = "America/Argentina/Buenos_Aires";
 const ESC = "\x1B";
 const GS = "\x1D";
 
+// GS ! n : nibble alto = ancho (x1..x8), nibble bajo = alto (x1..x8).
 const CMD = {
   init: ESC + "@",
   boldOn: ESC + "E\x01",
   boldOff: ESC + "E\x00",
   left: ESC + "a\x00",
   center: ESC + "a\x01",
-  // Doble ancho + doble alto / solo doble alto / normal.
-  big: GS + "!\x11",
-  tall: GS + "!\x01",
-  normal: GS + "!\x00",
+  sizeNormal: GS + "!\x00",
+  sizeTall: GS + "!\x01", // alto x2
+  sizeWide: GS + "!\x10", // ancho x2
+  sizeBig: GS + "!\x11", // ancho x2 + alto x2
   // Avanza 4 líneas y corta el papel.
   cut: GS + "VB\x04",
 };
@@ -82,31 +84,53 @@ function lineTotal(item: OrderDTO["items"][number]): number {
   return (item.price + opts) * item.quantity;
 }
 
-function textLine(text = ""): string {
-  return fold(text) + "\n";
+type Size = "normal" | "tall" | "wide" | "big";
+
+interface LineOpts {
+  size?: Size;
+  bold?: boolean;
+  center?: boolean;
+}
+
+// Una línea con estilo. Fija la alineación al principio (la alineación ESC/POS
+// es por-línea: hay que setearla antes del salto, no resetearla después). El
+// tamaño y la negrita sí se resetean al final (son por-carácter).
+function line(text = "", opts: LineOpts = {}): string {
+  const sizeCmd =
+    opts.size === "big"
+      ? CMD.sizeBig
+      : opts.size === "tall"
+        ? CMD.sizeTall
+        : opts.size === "wide"
+          ? CMD.sizeWide
+          : "";
+  let s = opts.center ? CMD.center : CMD.left;
+  if (opts.bold) s += CMD.boldOn;
+  s += sizeCmd + fold(text);
+  if (sizeCmd) s += CMD.sizeNormal;
+  if (opts.bold) s += CMD.boldOff;
+  return s + "\n";
 }
 
 function rule(ch = "-"): string {
-  return ch.repeat(WIDTH) + "\n";
+  return CMD.left + ch.repeat(WIDTH) + "\n";
 }
 
-// "izquierda ......... derecha" en una línea; si no entra, la derecha baja.
+// "izquierda ......... derecha" en una línea (tamaño normal, alineada a la
+// izquierda); si no entra, la derecha baja a su propia línea.
 function cols(left: string, right: string): string {
   const l = fold(left);
   const r = fold(right);
   const gap = WIDTH - l.length - r.length;
-  if (gap >= 1) return l + " ".repeat(gap) + r + "\n";
-  return l + "\n" + " ".repeat(Math.max(0, WIDTH - r.length)) + r + "\n";
-}
-
-function header(store: StoreInfo, lines: string[]): string {
-  let out = CMD.center + CMD.big + fold(store.name) + CMD.normal + "\n";
-  for (const l of lines) out += CMD.center + fold(l) + "\n";
-  return out + CMD.left;
+  const body =
+    gap >= 1
+      ? l + " ".repeat(gap) + r
+      : l + "\n" + " ".repeat(Math.max(0, WIDTH - r.length)) + r;
+  return CMD.left + body + "\n";
 }
 
 function footer(): string {
-  return CMD.center + fold(`gestionado con ${BRAND}`) + "\n" + CMD.left + CMD.cut;
+  return line(`gestionado con ${BRAND}`, { center: true }) + CMD.cut;
 }
 
 function paymentLine(order: OrderDTO): string {
@@ -116,47 +140,52 @@ function paymentLine(order: OrderDTO): string {
   }`;
 }
 
-// --- Ticket de cocina / local -------------------------------------------------
+// --- Ticket de cocina / local -----------------------------------------------
 
 export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
+  const isDelivery = order.orderType === "DELIVERY";
   let t = CMD.init;
-  t += header(store, []);
-  t += CMD.center + "COMANDA\n";
-  t += CMD.center + CMD.tall + "#" + order.number + CMD.normal + "\n";
-  t += CMD.center + fold(fmtDateTime(order.createdAt)) + "\n";
-  t += CMD.left + rule();
 
-  t +=
-    textLine(
-      order.orderType === "DELIVERY"
-        ? "ENVIO A DOMICILIO"
-        : "RETIRO EN EL LOCAL"
-    ) +
-    textLine(`${order.customerFirstName} ${order.customerLastName}`.trim()) +
-    textLine(order.customerPhone);
-  if (order.deliveryAddress) t += textLine(order.deliveryAddress);
+  // Identidad: nombre del local chico, número y canal enormes.
+  t += line(store.name, { center: true });
+  t += rule("=");
+  t += line("#" + order.number, { center: true, size: "big" });
+  t += line(isDelivery ? "ENVIO" : "RETIRO", {
+    center: true,
+    size: "wide",
+    bold: true,
+  });
+  t += line(fmtDateTime(order.createdAt), { center: true });
   t += rule();
 
+  // Cliente.
+  t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
+    bold: true,
+  });
+  t += line(order.customerPhone);
+  if (order.deliveryAddress) t += line(order.deliveryAddress, { bold: true });
+  t += rule();
+
+  // Ítems: grandes (el cocinero los lee de un vistazo). Adicionales y notas,
+  // tamaño normal e indentados.
   for (const it of order.items) {
-    t += CMD.boldOn + fold(`${it.quantity}x  ${it.productName}`) + CMD.boldOff + "\n";
+    t += line(`${it.quantity}x ${it.productName}`, { size: "tall", bold: true });
     if (it.options.length) {
-      t += textLine("    " + it.options.map((o) => o.name).join(", "));
+      t += line("   " + it.options.map((o) => o.name).join(", "));
     }
-    if (it.notes) t += textLine("    Nota: " + it.notes);
+    if (it.notes) t += line("   Nota: " + it.notes);
   }
   t += rule();
 
   if (order.notes) {
-    t += textLine("NOTA DEL PEDIDO:") + textLine(order.notes) + rule();
+    t += line("NOTA: " + order.notes, { bold: true });
+    t += rule();
   }
 
-  t += CMD.boldOn + cols("TOTAL", money(order.total)) + CMD.boldOff;
-  t += textLine(paymentLine(order));
-  if (
-    order.payment?.provider === "CASH" &&
-    order.payment.changeFor != null
-  ) {
-    t += textLine(
+  t += line("TOTAL   " + money(order.total), { bold: true });
+  t += line(paymentLine(order));
+  if (order.payment?.provider === "CASH" && order.payment.changeFor != null) {
+    t += line(
       `Paga con ${money(order.payment.changeFor)} - vuelto ${money(
         Math.max(0, order.payment.changeFor - order.total)
       )}`
@@ -167,16 +196,16 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   return t;
 }
 
-// --- Ticket del cliente -----------------------------------------------------
+// --- Ticket del cliente ---------------------------------------------------
 
 export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
   const subtotal = order.total - order.deliveryFee;
   let t = CMD.init;
 
-  const sub: string[] = [];
-  if (store.address) sub.push(store.address);
-  if (store.phone) sub.push(store.phone);
-  t += header(store, sub);
+  // Marca del local arriba, bien grande.
+  t += line(store.name, { center: true, size: "big" });
+  if (store.address) t += line(store.address, { center: true });
+  if (store.phone) t += line(store.phone, { center: true });
   t += rule();
 
   t += cols(`Pedido #${order.number}`, fmtDateTime(order.createdAt));
@@ -185,19 +214,22 @@ export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
   for (const it of order.items) {
     t += cols(`${it.quantity}x ${it.productName}`, money(lineTotal(it)));
     if (it.options.length) {
-      t += textLine("    " + it.options.map((o) => o.name).join(", "));
+      t += line("   " + it.options.map((o) => o.name).join(", "));
     }
   }
   t += rule();
 
   t += cols("Subtotal", money(subtotal));
   if (order.deliveryFee > 0) t += cols("Envio", money(order.deliveryFee));
-  t += CMD.boldOn + cols("TOTAL", money(order.total)) + CMD.boldOff;
+  t += line("");
+  // TOTAL: lo que el cliente mira. Grande y centrado.
+  t += line("TOTAL  " + money(order.total), { center: true, size: "big" });
   t += rule();
 
-  t += CMD.center + CMD.tall + "Gracias por su compra!" + CMD.normal + "\n";
-  t += CMD.center + fold(store.name) + "\n" + CMD.left;
-  t += "\n";
+  t += line("");
+  t += line("GRACIAS POR SU COMPRA", { center: true, size: "tall", bold: true });
+  t += line(store.name, { center: true });
+  t += line("");
   t += footer();
   return t;
 }
@@ -205,12 +237,12 @@ export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
 // Ticket corto para el botón "Imprimir prueba".
 export function buildTestTicket(store: StoreInfo): string {
   let t = CMD.init;
-  t += header(store, []);
-  t += CMD.center + "PRUEBA DE IMPRESION\n";
-  t += CMD.center + fold(fmtDateTime(new Date().toISOString())) + "\n";
-  t += CMD.left + rule();
-  t += textLine("Si estas leyendo esto, la comandera");
-  t += textLine("quedo conectada a Blend.");
+  t += line(store.name, { center: true, size: "big" });
+  t += line("PRUEBA DE IMPRESION", { center: true });
+  t += line(fmtDateTime(new Date().toISOString()), { center: true });
+  t += rule();
+  t += line("Si estas leyendo esto, la comandera");
+  t += line("quedo conectada a Blend.");
   t += rule();
   t += footer();
   return t;
