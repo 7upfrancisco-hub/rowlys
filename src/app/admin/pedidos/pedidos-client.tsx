@@ -232,12 +232,18 @@ export default function PedidosClient() {
       storeName?: string;
       storeAddress?: string | null;
       storePhone?: string | null;
+      prepTimeDeliveryMinutes?: number;
+      prepTimePickupMinutes?: number;
     }>("/api/settings")
       .then((s) => {
         setStore({
           name: s?.storeName || "Blend",
           address: s?.storeAddress ?? null,
           phone: s?.storePhone ?? null,
+          prepMinutes: {
+            delivery: s?.prepTimeDeliveryMinutes ?? 10,
+            pickup: s?.prepTimePickupMinutes ?? 10,
+          },
         });
       })
       .catch(() => {});

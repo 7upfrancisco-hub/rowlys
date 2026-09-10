@@ -9,12 +9,7 @@
 //    TOTAL grande. El detalle, tamaño normal.
 // En ambos, "Blend" queda como pie discreto.
 
-import {
-  PAYMENT_PROVIDER_LABELS,
-  PAYMENT_STATUS_LABELS,
-  formatCurrency,
-  type OrderDTO,
-} from "@/types";
+import { formatCurrency, type OrderDTO } from "@/types";
 
 // Nombre de la plataforma (marca). El del local sale de Settings.
 export const BRAND = "Blend";
@@ -46,6 +41,9 @@ export interface StoreInfo {
   name: string;
   address?: string | null;
   phone?: string | null;
+  // Minutos de preparación por canal (de Settings). Si vienen, la comanda
+  // muestra "Entrega estimada: HH:MM".
+  prepMinutes?: { pickup: number; delivery: number };
 }
 
 // Saca acentos y símbolos que las térmicas genéricas no mapean bien. Solo se
@@ -77,6 +75,25 @@ function fmtDateTime(iso: string): string {
 
 function money(n: number): string {
   return formatCurrency(Math.round(n));
+}
+
+function fmtClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString("es-AR", {
+    timeZone: AR_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+// Hora estimada de entrega = alta + demora del canal + demora extra del pedido.
+// Misma cuenta que el seguimiento del cliente (/pedido/[id]).
+function etaFor(order: OrderDTO, store: StoreInfo): string | null {
+  const p = store.prepMinutes;
+  if (!p) return null;
+  const base = order.orderType === "DELIVERY" ? p.delivery : p.pickup;
+  const mins = base + (order.extraDelayMinutes ?? 0);
+  return fmtClock(new Date(order.createdAt).getTime() + mins * 60000);
 }
 
 // Total de una línea del pedido: (precio unitario + adicionales) × cantidad.
@@ -156,69 +173,64 @@ function footer(): string {
   return line(`gestionado con ${BRAND}`, { center: true }) + CMD.cut;
 }
 
-function paymentLine(order: OrderDTO): string {
-  if (!order.payment) return "Sin pago";
-  return `${PAYMENT_PROVIDER_LABELS[order.payment.provider]} - ${
-    PAYMENT_STATUS_LABELS[order.payment.status]
-  }`;
-}
-
-// --- Ticket de cocina / local -----------------------------------------------
+// --- Ticket de cocina / local (estilo RestoSimple) -------------------------
+//
+// Sin plata: solo "TOTAL PRODUCTOS" + cantidad. El número de pedido va gigante
+// al final. El total en $ vive en el ticket del cliente.
 
 export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   const isDelivery = order.orderType === "DELIVERY";
+  const units = order.items.reduce((s, it) => s + it.quantity, 0);
+  const eta = etaFor(order, store);
   let t = CMD.init;
 
-  // Identidad: nombre del local chico, número enorme, canal grande.
   t += line(store.name, { center: true });
-  t += rule("=");
-  t += line("#" + order.number, { center: true, size: "xl" });
-  t += line(isDelivery ? "ENVIO" : "RETIRO", {
-    center: true,
-    size: "big",
-    bold: true,
-  });
   t += line(fmtDateTime(order.createdAt), { center: true });
-  t += rule();
+  t += rule("=");
 
-  // Cliente (doble alto, no doble ancho, para que no se corten nombres largos).
-  t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
-    size: "tall",
-    bold: true,
-  });
-  t += line(order.customerPhone, { size: "tall" });
-  if (order.deliveryAddress)
-    t += line(order.deliveryAddress, { size: "tall", bold: true });
-  t += rule();
-
-  // Ítems: bien grandes (el cocinero los lee de un vistazo). Adicionales y
-  // notas, un escalón abajo (doble alto).
+  // Ítems: centrados, grandes, sin precio.
   for (const it of order.items) {
-    t += line(`${it.quantity}x ${it.productName}`, { size: "big", bold: true });
+    t += line(`${it.quantity}x ${it.productName}`, {
+      center: true,
+      size: "big",
+      bold: true,
+    });
     if (it.options.length) {
-      t += line("  " + it.options.map((o) => o.name).join(", "), {
+      t += line(it.options.map((o) => o.name).join(", "), {
+        center: true,
         size: "tall",
       });
     }
-    if (it.notes) t += line("  Nota: " + it.notes, { size: "tall" });
+    if (it.notes) t += line("Nota: " + it.notes, { center: true, size: "tall" });
   }
   t += rule();
+
+  t += line(`TOTAL PRODUCTOS   ${units}`, {
+    center: true,
+    size: "tall",
+    bold: true,
+  });
+  t += rule();
+
+  // Canal + cliente + entrega.
+  t += line(isDelivery ? "ENVIO" : "RETIRO", { size: "big", bold: true });
+  t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
+    size: "tall",
+  });
+  if (order.deliveryAddress) t += line(order.deliveryAddress, { size: "tall" });
+  if (order.customerPhone) t += line(order.customerPhone, { size: "tall" });
+  if (eta) t += line(`Entrega estimada: ${eta}`, { size: "tall", bold: true });
 
   if (order.notes) {
-    t += line("NOTA: " + order.notes, { size: "big", bold: true });
     t += rule();
-  }
-
-  t += cols("TOTAL", money(order.total), { size: "tall", bold: true });
-  t += line(paymentLine(order), { size: "tall" });
-  if (order.payment?.provider === "CASH" && order.payment.changeFor != null) {
-    t += line(
-      `Paga con ${money(order.payment.changeFor)} - vuelto ${money(
-        Math.max(0, order.payment.changeFor - order.total)
-      )}`
-    );
+    t += line("NOTA: " + order.notes, { size: "big", bold: true });
   }
   t += rule();
+
+  // Número gigante al final (como el "T25" de RestoSimple).
+  t += line("");
+  t += line("#" + order.number, { center: true, size: "xl" });
+  t += line("");
   t += footer();
   return t;
 }

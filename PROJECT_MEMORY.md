@@ -1503,7 +1503,26 @@ casualidad. Ahora cada `line()`/`rule()`/`cols()` fija su alineación al princip
     TOTAL+pago a `tall`.
   - Cliente: **nombre del local a `xl`**; `Pedido #N` a `big`; ítems y subtotales a `tall`
     (columnas alineadas); **TOTAL a `xl` centrado**; "GRACIAS POR SU COMPRA" a `big`.
-- `tsc`/`build` limpios, sin schema. Deployado para reprobar en la comandera de Rowlys.
+- `tsc`/`build` limpios, sin schema. Deployado.
+
+### Fase 21c — comanda con el contenido/layout de RestoSimple (2026-09-09)
+
+El usuario mandó foto del ticket de comanda de RestoSimple y pidió replicar su **contenido**.
+Decisiones: **sin plata en la comanda** (solo "TOTAL PRODUCTOS" + cantidad de unidades; el $
+va en el ticket del cliente); el **número de pedido gigante al final** (como el "T25" de
+RestoSimple), no en el encabezado; **sumar "Entrega estimada: HH:MM"**.
+
+- `buildComandaTicket` reescrito: `Rowlys` + fecha (chico, centrado) → `===` → ítems
+  **centrados, grandes, sin precio** (opciones y notas centradas debajo, doble alto) → `---`
+  → `TOTAL PRODUCTOS  N` centrado → `---` → canal (`RETIRO`/`ENVIO`, big) + cliente + tel +
+  `Entrega estimada: HH:MM` (doble alto) → `---` → `NOTA:` del pedido (big) si hay → `---` →
+  **`#N` en `xl` centrado al final** → pie `gestionado con Blend`. Se sacó el total en $ y la
+  línea de medio de pago (y con eso `paymentLine` + los imports de `PAYMENT_*_LABELS`).
+- ETA: `StoreInfo` sumó `prepMinutes?: { pickup, delivery }`; `etaFor()` = alta + demora del
+  canal + `extraDelayMinutes` (misma cuenta que `/pedido/[id]`). `comanda-client` pasa
+  `prepTimes`; `pedidos-client` ahora también lee `prepTime*Minutes` de `/api/settings`.
+- El **ticket del cliente NO cambió** (solo se pidió la comanda).
+- `tsc`/`build` limpios, sin schema.
 
 ## Fase 22: base de datos de clientes (en código, 2026-09-08)
 
@@ -1621,7 +1640,7 @@ cancelar y rehacer, recalculando total y monto del pago. **Sin cambios de schema
 
 ## Historial de decisiones (log)
 
-- **2026-09-09** — El usuario confirmó que la **impresión de tickets (Fase 21) anda bien en la comandera del local**. Pidió rediseñar ambos tickets por jerarquía de tamaños → **Fase 21b**: `escpos.ts` reescrito con un helper `line({ size, bold, center })` (size: normal/tall/wide/big), fix de la alineación ESC/POS (es por-línea, se setea antes del `\n`). Comanda: `#N` grande, canal en doble ancho, ítems doble alto. Cliente: TOTAL grande y centrado. Deployado para probar; si no convence, el usuario manda foto del ticket de RestoSimple y se replica. Sin schema.
+- **2026-09-09** — El usuario confirmó que la **impresión de tickets (Fase 21) anda bien en la comandera del local**. Iteraciones de diseño de los tickets: **21b** — helper `line({ size, bold, center })` con sizes normal/tall/wide/big/xl + fix de la alineación ESC/POS (es por-línea, va antes del `\n`); 1ra versión salió chica → 2da versión sube todo (cuerpo en doble alto, `#N`/`TOTAL`/nombre del local en xl). **21c** — la **comanda pasa a tener el contenido de RestoSimple**: sin plata (solo "TOTAL PRODUCTOS N"), ítems centrados sin precio, "Entrega estimada: HH:MM", y `#N` gigante al final (tipo "T25"). El ticket del cliente quedó igual. Todo sin schema, deployado.
 - **2026-09-08** — El usuario eligió **editar pedido en la comanda**. **Fase 24** sin schema: se extrajo `resolveItems` en `src/lib/orders.ts` (compartido crear/editar), nuevo `updateOrderItems` + `POST /api/admin/orders/[id]/items` (reemplaza ítems en transacción, recalcula total y `payment.amount`), módulo compartido `order-line-picker.tsx` (`MenuColumn` + `ProductOptionsPanel`, refactor de `new-order-modal`), y `edit-order-modal.tsx` abierto desde "✏️ Editar pedido" en el menú ⋯ de la comanda. Editable: ítems/cantidades/adicionales (quitar+re-agregar)/nota. No editable: tipo, cliente, dirección, medio de pago. `tsc`/`build` limpios, push directo.
 - **2026-09-08** — El usuario eligió **limpieza de pedidos fantasma** (pedidos MP que nunca se pagan y quedan PENDING ocultos). Se implementó la **Fase 23** sin schema: `src/lib/phantom-orders.ts` (`sweepPhantomOrders` cancela los MP sin pagar de +3 h), barrido oportunista con throttle 10 min dentro de `GET /api/orders` (sin cron), `GET/POST /api/admin/orders/cleanup-unpaid` + banner con botón en `/admin/pedidos`, expiración de la preferencia de MP a 3 h (`expires`/`expiration_date_to`), y blindaje en el webhook (revive a PENDING si entra un pago confirmado a un pedido ya auto-cancelado). `tsc`/`build` limpios. Se puede pushear directo (sin `db push`).
 - **2026-09-08** — El usuario pidió una **base de datos de clientes** (todos los que compran). Definió: identidad por teléfono normalizado, ficha con historial de pedidos + direcciones de envío usadas, stats (total gastado / cantidad de pedidos) solo sobre pedidos facturables. Se implementó la **Fase 22**: modelo `Customer` (dedup por `phone`) + `Order.customerId`, upsert del cliente dentro de `createOrder`, `GET /api/admin/customers[/[id]]`, pantalla `/admin/clientes` (tabla + modal de ficha), link en el tablero, y `prisma/backfill-customers.ts` (script one-shot idempotente). Sin notas internas ni ranking de productos (no se pidieron). **Deployado** (`be57715`+`94beb9a`): el usuario corrió `npx.cmd prisma db push` + `npx.cmd tsx prisma/backfill-customers.ts` → 2 clientes desde 26 pedidos. (`npx` pelado falla por ExecutionPolicy de PowerShell, usar `npx.cmd`.)
