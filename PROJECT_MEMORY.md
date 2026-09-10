@@ -1493,13 +1493,17 @@ El usuario pidió cambiar el diseño de ambos tickets, enfocado en tamaños/jera
 ESC/POS es por-línea — hay que setearla ANTES del `\n`, no resetearla después; antes andaba de
 casualidad. Ahora cada `line()`/`rule()`/`cols()` fija su alineación al principio.
 
-- **Comanda**: nombre del local pasa a chico; **`#N` a `big`** (x2 x2); **canal `RETIRO`/`ENVIO`
-  a `wide` + negrita**; **ítems a `tall`** (alto x2) + negrita; nombre del cliente y dirección
-  de envío en negrita; regla `===` bajo el encabezado.
-- **Cliente**: nombre del local sigue `big`; **TOTAL pasa a `big` centrado** con línea en blanco
-  antes (antes era negrita normal en columna); más aire alrededor del "GRACIAS POR SU COMPRA".
-- `tsc`/`build` limpios, sin schema. Deployado para probar en la comandera de Rowlys; si no
-  convence, el usuario manda una foto del ticket que usa el local (RestoSimple) y se replica.
+- Helper `line({ size, bold, center })` con sizes normal / tall (alto x2) / wide (ancho x2) /
+  big (x2 x2) / **xl (x3 x3)**. `cols(l, r, { size, bold })` acepta solo `tall` (no cambia el
+  ancho, así la columna de precios sigue alineada).
+- **1ª iteración** salió chica en hardware real (el usuario mandó foto comparando con el ticket
+  de RestoSimple, que usa fuente mucho más grande). **2ª iteración (subir todo)**:
+  - Comanda: nombre del local chico; **`#N` a `xl`** (x3); **canal `RETIRO`/`ENVIO` a `big`**;
+    **ítems a `big`** (x2 x2); cliente / teléfono / dirección a `tall`; NOTA a `big`;
+    TOTAL+pago a `tall`.
+  - Cliente: **nombre del local a `xl`**; `Pedido #N` a `big`; ítems y subtotales a `tall`
+    (columnas alineadas); **TOTAL a `xl` centrado**; "GRACIAS POR SU COMPRA" a `big`.
+- `tsc`/`build` limpios, sin schema. Deployado para reprobar en la comandera de Rowlys.
 
 ## Fase 22: base de datos de clientes (en código, 2026-09-08)
 
