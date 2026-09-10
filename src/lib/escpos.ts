@@ -3,8 +3,8 @@
 // en `/admin/pedidos`, para armar el texto que después se manda a QZ Tray.
 //
 // Dos tickets por pedido:
-//  - buildComandaTicket: para la cocina. Jerarquía: número de pedido y canal
-//    (retiro/envío) enormes, ítems grandes. El resto, chico.
+//  - buildComandaTicket: para la cocina. "blend" arriba; número de pedido
+//    gigante (~1.5 cm) al final; ítems a x3; el resto de los datos a x2.
 //  - buildClienteTicket: para el cliente. Jerarquía: nombre del local arriba y
 //    TOTAL grande. El detalle, tamaño normal.
 // En ambos, "Blend" queda como pie discreto.
@@ -33,6 +33,7 @@ const CMD = {
   sizeWide: GS + "!\x10", // ancho x2
   sizeBig: GS + "!\x11", // ancho x2 + alto x2
   sizeXl: GS + "!\x22", // ancho x3 + alto x3
+  sizeHuge: GS + "!\x44", // ancho x5 + alto x5 (~1.5 cm de alto)
   // Avanza 4 líneas y corta el papel.
   cut: GS + "VB\x04",
 };
@@ -102,10 +103,12 @@ function lineTotal(item: OrderDTO["items"][number]): number {
   return (item.price + opts) * item.quantity;
 }
 
-type Size = "normal" | "tall" | "wide" | "big" | "xl";
+type Size = "normal" | "tall" | "wide" | "big" | "xl" | "huge";
 
 function sizeCmd(size?: Size): string {
   switch (size) {
+    case "huge":
+      return CMD.sizeHuge;
     case "xl":
       return CMD.sizeXl;
     case "big":
@@ -176,7 +179,8 @@ function footer(): string {
 // --- Ticket de cocina / local (estilo RestoSimple) -------------------------
 //
 // Sin plata: solo "TOTAL PRODUCTOS" + cantidad. El número de pedido va gigante
-// al final. El total en $ vive en el ticket del cliente.
+// al final. El total en $ vive en el ticket del cliente. Escala (referencia:
+// el número de pedido mide ~1.5 cm): ítems a x3, el resto de los datos a x2.
 
 export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   const isDelivery = order.orderType === "DELIVERY";
@@ -184,42 +188,44 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   const eta = etaFor(order, store);
   let t = CMD.init;
 
+  // Marca arriba; nombre del local y fecha, chicos, debajo.
+  t += line("blend", { center: true, size: "xl", bold: true });
   t += line(store.name, { center: true });
   t += line(fmtDateTime(order.createdAt), { center: true });
   t += rule("=");
 
-  // Ítems: centrados, grandes, sin precio.
+  // Ítems: centrados, x3, sin precio. Opciones y nota del ítem a x2.
   for (const it of order.items) {
     t += line(`${it.quantity}x ${it.productName}`, {
       center: true,
-      size: "big",
+      size: "xl",
       bold: true,
     });
     if (it.options.length) {
       t += line(it.options.map((o) => o.name).join(", "), {
         center: true,
-        size: "tall",
+        size: "big",
       });
     }
-    if (it.notes) t += line("Nota: " + it.notes, { center: true, size: "tall" });
+    if (it.notes) t += line("Nota: " + it.notes, { center: true, size: "big" });
   }
   t += rule();
 
   t += line(`TOTAL PRODUCTOS   ${units}`, {
     center: true,
-    size: "tall",
+    size: "big",
     bold: true,
   });
   t += rule();
 
-  // Canal + cliente + entrega.
+  // Canal + cliente + entrega, todo a x2.
   t += line(isDelivery ? "ENVIO" : "RETIRO", { size: "big", bold: true });
   t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
-    size: "tall",
+    size: "big",
   });
-  if (order.deliveryAddress) t += line(order.deliveryAddress, { size: "tall" });
-  if (order.customerPhone) t += line(order.customerPhone, { size: "tall" });
-  if (eta) t += line(`Entrega estimada: ${eta}`, { size: "tall", bold: true });
+  if (order.deliveryAddress) t += line(order.deliveryAddress, { size: "big" });
+  if (order.customerPhone) t += line(order.customerPhone, { size: "big" });
+  if (eta) t += line(`Entrega estimada: ${eta}`, { size: "big", bold: true });
 
   if (order.notes) {
     t += rule();
@@ -227,9 +233,9 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   }
   t += rule();
 
-  // Número gigante al final (como el "T25" de RestoSimple).
+  // Número gigante al final (~1.5 cm de alto, como el "T25" de RestoSimple).
   t += line("");
-  t += line("#" + order.number, { center: true, size: "xl" });
+  t += line("#" + order.number, { center: true, size: "huge" });
   t += line("");
   t += footer();
   return t;
