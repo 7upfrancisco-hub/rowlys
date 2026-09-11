@@ -1786,10 +1786,69 @@ que ya existe en el dashboard (grupo "Configuración" con sub-tarjetas: hasta ah
 - `/admin/personalizacion` queda protegido automáticamente por el matcher existente
   (`/admin/:path*` en `middleware.ts`), sin tocar nada de auth.
 - `tsc`/`build` limpios (`next build` exit 0). Verificado con curl que ambas rutas responden
-  307 (redirect a `/login` sin sesión) en vez de 500. Falta commitear/pushear.
+  307 (redirect a `/login` sin sesión) en vez de 500. **Commiteado y pusheado** (commit
+  `f7ae760`, `origin/main` al día).
+
+### Fase 21e — certificado de firma de QZ Tray, cargado en Vercel (en curso, 2026-09-11)
+
+El usuario reportó (con foto) que al imprimir le aparece siempre el cartel "Action
+Required / Allow-Block" de QZ Tray — molesto, hay que tildarlo en cada ticket. Causa
+confirmada leyendo las env vars de Vercel: **`QZ_CERT`/`QZ_PRIVATE_KEY` nunca se habían
+cargado** en producción (la Fase 21 los dejó documentados en `PRINTING_SETUP.md` pero no se
+habían generado ni cargado — sin ellos, `POST/GET /api/admin/print/sign` responde vacío y
+QZ Tray no tiene forma de confiar automáticamente).
+
+- Generé el par cert/clave con OpenSSL (Git Bash local, `MSYS_NO_PATHCONV=1` porque MSYS
+  reescribe como ruta de Windows cualquier argumento que empiece con `/`, como `-subj
+  "/CN=Blend/O=Blend"` — quedaba `C:/Program Files/Git/CN=Blend/O=Blend` y openssl fallaba).
+  Archivos guardados en `C:\Users\Usuario\qz-cert\` (fuera del repo, nunca commitear) y
+  enviados al usuario por `SendUserFile` para que los tenga a mano en otro dispositivo.
+- **Gotcha real de esta sesión**: `vercel env add` (y en general `npx` de scripts `.ps1`) en
+  la **PowerShell** del usuario falla con `UnauthorizedAccess` porque tiene la política de
+  ejecución de scripts deshabilitada — síntoma ya conocido (ver sección "Infra/despliegue"),
+  la solución que ya funcionaba antes era `npx.cmd` en vez de `npx`, pero esta vez se resolvió
+  más simple todavía: **usar una terminal de Git Bash en VSCode en vez de PowerShell** — ahí
+  `npx` corre el shim POSIX directo, sin tocar `.ps1` ni política de ejecución alguna. Dejarlo
+  como recomendación por defecto para cualquier futuro `vercel env add`/similar en esta
+  máquina, más simple que acordarse de `.cmd`.
+- **`QZ_CERT` y `QZ_PRIVATE_KEY` ya están cargados en Vercel producción** (confirmado leyendo
+  `vercel env ls production`, algo que sí puedo hacer yo — es lectura) y ya se redeployó
+  después de cada uno (confirmado con `vercel ls`, deployments más nuevos que cada env var).
+- **Pendiente, pausado por el usuario** (la PC de la comandera la están usando para trabajar):
+  copiar el contenido de `digital-certificate.txt` como
+  `C:\Program Files\QZ Tray\demo\assets\override.crt` en **esa** PC (no esta — QZ Tray no
+  está instalado en la máquina de esta sesión), reiniciar QZ Tray del todo (Exit desde el
+  ícono de la bandeja, no solo cerrar la ventana), y probar "Imprimir prueba" desde
+  `/comanda` para confirmar que el cartel ya no aparece. Sin esto, aunque las env vars ya
+  estén en Vercel, la PC de la comandera todavía no confía en el certificado y seguiría
+  preguntando.
+
+### Fase 21f — datos de envío en el ticket del cliente, para el repartidor (en código, 2026-09-11)
+
+El usuario pidió que el **ticket del cliente** (el segundo ticket, el que físicamente viaja
+con el pedido) sume nombre/dirección/teléfono cuando es delivery — el repartidor no tiene
+acceso al panel, necesita esos datos en el papel para hacer la entrega.
+
+- `buildClienteTicket` (`src/lib/escpos.ts`): si `order.orderType === "DELIVERY"`, después de
+  "Pedido #N" / fecha y antes del detalle de ítems, suma un bloque **"ENVIO A:"** (bold, x2)
+  con nombre y apellido, dirección (si hay) y teléfono (si hay), todo en negrita a `tall`
+  (x2 de alto) para que se lea fácil. En pickup no cambia nada — sigue igual que antes.
+- La **comanda** (ticket de cocina) ya tenía estos mismos datos (Fase 21c) — esto solo replica
+  la parte de envío en el segundo ticket, no toca `buildComandaTicket`.
+- `tsc`/`build` limpios. Falta commitear/pushear y probar en la comandera real (junto con el
+  `override.crt` pendiente de la Fase 21e).
 
 ## Historial de decisiones (log)
 
+- **2026-09-11** — El usuario reportó (con foto) el cartel "Action Required" de QZ Tray
+  apareciendo en cada impresión. Causa: `QZ_CERT`/`QZ_PRIVATE_KEY` nunca se habían cargado en
+  Vercel (documentado en `PRINTING_SETUP.md` desde la Fase 21 pero nunca ejecutado). Generé
+  el par cert/clave, se lo mandé al usuario por `SendUserFile`, y lo ayudé a cargarlo en
+  Vercel producción — la PowerShell del usuario no podía correr `npx` por política de
+  ejecución de scripts, se resolvió usando una terminal de Git Bash en vez de PowerShell.
+  Ambas env vars confirmadas en Vercel + redeploy hecho. Ver "Fase 21e". **Pendiente,
+  pausado por el usuario**: instalar `override.crt` en la PC de la comandera (la están
+  usando para trabajar) — sin eso el cartel va a seguir apareciendo ahí.
 - **2026-09-11** — El usuario pidió poder "editar y hacer una configuración del menú online, para que cada resto pueda tener su personalización de menú". Charlado antes de codear: confirmó que es porque Blend es su marca/producto pensado para vender a varios locales (no una sola personalización interna) — pivot real respecto a la decisión "no multi-tenant" que ya estaba anotada. Acordamos plan en 2 etapas (motor de personalización visual ya, multi-tenant real con el segundo local) y que el color de marca sea un **color picker libre** (no paletas prearmadas), con el resto de la paleta derivada automáticamente para garantizar contraste. Implementada la **Fase 25**: `themeColor`/`themeFont` en `Settings`, `theme-color.ts` (fórmula de derivación, con protección de contraste), catálogo de 8 tipografías vía `next/font`, `StorefrontTheme` (wrapper server que inyecta CSS vars + fuente), reemplazo del rojo hardcodeado por tokens dinámicos en las 4 páginas del cliente, y sección nueva con preview en vivo en `/admin/configuracion`. `prisma db push` corrido con éxito (sin bloqueo esta vez), verificado contra Neon. `tsc`/`build` limpios. Falta probar en navegador y pushear.
 - **2026-09-10** — El usuario pidió otra iteración de la **comanda** (**Fase 21d**), con foto del ticket de RestoSimple como referencia de escala: el número de pedido mide ~1,5 cm, y con esa escala hay que agrandar la fuente de los datos; además "blend" arriba, en el espacio en blanco del encabezado. Decisiones tomadas por el usuario: "blend" grande (x3) arriba + nombre del local chico debajo; ítems a x3, el resto de los datos (canal, cliente, TOTAL PRODUCTOS, entrega estimada, NOTA) a x2, `#N` a ~1,5 cm (nuevo `sizeHuge` = GS ! \x44, x5). El contenido no cambió (ya era el de RestoSimple desde 21c), solo tamaños + la marca. Ticket del cliente intacto. Sin schema, `tsc`/`build` limpios. Falta commit/push y verificar en la comandera real.
 - **2026-09-09** — El usuario confirmó que la **impresión de tickets (Fase 21) anda bien en la comandera del local**. Iteraciones de diseño de los tickets: **21b** — helper `line({ size, bold, center })` con sizes normal/tall/wide/big/xl + fix de la alineación ESC/POS (es por-línea, va antes del `\n`); 1ra versión salió chica → 2da versión sube todo (cuerpo en doble alto, `#N`/`TOTAL`/nombre del local en xl). **21c** — la **comanda pasa a tener el contenido de RestoSimple**: sin plata (solo "TOTAL PRODUCTOS N"), ítems centrados sin precio, "Entrega estimada: HH:MM", y `#N` gigante al final (tipo "T25"). El ticket del cliente quedó igual. Todo sin schema, deployado.

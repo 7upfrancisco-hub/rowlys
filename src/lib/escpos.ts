@@ -5,8 +5,10 @@
 // Dos tickets por pedido:
 //  - buildComandaTicket: para la cocina. "blend" arriba; número de pedido
 //    gigante (~1.5 cm) al final; ítems a x3; el resto de los datos a x2.
-//  - buildClienteTicket: para el cliente. Jerarquía: nombre del local arriba y
-//    TOTAL grande. El detalle, tamaño normal.
+//  - buildClienteTicket: para el cliente (y, si es delivery, para el
+//    repartidor — es el ticket que viaja físicamente con el pedido). Jerarquía:
+//    nombre del local arriba y TOTAL grande. El detalle, tamaño normal. Si es
+//    envío, suma nombre/dirección/teléfono del cliente antes del detalle.
 // En ambos, "Blend" queda como pie discreto.
 
 import { formatCurrency, type OrderDTO } from "@/types";
@@ -245,6 +247,7 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
 
 export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
   const subtotal = order.total - order.deliveryFee;
+  const isDelivery = order.orderType === "DELIVERY";
   let t = CMD.init;
 
   // Marca del local arriba, bien grande.
@@ -255,6 +258,22 @@ export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
 
   t += line(`Pedido #${order.number}`, { size: "big", bold: true });
   t += line(fmtDateTime(order.createdAt), { size: "tall" });
+
+  // Datos de envío: este ticket es el que viaja con el pedido, así que si es
+  // delivery el repartidor necesita nombre/dirección/teléfono acá (no tiene
+  // acceso al panel).
+  if (isDelivery) {
+    t += rule();
+    t += line("ENVIO A:", { size: "big", bold: true });
+    t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
+      size: "tall",
+      bold: true,
+    });
+    if (order.deliveryAddress)
+      t += line(order.deliveryAddress, { size: "tall", bold: true });
+    if (order.customerPhone)
+      t += line("Tel: " + order.customerPhone, { size: "tall", bold: true });
+  }
   t += rule();
 
   // Detalle: doble alto (mantiene el ancho para que la columna de precios
