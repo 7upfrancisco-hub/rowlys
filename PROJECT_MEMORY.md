@@ -1758,8 +1758,35 @@ tenga **solo dos opciones, blanco o negro**.
   Windows (`EPERM` renombrando el `.dll.node`) — hubo que matar el proceso en el puerto 3000
   antes de regenerar. A tener en cuenta la próxima vez que se cambie el schema con el dev
   server local corriendo.
-- `tsc`/`build` limpios. Sin probar el toggle en el navegador todavía (sí verificado a nivel
-  HTML/DB). Falta commitear/pushear (junto con el resto de la Fase 25).
+- `tsc`/`build` limpios. **Commiteado y pusheado** junto con el resto de la Fase 25 (commit
+  `50c50fc`, push corrido por el usuario). Probado en navegador: el usuario vio el toggle
+  renderizado y marcó un bug visual (el botón "Negro" quedaba más angosto que "Blanco",
+  ancho por contenido en vez de parejo) — se corrigió con `w-56` en el contenedor + `flex-1
+  text-center` en cada botón, para que los dos midan siempre lo mismo sin importar el largo
+  del texto.
+
+### Fase 25c — separar "Personalización" en su propio apartado de Configuración (2026-09-11)
+
+El usuario pidió que la sección de personalización NO viva apilada dentro del mismo
+formulario que "Datos del local" — la quiere como su propio apartado, siguiendo el patrón
+que ya existe en el dashboard (grupo "Configuración" con sub-tarjetas: hasta ahora
+"Repartidores" y "Datos del local").
+
+- **`/admin/personalizacion`** (nuevo): página + `personalizacion-client.tsx`, extraído tal
+  cual del bloque que estaba en `configuracion-client.tsx` (color de marca, tipografía,
+  toggle blanco/negro, preview en vivo). Su `PATCH /api/admin/settings` manda **solo**
+  `themeColor`/`themeFont`/`themeOnAccent` (no pisa nada de "Datos del local" — Prisma
+  `update` con un campo ausente/`undefined` no lo toca).
+- **`configuracion-client.tsx`**: vuelve a ser solo "Datos del local" (nombre, teléfono,
+  dirección, alias bancario, envío, demora, estado abierto/cerrado). Título del `<h2>`
+  cambiado de "Configuración" a "Datos del local" para que coincida con la tarjeta del
+  dashboard. Ya no importa nada de `theme-color.ts`/`storefront-fonts.ts`.
+- **`dashboard-client.tsx`**: el grupo "Configuración" suma la tarjeta "Personalización" →
+  `/admin/personalizacion`.
+- `/admin/personalizacion` queda protegido automáticamente por el matcher existente
+  (`/admin/:path*` en `middleware.ts`), sin tocar nada de auth.
+- `tsc`/`build` limpios (`next build` exit 0). Verificado con curl que ambas rutas responden
+  307 (redirect a `/login` sin sesión) en vez de 500. Falta commitear/pushear.
 
 ## Historial de decisiones (log)
 

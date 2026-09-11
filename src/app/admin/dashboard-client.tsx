@@ -78,6 +78,11 @@ const GROUPS = [
         label: "Datos del local",
         desc: "Envío, alias bancario, horarios",
       },
+      {
+        href: "/admin/personalizacion",
+        label: "Personalización",
+        desc: "Color de marca y tipografía de la carta",
+      },
     ],
   },
 ];
