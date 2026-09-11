@@ -1835,8 +1835,28 @@ acceso al panel, necesita esos datos en el papel para hacer la entrega.
   (x2 de alto) para que se lea fácil. En pickup no cambia nada — sigue igual que antes.
 - La **comanda** (ticket de cocina) ya tenía estos mismos datos (Fase 21c) — esto solo replica
   la parte de envío en el segundo ticket, no toca `buildComandaTicket`.
-- `tsc`/`build` limpios. Falta commitear/pushear y probar en la comandera real (junto con el
-  `override.crt` pendiente de la Fase 21e).
+- `tsc`/`build` limpios. **Commiteado** (`bf5f9a6`, sin pushear todavía). Falta probar en la
+  comandera real (junto con el `override.crt` pendiente de la Fase 21e). Superado en parte
+  por la Fase 21g (ver abajo): la comanda dejó de mostrar dirección/teléfono, así que ahora
+  ese dato SOLO vive en este ticket del cliente — más motivo para que el repartidor use este
+  ticket y no el de cocina.
+
+### Fase 21g — comanda: sacar dirección/teléfono/entrega estimada, sumar T/D al número (en código, 2026-09-11)
+
+El usuario pidió aligerar la comanda (cocina no necesita esos datos, ya están en el ticket
+del cliente desde la Fase 21f) y agregar el canal como letra junto al número de pedido.
+
+- `buildComandaTicket`: se sacaron las líneas de `deliveryAddress`, `customerPhone` y
+  "Entrega estimada" — el bloque de canal+cliente ahora es solo `RETIRO`/`ENVIO` + nombre.
+  El número final pasa de `#N` a **`T #N`** (retiro) / **`D #N`** (delivery), mismo tamaño
+  `huge` (~1,5 cm) de antes.
+- Limpieza de código muerto que quedó al sacar la entrega estimada: `etaFor()`, `fmtClock()`
+  y `StoreInfo.prepMinutes` se borraron de `escpos.ts` (nada más los usaba — el ticket del
+  cliente nunca mostró ETA). Los dos call sites que armaban ese campo para pasarlo
+  (`comanda-client.tsx`, `admin/pedidos/pedidos-client.tsx`) se actualizaron para no
+  construirlo más. El widget de "demora estimada" editable del header de `/comanda` (otra
+  cosa, no tiene que ver con el ticket) sigue intacto — usa su propio estado `prepTimes`.
+- `tsc`/`build` limpios. Falta commitear/pushear.
 
 ## Historial de decisiones (log)
 

@@ -4,7 +4,9 @@
 //
 // Dos tickets por pedido:
 //  - buildComandaTicket: para la cocina. "blend" arriba; número de pedido
-//    gigante (~1.5 cm) al final; ítems a x3; el resto de los datos a x2.
+//    gigante (~1.5 cm) al final, con T/D de canal a la izquierda; ítems a x3;
+//    el resto de los datos a x2. Sin dirección/teléfono/entrega estimada
+//    (esos datos van solo en el ticket del cliente).
 //  - buildClienteTicket: para el cliente (y, si es delivery, para el
 //    repartidor — es el ticket que viaja físicamente con el pedido). Jerarquía:
 //    nombre del local arriba y TOTAL grande. El detalle, tamaño normal. Si es
@@ -44,9 +46,6 @@ export interface StoreInfo {
   name: string;
   address?: string | null;
   phone?: string | null;
-  // Minutos de preparación por canal (de Settings). Si vienen, la comanda
-  // muestra "Entrega estimada: HH:MM".
-  prepMinutes?: { pickup: number; delivery: number };
 }
 
 // Saca acentos y símbolos que las térmicas genéricas no mapean bien. Solo se
@@ -78,25 +77,6 @@ function fmtDateTime(iso: string): string {
 
 function money(n: number): string {
   return formatCurrency(Math.round(n));
-}
-
-function fmtClock(ms: number): string {
-  return new Date(ms).toLocaleTimeString("es-AR", {
-    timeZone: AR_TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
-// Hora estimada de entrega = alta + demora del canal + demora extra del pedido.
-// Misma cuenta que el seguimiento del cliente (/pedido/[id]).
-function etaFor(order: OrderDTO, store: StoreInfo): string | null {
-  const p = store.prepMinutes;
-  if (!p) return null;
-  const base = order.orderType === "DELIVERY" ? p.delivery : p.pickup;
-  const mins = base + (order.extraDelayMinutes ?? 0);
-  return fmtClock(new Date(order.createdAt).getTime() + mins * 60000);
 }
 
 // Total de una línea del pedido: (precio unitario + adicionales) × cantidad.
@@ -181,13 +161,14 @@ function footer(): string {
 // --- Ticket de cocina / local (estilo RestoSimple) -------------------------
 //
 // Sin plata: solo "TOTAL PRODUCTOS" + cantidad. El número de pedido va gigante
-// al final. El total en $ vive en el ticket del cliente. Escala (referencia:
-// el número de pedido mide ~1.5 cm): ítems a x3, el resto de los datos a x2.
+// al final, con T (takeaway) o D (delivery) a la izquierda. El total en $,
+// la dirección, el teléfono y la entrega estimada viven en el ticket del
+// cliente. Escala (referencia: el número de pedido mide ~1.5 cm): ítems a x3,
+// el resto de los datos a x2.
 
 export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   const isDelivery = order.orderType === "DELIVERY";
   const units = order.items.reduce((s, it) => s + it.quantity, 0);
-  const eta = etaFor(order, store);
   let t = CMD.init;
 
   // Marca arriba; nombre del local y fecha, chicos, debajo.
@@ -220,14 +201,13 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   });
   t += rule();
 
-  // Canal + cliente + entrega, todo a x2.
+  // Canal + cliente, a x2. Sin dirección/teléfono/entrega estimada — esos
+  // datos van en el ticket del cliente (Fase 21f), no hace falta duplicarlos
+  // acá.
   t += line(isDelivery ? "ENVIO" : "RETIRO", { size: "big", bold: true });
   t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
     size: "big",
   });
-  if (order.deliveryAddress) t += line(order.deliveryAddress, { size: "big" });
-  if (order.customerPhone) t += line(order.customerPhone, { size: "big" });
-  if (eta) t += line(`Entrega estimada: ${eta}`, { size: "big", bold: true });
 
   if (order.notes) {
     t += rule();
@@ -235,9 +215,13 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   }
   t += rule();
 
-  // Número gigante al final (~1.5 cm de alto, como el "T25" de RestoSimple).
+  // Número gigante al final (~1.5 cm de alto, como el "T25" de RestoSimple),
+  // con el canal como letra a la izquierda: T = takeaway/retiro, D = delivery.
   t += line("");
-  t += line("#" + order.number, { center: true, size: "huge" });
+  t += line((isDelivery ? "D #" : "T #") + order.number, {
+    center: true,
+    size: "huge",
+  });
   t += line("");
   t += footer();
   return t;

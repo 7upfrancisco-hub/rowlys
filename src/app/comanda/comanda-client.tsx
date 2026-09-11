@@ -379,7 +379,6 @@ export default function ComandaClient() {
     name: storeName,
     address: storeContact.address,
     phone: storeContact.phone,
-    prepMinutes: prepTimes ?? undefined,
   };
 
   // Imprime los dos tickets (comanda + cliente) de un pedido.
