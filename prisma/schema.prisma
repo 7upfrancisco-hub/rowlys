@@ -230,5 +230,20 @@ model Settings {
   // checkout y en el seguimiento del pedido. Editable desde /comanda.
   prepTimeDeliveryMinutes Int @default(10)
   prepTimePickupMinutes   Int @default(10)
+  // Personalización visual de la carta online (etapa 1 hacia multi-tenant:
+  // hoy vive en la fila única de Settings; el día que exista un modelo
+  // Tenant, estos dos campos se mudan ahí tal cual). themeColor es el color
+  // de marca elegido libremente por el local (hex); el resto de la paleta
+  // del storefront (texto/tinte, botón sólido, hover, color de texto sobre
+  // el botón) se DERIVA de este valor en src/lib/theme-color.ts, nunca se
+  // guarda calculado, para poder ajustar la fórmula sin migrar datos.
+  // themeFont es la clave de una tipografía curada (src/lib/storefront-fonts.ts).
+  themeColor String @default("#c92a2a")
+  themeFont  String @default("inter")
+  // "Color secundario" en la jerga del local: blanco o negro, el texto/
+  // íconos que van SOBRE themeColor (el "+", el texto de los botones). Es
+  // una elección manual, no calculada — reemplaza el contraste automático
+  // que sugiere src/lib/theme-color.ts cuando el local no tocó esto todavía.
+  themeOnAccent String @default("white")
   updatedAt       DateTime @updatedAt
 }

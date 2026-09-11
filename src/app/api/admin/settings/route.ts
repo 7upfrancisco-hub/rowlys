@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { isValidHex, isOnAccentChoice } from "@/lib/theme-color";
+import { isStorefrontFontKey } from "@/lib/storefront-fonts";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,9 @@ export async function GET() {
     closedImageUrl: null,
     prepTimeDeliveryMinutes: 10,
     prepTimePickupMinutes: 10,
+    themeColor: "#c92a2a",
+    themeFont: "inter",
+    themeOnAccent: "white",
     updatedAt: new Date().toISOString(),
   });
 }
@@ -47,6 +52,21 @@ const settingsSchema = z.object({
   closedImageUrl: z.string().trim().nullable().optional(),
   prepTimeDeliveryMinutes: z.number().int().min(0).max(240).optional(),
   prepTimePickupMinutes: z.number().int().min(0).max(240).optional(),
+  themeColor: z
+    .string()
+    .trim()
+    .refine(isValidHex, "Color inválido (usá formato #rrggbb).")
+    .optional(),
+  themeFont: z
+    .string()
+    .trim()
+    .refine(isStorefrontFontKey, "Tipografía inválida.")
+    .optional(),
+  themeOnAccent: z
+    .string()
+    .trim()
+    .refine(isOnAccentChoice, "El color secundario es blanco o negro.")
+    .optional(),
 });
 
 export async function PATCH(request: Request) {

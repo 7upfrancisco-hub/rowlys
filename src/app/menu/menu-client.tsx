@@ -145,7 +145,7 @@ export default function MenuClient() {
       <ThemeToggle />
 
       {readOnly && (
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-store-500/10 px-6 py-2 text-sm">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-accent/10 px-6 py-2 text-sm">
           <span className="font-medium text-accent">
             {storeInfo?.closedTitle || "Estamos cerrados"} · solo podés ver el menú
           </span>
@@ -173,7 +173,7 @@ export default function MenuClient() {
                   className={
                     "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-40 " +
                     (orderType === type
-                      ? "bg-store-600 text-white"
+                      ? "bg-accent-solid text-on-accent"
                       : "border border-line text-muted")
                   }
                 >
@@ -200,7 +200,7 @@ export default function MenuClient() {
                 className={
                   "whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium " +
                   (activeCategoryId === category.id
-                    ? "bg-store-500/15 text-accent"
+                    ? "bg-accent/15 text-accent"
                     : "text-muted hover:bg-surface-2")
                 }
               >
@@ -225,7 +225,7 @@ export default function MenuClient() {
       {!readOnly && lines.length > 0 && (
         <button
           onClick={() => setCartOpen(true)}
-          className="fixed inset-x-6 bottom-6 rounded-xl bg-store-600 px-4 py-4 text-center font-semibold text-white shadow-lg transition hover:bg-store-500"
+          className="fixed inset-x-6 bottom-6 rounded-xl bg-accent-solid px-4 py-4 text-center font-semibold text-on-accent shadow-lg transition hover:bg-accent-solid-hover"
         >
           Ver mi carrito ({formatCurrency(subtotal)})
         </button>
@@ -266,7 +266,7 @@ function ProductCard({
   return (
     <div
       onClick={onOpen}
-      className="cursor-pointer rounded-2xl border border-line bg-surface p-4 shadow-sm transition hover:border-store-500/40 hover:shadow-md"
+      className="cursor-pointer rounded-2xl border border-line bg-surface p-4 shadow-sm transition hover:border-accent/40 hover:shadow-md"
     >
       {product.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -309,7 +309,7 @@ function ProductCard({
                 price: product.discountPrice ?? product.price,
               });
             }}
-            className="rounded-full bg-store-600 px-3 py-1 text-sm font-bold text-white hover:bg-store-500"
+            className="rounded-full bg-accent-solid px-3 py-1 text-sm font-bold text-on-accent hover:bg-accent-solid-hover"
           >
             +
           </button>
@@ -403,7 +403,7 @@ function ProductDetailOverlay({
 
         {readOnly && (
           <>
-            <p className="mt-4 rounded-lg bg-store-500/10 px-3 py-2 text-sm text-muted">
+            <p className="mt-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-muted">
               El local está cerrado. Podés mirar el menú pero no hacer pedidos.
             </p>
             <button
@@ -436,7 +436,7 @@ function ProductDetailOverlay({
                       className={
                         "flex items-center justify-between rounded-lg border px-4 py-2 text-left text-sm transition " +
                         (checked
-                          ? "border-store-500 bg-store-500/15 text-accent"
+                          ? "border-accent bg-accent/15 text-accent"
                           : "border-line text-fg")
                       }
                     >
@@ -460,7 +460,7 @@ function ProductDetailOverlay({
             value={notes}
             onChange={(e) => setNotes(e.target.value.slice(0, 150))}
             rows={2}
-            className="rounded-lg border border-line bg-surface-2 px-4 py-2 focus:border-store-500 focus:outline-none"
+            className="rounded-lg border border-line bg-surface-2 px-4 py-2 focus:border-accent focus:outline-none"
           />
         </div>
         )}
@@ -485,7 +485,7 @@ function ProductDetailOverlay({
           <button
             onClick={handleAdd}
             disabled={!canAdd}
-            className="rounded-lg bg-store-600 px-5 py-3 font-semibold text-white transition hover:bg-store-500 disabled:opacity-40"
+            className="rounded-lg bg-accent-solid px-5 py-3 font-semibold text-on-accent transition hover:bg-accent-solid-hover disabled:opacity-40"
           >
             Agregar ({formatCurrency((unitPrice + optionsPrice) * quantity)})
           </button>
@@ -592,7 +592,7 @@ function CartSheet({
         </div>
 
         {orderBlocked && (
-          <p className="mt-3 rounded-lg bg-store-500/10 px-3 py-2 text-sm text-accent">
+          <p className="mt-3 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent">
             {orderBlockedReason}. No se pueden tomar pedidos ahora.
           </p>
         )}
@@ -600,7 +600,7 @@ function CartSheet({
         <button
           onClick={onCheckout}
           disabled={lines.length === 0 || orderBlocked}
-          className="mt-4 w-full rounded-lg bg-store-600 px-4 py-3 font-semibold text-white transition hover:bg-store-500 disabled:opacity-40"
+          className="mt-4 w-full rounded-lg bg-accent-solid px-4 py-3 font-semibold text-on-accent transition hover:bg-accent-solid-hover disabled:opacity-40"
         >
           Continuar al pago
         </button>

@@ -1,5 +1,12 @@
 import PedidoClient from "./pedido-client";
+import StorefrontTheme from "@/components/StorefrontTheme";
+
+export const dynamic = "force-dynamic";
 
 export default function PedidoPage({ params }: { params: { id: string } }) {
-  return <PedidoClient id={params.id} />;
+  return (
+    <StorefrontTheme>
+      <PedidoClient id={params.id} />
+    </StorefrontTheme>
+  );
 }

@@ -61,6 +61,11 @@ const config: Config = {
         fg: "rgb(var(--s-fg) / <alpha-value>)",
         muted: "rgb(var(--s-muted) / <alpha-value>)",
         accent: "rgb(var(--s-accent) / <alpha-value>)",
+        // Botón sólido de marca (color elegido por el local) + su texto.
+        // Igual en los dos temas, a diferencia de `accent` de arriba.
+        "accent-solid": "rgb(var(--s-accent-solid) / <alpha-value>)",
+        "accent-solid-hover": "rgb(var(--s-accent-solid-hover) / <alpha-value>)",
+        "on-accent": "rgb(var(--s-on-accent) / <alpha-value>)",
       },
     },
   },

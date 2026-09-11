@@ -9,7 +9,7 @@ Sistema propio de carta digital + toma de pedidos para el local gastronómico de
 ## Decisiones de alcance (confirmadas por el usuario)
 
 - **Modalidad de pedido:** take-away (retiro en el local) **y** delivery (envío a domicilio). No es un sistema de mesas/dine-in — el scaffold original que existía en el repo estaba armado para mesas y hay que pivotarlo.
-- **Multi-tenant:** NO por ahora. Es para un solo local (el del usuario). Se construye simple; si más adelante se decide vender el producto, se migra a multi-tenant en ese momento, no ahora.
+- **Multi-tenant:** NO por ahora, **revisado 2026-09-11**. El usuario confirmó que Blend es su marca/producto, pensado como plataforma tipo RestoSimple que varios locales van a contratar — la migración a multi-tenant real (Tenant, login separado, catálogo/pedidos por local) queda para cuando haya un segundo local, PERO se decidió adelantar la parte de **personalización visual por local** (color de marca + tipografía) ya, sobre el `Settings` actual (fila única), justamente para que esa pieza esté lista y no haya que rehacerla al migrar. Ver "Fase 25".
 - **Medios de pago** (pensados para poder sumar más a futuro sin rehacer todo). Decisión final (revisada 2026-08-26 tras ver el checkout real de RestoSimple):
   - **Efectivo**: Takeaway se paga en el local; Delivery se le paga al repartidor. Sin verificación online; el staff lo marca como cobrado manualmente desde el panel.
   - **Mercado Pago**: billetera/tarjetas + el medio "Transferencia" (CVU) del propio Checkout Pro de MP, confirmado automáticamente por webhook.
@@ -1655,8 +1655,115 @@ cancelar y rehacer, recalculando total y monto del pago. **Sin cambios de schema
 - **Sin probar en navegador.** No editable: tipo de pedido, datos del cliente, dirección,
   medio de pago (fuera de alcance de esta fase).
 
+## Fase 25: personalización de la carta por local — color de marca + tipografía (en código, 2026-09-11)
+
+El usuario pidió "que cada resto pueda tener su personalización de menú" en Blend. Charlado
+antes de codear (ver también el ajuste a la sección "Decisiones de alcance" más arriba):
+Blend es la marca/producto del usuario, pensado como plataforma tipo RestoSimple para que
+otros locales la contraten — pero migrar a multi-tenant real es una etapa cara (auth,
+`tenantId` en todo, routing por local) que solo se justifica con un segundo local real.
+**Decisión: etapa 1 = motor de personalización visual (color + tipografía) ya, sobre el
+`Settings` actual (fila única); etapa 2 = multi-tenant real, más adelante.** Para el color,
+el usuario eligió específicamente un **color picker libre** (no paletas prearmadas): "que mis
+clientes puedan poner sú marca en mi pagina, así de esa manera juega la pagina con la
+impronta de cada marca".
+
+- **Schema**: `Settings` suma `themeColor String @default("#c92a2a")` (hex libre) y
+  `themeFont String @default("inter")` (clave de una tipografía curada). Pensados para
+  mudarse tal cual a un futuro modelo `Tenant` sin rehacer el motor de theming.
+  `prisma db push` corrido con éxito de forma directa (no bloqueado esta vez) — verificado
+  contra Neon: la fila `singleton` ya trae los defaults.
+- **`src/lib/theme-color.ts`** (nuevo, puro): `deriveStorefrontTheme(hex)` calcula, a partir
+  del color de marca elegido, TODA la paleta que necesita el storefront — nunca se guarda ya
+  calculada, para poder retocar la fórmula sin migrar datos. Conserva el matiz (hue) elegido
+  pero fuerza luminosidad/saturación a rangos legibles: `accentLight`/`accentDark` (mismo
+  matiz, L=46%/67%, para texto/tinte sobre fondo claro y oscuro del storefront — antes eran
+  dos rojos hardcodeados), `accentSolid`/`accentSolidHover` (para botones llenos, L acotada a
+  30-56% desde la luminosidad real del color elegido, igual en los dos temas — un botón de
+  marca no cambia de color al togglear claro/oscuro), y `onAccent` (blanco o casi-negro, el
+  que dé contraste WCAG ≥4.5:1 contra `accentSolid` — protege colores de marca muy claros,
+  tipo amarillo, de quedar con texto blanco ilegible). Si el local elige gris/negro/blanco
+  puro (saturación 0) se respeta la escala de grises en vez de inventarle un matiz.
+  Verificado a mano con 7 colores de prueba (rojo actual, azul, verde, amarillo, negro,
+  blanco, violeta) — outputs sensatos en todos los casos, incluida la protección de contraste
+  en amarillo/blanco.
+- **`src/lib/storefront-fonts.ts`** (nuevo, puro) + **`storefront-font-loaders.ts`**
+  (nuevo, server-only): catálogo curado de 8 tipografías (Inter, Poppins, Playfair Display,
+  Montserrat, Quicksand, Oswald, Merriweather, DM Sans — variedad de estilos: sans neutra,
+  redondeada, serif elegante, geométrica, casual, condensada, serif cálida, minimalista). Se
+  separaron en dos archivos para no arrastrar los 8 loaders de `next/font/google` al bundle
+  del cliente: el archivo puro (lista + labels + helper de URL de Google Fonts para preview)
+  lo importa también `/admin/configuracion`; el de loaders reales (autohosteados, sin pegarle
+  a Google en runtime) solo lo importa el wrapper de servidor.
+- **`src/components/StorefrontTheme.tsx`** (nuevo, server component): envuelve cada página
+  del storefront del cliente (home, `/menu`, `/checkout`, `/pedido/[id]`), lee
+  `themeColor`/`themeFont` de `Settings` por request, y los inyecta como CSS vars (`style`
+  inline) + clase de fuente en un div ancestro — el contenido interno no cambió, sigue
+  usando `text-accent`/`bg-accent-solid`/etc. de siempre.
+- **`globals.css`/`tailwind.config.ts`**: nuevos tokens `accent-solid`, `accent-solid-hover`,
+  `on-accent` (además del `accent` que ya existía). Se agregó una indirección:
+  `--s-accent-light`/`--s-accent-dark` ahora las provee `StorefrontTheme` vía `style` inline
+  (que siempre gana sobre una regla de clase), y `.storefront` / `html[data-store-theme]`
+  leen de ahí (`--s-accent: var(--s-accent-dark)`, etc.) en vez de tener el rojo hardcodeado
+  — así el toggle claro/oscuro se sigue resolviendo en CSS normalmente.
+- **Reemplazo del rojo hardcodeado**: `bg-store-600`/`bg-store-500`/`border-store-500`/
+  `text-white` (Tailwind fijo) → `bg-accent-solid`/`hover:bg-accent-solid-hover`/
+  `border-accent`/`text-on-accent` (CSS vars dinámicas) en las 4 superficies del cliente:
+  `page.tsx` (home), `menu/menu-client.tsx`, `checkout/checkout-client.tsx`,
+  `pedido/[id]/pedido-client.tsx`. El panel interno (`bg-brand-*` de admin/comanda) NO se
+  tocó — esa es la marca de Blend, no la personalización por local.
+- **`/admin/configuracion`**: nueva sección "Personalización de la carta online" — color
+  picker nativo + input hex libre (con validación inline), `<select>` de las 8 tipografías, y
+  una vista previa en vivo (mismo `deriveStorefrontTheme` importado en el cliente, así lo que
+  ve el admin es exactamente lo que va a ver el cliente) con un botón de muestra y el nombre
+  del local coloreado. La preview de tipografía carga el CSS de Google Fonts al vuelo (un
+  `<link>` que cambia de `href`); la carta real del cliente no depende de Google en runtime
+  (usa `next/font`, autohosteado).
+- **`/api/admin/settings`**: `GET` default y `PATCH` (zod: hex válido / clave de fuente
+  válida) suman los dos campos.
+- Páginas del storefront (`/`, `/menu`, `/checkout`, `/pedido/[id]`) pasan de estáticas a
+  `force-dynamic` (ya consultan `Settings` en cada request vía `StorefrontTheme`).
+- `npx tsc --noEmit` y `npm run build` limpios (el build tarda más que antes: baja las 8
+  tipografías de Google en build time, autohosteo de `next/font`).
+- **Probado en navegador por el usuario** (2026-09-11): levantamos `npm run dev` local,
+  eligió un color real (`#de4a44`) desde `/admin/configuracion` y lo vio reflejado en
+  `/menu`/`/` — confirmado también contra Neon.
+- **Pendiente**: commitear y pushear (lo corre el usuario). La migración a multi-tenant real
+  (Fase 2 de este cambio de rumbo) queda para cuando haya un segundo local.
+
+### Fase 25b — "color secundario": blanco o negro a mano (2026-09-11)
+
+Al probarlo, el usuario pidió poder elegir él mismo el color de contraste (el que va sobre
+`themeColor` — el "+", el texto de los botones) en vez de que lo decida el algoritmo de
+contraste. Lo llama "color secundario", pero aclaró que no es un matiz nuevo: quiere que
+tenga **solo dos opciones, blanco o negro**.
+
+- **Schema**: `Settings` suma `themeOnAccent String @default("white")`.
+- **`theme-color.ts`**: `deriveStorefrontTheme(hex, onAccentChoice?)` ahora acepta un segundo
+  parámetro opcional `"white" | "black"` — si viene, se usa tal cual (el local manda, aunque
+  el contraste no sea el ideal); si no viene (o el valor no es válido), sigue el fallback
+  automático de antes. Nuevo `suggestOnAccent(hex)` (misma fórmula de contraste, expuesta
+  aparte) para mostrar una sugerencia en el form sin forzarla.
+- **`StorefrontTheme.tsx`**: lee `themeOnAccent` y lo pasa como segundo argumento.
+- **`/api/admin/settings`**: default y validación zod (`isOnAccentChoice`) suman el campo.
+- **`/admin/configuracion`**: toggle de dos botones "Blanco"/"Negro" junto al selector de
+  tipografía, con un texto chico "Sugerido para este color: ...". La preview en vivo ya
+  pasaba por `deriveStorefrontTheme`, así que automáticamente refleja el toggle.
+- Verificado a mano contra el server local + Neon: forzando `themeOnAccent="black"` con el
+  rojo real del local (`#de4a44`, que por contraste automático sugeriría blanco), el HTML
+  servido por `/menu` mostró `--s-on-accent: 23 23 23` — confirma que el valor manual pisa la
+  sugerencia automática. Revertido a `"white"` (el valor real, sin tocar por el usuario
+  todavía).
+- `prisma generate` chocó una vez con el engine bloqueado por el dev server corriendo en
+  Windows (`EPERM` renombrando el `.dll.node`) — hubo que matar el proceso en el puerto 3000
+  antes de regenerar. A tener en cuenta la próxima vez que se cambie el schema con el dev
+  server local corriendo.
+- `tsc`/`build` limpios. Sin probar el toggle en el navegador todavía (sí verificado a nivel
+  HTML/DB). Falta commitear/pushear (junto con el resto de la Fase 25).
+
 ## Historial de decisiones (log)
 
+- **2026-09-11** — El usuario pidió poder "editar y hacer una configuración del menú online, para que cada resto pueda tener su personalización de menú". Charlado antes de codear: confirmó que es porque Blend es su marca/producto pensado para vender a varios locales (no una sola personalización interna) — pivot real respecto a la decisión "no multi-tenant" que ya estaba anotada. Acordamos plan en 2 etapas (motor de personalización visual ya, multi-tenant real con el segundo local) y que el color de marca sea un **color picker libre** (no paletas prearmadas), con el resto de la paleta derivada automáticamente para garantizar contraste. Implementada la **Fase 25**: `themeColor`/`themeFont` en `Settings`, `theme-color.ts` (fórmula de derivación, con protección de contraste), catálogo de 8 tipografías vía `next/font`, `StorefrontTheme` (wrapper server que inyecta CSS vars + fuente), reemplazo del rojo hardcodeado por tokens dinámicos en las 4 páginas del cliente, y sección nueva con preview en vivo en `/admin/configuracion`. `prisma db push` corrido con éxito (sin bloqueo esta vez), verificado contra Neon. `tsc`/`build` limpios. Falta probar en navegador y pushear.
 - **2026-09-10** — El usuario pidió otra iteración de la **comanda** (**Fase 21d**), con foto del ticket de RestoSimple como referencia de escala: el número de pedido mide ~1,5 cm, y con esa escala hay que agrandar la fuente de los datos; además "blend" arriba, en el espacio en blanco del encabezado. Decisiones tomadas por el usuario: "blend" grande (x3) arriba + nombre del local chico debajo; ítems a x3, el resto de los datos (canal, cliente, TOTAL PRODUCTOS, entrega estimada, NOTA) a x2, `#N` a ~1,5 cm (nuevo `sizeHuge` = GS ! \x44, x5). El contenido no cambió (ya era el de RestoSimple desde 21c), solo tamaños + la marca. Ticket del cliente intacto. Sin schema, `tsc`/`build` limpios. Falta commit/push y verificar en la comandera real.
 - **2026-09-09** — El usuario confirmó que la **impresión de tickets (Fase 21) anda bien en la comandera del local**. Iteraciones de diseño de los tickets: **21b** — helper `line({ size, bold, center })` con sizes normal/tall/wide/big/xl + fix de la alineación ESC/POS (es por-línea, va antes del `\n`); 1ra versión salió chica → 2da versión sube todo (cuerpo en doble alto, `#N`/`TOTAL`/nombre del local en xl). **21c** — la **comanda pasa a tener el contenido de RestoSimple**: sin plata (solo "TOTAL PRODUCTOS N"), ítems centrados sin precio, "Entrega estimada: HH:MM", y `#N` gigante al final (tipo "T25"). El ticket del cliente quedó igual. Todo sin schema, deployado.
 - **2026-09-08** — El usuario eligió **editar pedido en la comanda**. **Fase 24** sin schema: se extrajo `resolveItems` en `src/lib/orders.ts` (compartido crear/editar), nuevo `updateOrderItems` + `POST /api/admin/orders/[id]/items` (reemplaza ítems en transacción, recalcula total y `payment.amount`), módulo compartido `order-line-picker.tsx` (`MenuColumn` + `ProductOptionsPanel`, refactor de `new-order-modal`), y `edit-order-modal.tsx` abierto desde "✏️ Editar pedido" en el menú ⋯ de la comanda. Editable: ítems/cantidades/adicionales (quitar+re-agregar)/nota. No editable: tipo, cliente, dirección, medio de pago. `tsc`/`build` limpios, push directo.

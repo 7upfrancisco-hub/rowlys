@@ -178,7 +178,7 @@ export default function CheckoutClient() {
           <p className="text-muted">Tu carrito está vacío.</p>
           <Link
             href="/menu"
-            className="rounded-lg bg-store-600 px-4 py-3 font-semibold text-white hover:bg-store-500"
+            className="rounded-lg bg-accent-solid px-4 py-3 font-semibold text-on-accent hover:bg-accent-solid-hover"
           >
             Ver el menú
           </Link>
@@ -189,10 +189,10 @@ export default function CheckoutClient() {
 
   const pillClass = (active: boolean) =>
     "rounded-lg px-4 py-2 text-sm font-medium " +
-    (active ? "bg-store-600 text-white" : "border border-line text-muted");
+    (active ? "bg-accent-solid text-on-accent" : "border border-line text-muted");
 
   const inputClass =
-    "rounded-lg border border-line bg-surface-2 px-4 py-2 focus:border-store-500 focus:outline-none";
+    "rounded-lg border border-line bg-surface-2 px-4 py-2 focus:border-accent focus:outline-none";
 
   return (
     <div className="storefront">
@@ -213,7 +213,7 @@ export default function CheckoutClient() {
         </p>
 
         {orderBlocked && (
-          <div className="mb-6 rounded-2xl border border-store-500/30 bg-store-500/10 p-4">
+          <div className="mb-6 rounded-2xl border border-accent/30 bg-accent/10 p-4">
             <p className="font-semibold text-accent">{orderBlockedReason}</p>
             <p className="mt-1 text-sm text-muted">
               {settings?.closedTitle && storeClosed
@@ -372,7 +372,7 @@ export default function CheckoutClient() {
           <button
             type="submit"
             disabled={submitting || orderBlocked}
-            className="rounded-lg bg-store-600 px-4 py-4 font-semibold text-white transition hover:bg-store-500 disabled:opacity-60"
+            className="rounded-lg bg-accent-solid px-4 py-4 font-semibold text-on-accent transition hover:bg-accent-solid-hover disabled:opacity-60"
           >
             {orderBlocked
               ? "Pedidos pausados"

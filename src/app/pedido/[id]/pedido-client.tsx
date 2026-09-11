@@ -163,7 +163,7 @@ export default function PedidoClient({ id }: { id: string }) {
                 <div
                   className={
                     "h-3 w-3 rounded-full " +
-                    (i <= currentIndex ? "bg-store-500" : "bg-line")
+                    (i <= currentIndex ? "bg-accent-solid" : "bg-line")
                   }
                 />
                 <p
@@ -214,7 +214,7 @@ export default function PedidoClient({ id }: { id: string }) {
                 <button
                   onClick={payWithMp}
                   disabled={paying}
-                  className="mt-3 rounded-lg bg-store-600 px-4 py-2 text-sm font-semibold text-white hover:bg-store-500 disabled:opacity-60"
+                  className="mt-3 rounded-lg bg-accent-solid px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-solid-hover disabled:opacity-60"
                 >
                   {paying
                     ? "Redirigiendo..."
