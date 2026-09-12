@@ -2052,8 +2052,75 @@ backfills anteriores):
   construir 26c (super-admin, para no tener que dar de alta locales a mano por script) y/o
   26d (directorio público, que recién ahora tiene sentido mostrar con más de un local).
 
+### Fase 26c — panel de super-admin de Blend (hecho, 2026-09-12)
+
+El usuario eligió 26c primero ("para no tener que crear locales a mano por script"). Sin
+cambios de schema — `Tenant.active` ya existía desde la 26a.
+
+- **Sistema de auth totalmente aparte** del de cada tenant (ver diseño ya explicado en la
+  26b): cookie propia `blend_admin_session` (`src/lib/auth.ts`:
+  `createSuperAdminSessionToken`/`verifySuperAdminSessionToken`, payload `{sub, role:
+  "SUPERADMIN"}`), sigue validando contra `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` (env vars).
+  `middleware.ts` resuelve `/blend-admin/*` y `/api/blend-admin/*` en una rama aparte, antes
+  del chequeo de sesión de tenant — nunca se mezclan.
+- **`/blend-admin/login`** (nuevo): mismo diseño visual que `/login`, pero con paleta navy
+  (para que se note a simple vista que es "modo Blend", no un tenant) y postea a
+  `/api/blend-admin/login`. `LogoutButton` se generalizó con props `endpoint`/`redirectTo`
+  (antes hardcodeado a `/api/auth/logout` + `/login`) para reusarlo acá sin duplicar el
+  componente.
+- **`/blend-admin`** (nuevo, `blend-admin-client.tsx`): tabla de todos los tenants (nombre +
+  slug, cantidad de usuarios, **pedidos y facturado del mes en curso** — el dato que el
+  usuario pidió para poder cobrar por pedidos) + botón "+ Nuevo local" que abre un form
+  (nombre, slug autogenerado del nombre pero editable, usuario, contraseña inicial). Al
+  crear, muestra un cartel con las credenciales una sola vez (no se pueden volver a ver,
+  solo queda el hash). Toggle Activo/Inactivo por fila (`PATCH`, optimista con revert si
+  falla) — por ahora es solo una bandera, no cambia nada del storefront de ese local
+  todavía (eso se define si hace falta más adelante).
+- **`GET/POST /api/blend-admin/tenants`**: el `POST` crea `Tenant`+`User`+`Settings` en una
+  transacción (valida que el slug — regex minúsculas/números/guiones — y el username no
+  estén tomados, 409 si alguno choca). El `GET` agrega pedidos facturables (mismo criterio
+  que `/api/admin/metrics`) del mes en curso por tenant — la cuenta de zona horaria
+  Argentina se duplicó acá a propósito (es chica y esta rama de rutas está separada del
+  resto, no valía la pena acoplarla todavía).
+- **`PATCH /api/blend-admin/tenants/[id]`**: activar/desactivar.
+- **Gotcha real encontrado al verificar**: `next dev` imprime "Environments: .env.local,
+  .env" — Next.js carga `.env.local` con MÁS prioridad que `.env`, y este proyecto tiene un
+  `.env.local` (generado por `vercel env pull` en algún momento) que **también** define
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` (con el `EVO`/hash real, un hash distinto pero
+  válido para la misma contraseña `evolution27` que el que está anotado en "Infra/
+  despliegue" — bcrypt genera un hash distinto cada vez aunque la contraseña sea la misma,
+  no es una contraseña distinta). Por eso probar overrides de esas env vars solo en `.env`
+  (o por variable de entorno de shell) **no tiene ningún efecto en local** — hay que tocar
+  `.env.local` si hace falta simular otro super-admin. Bueno tenerlo anotado para la próxima
+  vez que algo relacionado a `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` no ande como se espera
+  en local.
+- **Verificado end-to-end contra Neon real**: login super-admin con las credenciales reales
+  (`EVO`/`evolution27`) → 200 + cookie; sin cookie o con la cookie de sesión de un tenant →
+  401 (los dos sistemas no se pisan); `GET` lista Rowlys y Pizzería Demo con sus pedidos/
+  facturado reales del mes; crear un tenant de prueba ("Burger Test") vía la API, slug
+  duplicado → 409, login inmediato con las credenciales recién creadas, catálogo vacío y
+  aislado (no ve nada de Rowlys ni de Pizzería Demo); tenant de prueba borrado después
+  (cascada a su `User`/`Settings`). `tsc`/`next build` limpios.
+- **Pendiente**: commitear/pushear. El toggle activo/inactivo todavía no tiene ningún efecto
+  visible fuera del panel (el storefront de ese local no lo consulta) — queda para cuando
+  haga falta. Sigue afuera de esta fase: directorio público (26d), routing por slug del
+  checkout público, `tenantId` obligatorio.
+
 ## Historial de decisiones (log)
 
+- **2026-09-12** — El usuario pidió crear la "interfaz de Blend" — aclaramos que eran dos
+  cosas distintas (super-admin vs. directorio público) y eligió el **super-admin primero**
+  ("para no tener que crear locales a mano por script"). Implementada la **Fase 26c**:
+  sistema de login totalmente aparte para Blend (`/blend-admin/login`, cookie
+  `blend_admin_session`, sigue con las env vars de siempre), panel `/blend-admin` con tabla
+  de locales (pedidos/facturado del mes, para saber cuánto cobrarle a cada uno) y alta de
+  local nuevo (`Tenant`+`User`+`Settings` en una transacción, con slug/usuario únicos).
+  Encontrado en el camino: `.env.local` (de un `vercel env pull` viejo) tiene más prioridad
+  que `.env` en Next.js y también define `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` — así que
+  cualquier prueba tocando esas vars en local hay que hacerla ahí, no en `.env`. Verificado
+  end-to-end contra Neon: login super-admin real, aislamiento total respecto a las sesiones
+  de tenant, alta + login inmediato de un local de prueba (borrado después). `tsc`/`build`
+  limpios. Ver "Fase 26c". Sin schema nuevo (reusa `Tenant.active`).
 - **2026-09-12** — Al probar el login de la Fase 26b en el navegador, el usuario no podía
   entrar con sus credenciales reales (`EVO`/`evolution27`). Causa: el backfill de la 26a
   copió `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` del `.env` **local** (usuario de desarrollo

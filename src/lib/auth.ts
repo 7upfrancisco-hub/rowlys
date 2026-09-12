@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 
+// Sesión de un tenant (login de un local, /login -> /admin, /comanda).
 export const SESSION_COOKIE = "rowlys_session";
 
 export interface SessionPayload {
@@ -8,6 +9,18 @@ export interface SessionPayload {
   // Tenant al que pertenece ese User. Todo lo que la sesión puede ver/tocar
   // se scopea por esto (Fase 26b).
   tenantId: string;
+}
+
+// Sesión del super-admin de Blend (Fase 26c): cookie APARTE de la de tenant
+// — a propósito, para que las dos convivan sin pisarse (podés estar logueado
+// como Rowlys y como Blend al mismo tiempo, en el mismo navegador) y para
+// que un bug en un sistema no filtre acceso al otro. Sigue validando contra
+// ADMIN_USERNAME/ADMIN_PASSWORD_HASH (env vars), no contra la tabla `User`
+// — esas credenciales son solo para los tenants.
+export const SUPERADMIN_SESSION_COOKIE = "blend_admin_session";
+
+export interface SuperAdminSessionPayload {
+  sub: string;
 }
 
 function getSecretKey() {
@@ -38,6 +51,30 @@ export async function verifySessionToken(
       return null;
     }
     return { sub: payload.sub, tenantId: payload.tenantId };
+  } catch {
+    return null;
+  }
+}
+
+export async function createSuperAdminSessionToken(
+  payload: SuperAdminSessionPayload
+): Promise<string> {
+  return new SignJWT({ sub: payload.sub, role: "SUPERADMIN" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(getSecretKey());
+}
+
+export async function verifySuperAdminSessionToken(
+  token: string
+): Promise<SuperAdminSessionPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecretKey());
+    if (typeof payload.sub !== "string" || payload.role !== "SUPERADMIN") {
+      return null;
+    }
+    return { sub: payload.sub };
   } catch {
     return null;
   }
