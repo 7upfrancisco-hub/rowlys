@@ -2013,13 +2013,32 @@ próxima sub-fase (routing por slug para las páginas públicas).
   confuso (`Cannot find module for page: /admin/clientes`). No es un bug del código: hay
   que parar el `dev` antes de un `build` (o viceversa). Build limpio después de matar el
   dev server y borrar `.next`.
-- `tsc` y `next build` limpios. **Pendiente**: commitear/pushear. Sigue afuera de esta fase
-  (para la próxima): routing por slug del checkout público, `tenantId` obligatorio en todos
-  los modelos, `Customer.phone` a `@@unique([tenantId, phone])`, panel de super-admin
-  (26c), directorio público (26d).
+- `tsc` y `next build` limpios. **Commiteado y pusheado** (`65e78ec`).
+- **Bug encontrado al probar en el navegador (mismo día)**: el usuario no podía entrar con
+  sus credenciales reales (`EVO`/`evolution27`, ver "Infra/despliegue"). Causa: el backfill
+  de la Fase 26a leyó `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` del `.env` **local**, que tiene
+  un usuario de desarrollo distinto (`admin`, con su propio hash) al de **producción**
+  (`EVO`) — nunca estuvieron sincronizados (son entornos separados a propósito, ver el
+  gotcha de `dotenv-expand` en "Infra/despliegue"). El `User` de Rowlys quedó con las
+  credenciales equivocadas. Corregido a mano (`prisma.user.update`, un solo `UPDATE`):
+  `username` → `EVO`, `passwordHash` → el hash real de producción ya documentado. Verificado
+  con `POST /api/auth/login` contra Neon real → 200 + cookie. **Lección**: cualquier backfill
+  futuro que dependa de env vars debería usar las de **producción**, no las locales, cuando
+  ambas existen y difieren — o pedir el valor explícito en vez de inferirlo del `.env` de la
+  máquina donde corre el script.
+- Sigue afuera de esta fase (para la próxima): routing por slug del checkout público,
+  `tenantId` obligatorio en todos los modelos, `Customer.phone` a
+  `@@unique([tenantId, phone])`, panel de super-admin (26c), directorio público (26d).
 
 ## Historial de decisiones (log)
 
+- **2026-09-12** — Al probar el login de la Fase 26b en el navegador, el usuario no podía
+  entrar con sus credenciales reales (`EVO`/`evolution27`). Causa: el backfill de la 26a
+  copió `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` del `.env` **local** (usuario de desarrollo
+  `admin`, distinto al de producción) al crear el `User` de Rowlys. Corregido con un
+  `UPDATE` directo (`username` → `EVO`, `passwordHash` → el hash real de producción),
+  verificado con `POST /api/auth/login` → 200. Sin cambios de código, solo dato. Ver nota en
+  "Fase 26b".
 - **2026-09-12** — El usuario confirmó seguir con la Fase 26b ("Rowlys todavía no está en
   producción con Blend", menos riesgo). Se implementó auth real por tenant: `/login` valida
   contra la tabla `User` (ya no contra las env vars — esas quedan reservadas para el futuro
