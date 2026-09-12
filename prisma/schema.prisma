@@ -7,11 +7,59 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- Multi-tenant (Fase 26a) -----------------------------------------------
+//
+// "Cliente de Blend" = un local que usa el sistema (Rowlys es el primero).
+// tenantId en los modelos de abajo empieza NULLABLE a propósito: se agrega,
+// se hace `db push`, se backfillea con un script (todo lo existente pasa a
+// pertenecer al tenant "rowlys"), y RECIÉN AHÍ se pasa a obligatorio — así
+// nunca hay una ventana donde el create/push falle por un NOT NULL sin
+// default. El código de la app (rutas, queries) todavía NO lee/filtra por
+// tenantId — eso es la Fase 26b (routing + auth por tenant). Esta fase es
+// puramente aditiva: nada de lo que ya funciona debería cambiar de
+// comportamiento.
+
+model Tenant {
+  id             String          @id @default(cuid())
+  // Identificador en la URL (ej. "rowlys" en blend.app/rowlys/menu). Solo
+  // minúsculas/números/guiones, se valida en la capa de alta (super-admin).
+  slug           String          @unique
+  name           String
+  active         Boolean         @default(true)
+  settings       Settings?
+  users          User[]
+  categories     Category[]
+  products       Product[]
+  modifierGroups ModifierGroup[]
+  customers      Customer[]
+  orders         Order[]
+  drivers        Driver[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+// Login de cada local (reemplaza, para los tenants, el admin único por env
+// vars que sigue usando Blend para su propio super-admin). Un tenant puede
+// tener más de un usuario a futuro; hoy alcanza con uno (el dueño).
+model User {
+  id           String   @id @default(cuid())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId     String
+  username     String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, username])
+}
+
 model Category {
   id        String    @id @default(cuid())
   name      String
   order     Int       @default(0)
   products  Product[]
+  tenant    Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
@@ -30,6 +78,8 @@ model Product {
   categoryId        String
   modifierGroups    ProductModifierGroup[]
   orderItems        OrderItem[]
+  tenant            Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId          String?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 }
@@ -49,6 +99,8 @@ model ModifierGroup {
   active    Boolean                @default(true)
   options   ModifierOption[]
   products  ProductModifierGroup[]
+  tenant    Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String?
   createdAt DateTime               @default(now())
   updatedAt DateTime               @updatedAt
 }
@@ -106,12 +158,17 @@ enum PaymentStatus {
 // Order (snapshot histórico); acá se guarda la versión "actual" del cliente.
 model Customer {
   id        String   @id @default(cuid())
-  // Teléfono normalizado, formato 549XXXXXXXXXX (sin "+"). Clave de dedup.
+  // Teléfono normalizado, formato 549XXXXXXXXXX (sin "+"). Clave de dedup
+  // HOY todavía global (@unique); en la Fase 26b pasa a ser @@unique por
+  // tenant, para que dos locales distintos puedan tener cada uno "su"
+  // cliente con el mismo teléfono sin pisarse.
   phone     String   @unique
   firstName String
   lastName  String   @default("")
   email     String?
   orders    Order[]
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String?
   // ~ fecha del primer pedido del cliente.
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -150,11 +207,14 @@ model Order {
   // el pedido queda sin asignar pero no se pierde.
   driver            Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
   driverId          String?
+  tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId          String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   @@index([status])
   @@index([customerId])
+  @@index([tenantId])
 }
 
 model Driver {
@@ -168,6 +228,8 @@ model Driver {
   notes        String?
   active       Boolean  @default(true)
   orders       Order[]
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -210,26 +272,26 @@ model Payment {
 }
 
 model Settings {
-  id            String   @id @default("singleton")
-  deliveryFee   Float    @default(0)
-  storeName     String   @default("Rowlys")
-  storePhone    String?
-  storeAddress  String?
-  bankAlias     String?
+  id                      String   @id @default("singleton")
+  deliveryFee             Float    @default(0)
+  storeName               String   @default("Rowlys")
+  storePhone              String?
+  storeAddress            String?
+  bankAlias               String?
   // Estado del local. storeOpen=false => el cliente puede VER el menu pero no
   // hacer pedidos (banner con closedTitle/closedMessage). deliveryEnabled /
   // pickupEnabled cierran un canal puntual sin cerrar todo el local. Todo se
   // togglea desde el header de /comanda.
-  storeOpen       Boolean  @default(true)
-  deliveryEnabled Boolean  @default(true)
-  pickupEnabled   Boolean  @default(true)
-  closedTitle     String?
-  closedMessage   String?
-  closedImageUrl  String?
+  storeOpen               Boolean  @default(true)
+  deliveryEnabled         Boolean  @default(true)
+  pickupEnabled           Boolean  @default(true)
+  closedTitle             String?
+  closedMessage           String?
+  closedImageUrl          String?
   // Tiempo de preparación estimado por canal (minutos). Se muestra en el
   // checkout y en el seguimiento del pedido. Editable desde /comanda.
-  prepTimeDeliveryMinutes Int @default(10)
-  prepTimePickupMinutes   Int @default(10)
+  prepTimeDeliveryMinutes Int      @default(10)
+  prepTimePickupMinutes   Int      @default(10)
   // Personalización visual de la carta online (etapa 1 hacia multi-tenant:
   // hoy vive en la fila única de Settings; el día que exista un modelo
   // Tenant, estos dos campos se mudan ahí tal cual). themeColor es el color
@@ -238,12 +300,17 @@ model Settings {
   // el botón) se DERIVA de este valor en src/lib/theme-color.ts, nunca se
   // guarda calculado, para poder ajustar la fórmula sin migrar datos.
   // themeFont es la clave de una tipografía curada (src/lib/storefront-fonts.ts).
-  themeColor String @default("#c92a2a")
-  themeFont  String @default("inter")
+  themeColor              String   @default("#c92a2a")
+  themeFont               String   @default("inter")
   // "Color secundario" en la jerga del local: blanco o negro, el texto/
   // íconos que van SOBRE themeColor (el "+", el texto de los botones). Es
   // una elección manual, no calculada — reemplaza el contraste automático
   // que sugiere src/lib/theme-color.ts cuando el local no tocó esto todavía.
-  themeOnAccent String @default("white")
-  updatedAt       DateTime @updatedAt
+  themeOnAccent           String   @default("white")
+  // 1:1 con Tenant. Nullable por ahora (ver nota de la Fase 26a arriba); el
+  // día que haya más de un local, cada uno tiene su propia fila de Settings
+  // (deja de ser singleton) identificada por este campo.
+  tenant                  Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId                String?  @unique
+  updatedAt               DateTime @updatedAt
 }

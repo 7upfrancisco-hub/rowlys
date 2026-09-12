@@ -1856,10 +1856,111 @@ del cliente desde la Fase 21f) y agregar el canal como letra junto al número de
   (`comanda-client.tsx`, `admin/pedidos/pedidos-client.tsx`) se actualizaron para no
   construirlo más. El widget de "demora estimada" editable del header de `/comanda` (otra
   cosa, no tiene que ver con el ticket) sigue intacto — usa su propio estado `prepTimes`.
-- `tsc`/`build` limpios. Falta commitear/pushear.
+- `tsc`/`build` limpios. **Commiteado y pusheado** (`bf5f9a6` + `d583828`, `origin/main` al día).
+
+## Fase 26: Blend multi-tenant real (en curso, 2026-09-11/12)
+
+El usuario planteó la idea grande: que Blend tenga su propia página pública tipo
+**directorio** — lista los "clientes de Blend" (locales que usan el sistema: Rowlys es el
+primero, la meta es sumar más) y desde ahí se entra directo a la carta de cada uno para
+pedir. Esto es la migración a multi-tenant real que se venía posponiendo desde la Fase 25
+("no multi-tenant por ahora... hasta que haya un segundo local"). Charlado y confirmado
+antes de tocar código:
+
+- **Alcance confirmado por el usuario**: (1) arrancar YA la base multi-local de verdad
+  (Tenant con su propio Settings/catálogo/pedidos), aunque hoy solo haya un local cargado —
+  "lo que me interesa es que haya más Rowlys, digamos"; (2) **panel de super-admin desde
+  ya** (pantalla protegida, solo para el usuario/Blend) para dar de alta un local nuevo sin
+  tocar código ni base de datos; (3) Blend (el super-admin) necesita **acceso a los datos de
+  todos los locales para poder cobrarles por pedidos** (retoma la idea de la Fase 14 de
+  "servicio que se cobra por pedidos mensuales", pero ahora a nivel plataforma, no por
+  local); (4) hace falta una tabla de usuarios para que **cada local inicie sesión y vea su
+  propio dashboard** (hoy es un solo admin por variable de entorno, sin tabla); (5) el
+  directorio **no filtra por abierto/cerrado** — el usuario aclaró que un local cerrado
+  igual deja ver el menú (comportamiento ya existente desde la Fase 8b), así que todos los
+  locales aparecen siempre en el directorio.
+  - **No negociable**: "quiero que Rowlys no se pierda" — la migración tiene que preservar
+    100% los datos actuales de Rowlys (pedidos, clientes, catálogo, configuración), no
+    empezar de cero.
+
+**Plan en 4 sub-fases** (mismo criterio de siempre: una por vez, verificada contra Neon
+antes de avanzar a la siguiente — esta es, con diferencia, la migración más grande del
+proyecto hasta ahora):
+
+- **26a (hecha)**: modelo de datos + backfill de Rowlys. Ver detalle abajo.
+- **26b (pendiente, la parte grande y de más riesgo)**: routing por local (decidido:
+  **por path**, `/<slug>/menu`, `/<slug>/checkout`, `/<slug>/admin`, `/<slug>/comanda` — NO
+  por subdominio, porque eso requeriría comprar un dominio propio + DNS wildcard, que hoy no
+  existe, todo corre sobre `rowlys.vercel.app`); auth real por tenant (login valida contra
+  `User`, cada request queda scopeado a `tenantId`); pasar `tenantId` de nullable a
+  obligatorio en todos los modelos (recién ahí, una vez que TODAS las rutas de creación lo
+  completen); `Customer.phone` pasa de `@unique` global a `@@unique([tenantId, phone])`.
+- **26c (pendiente)**: panel de super-admin de Blend (alta de locales con slug/nombre/
+  credenciales iniciales, activar/desactivar, vista agregada de pedidos por local por mes
+  para facturar). Sigue protegido por el login actual por env vars (ADMIN_USERNAME/
+  ADMIN_PASSWORD_HASH) — ese es el login de Blend, no se toca; el login por `User` es
+  exclusivamente para cada tenant.
+- **26d (pendiente)**: directorio público de Blend en la home (`/`) — lista todos los
+  tenants activos (sin filtrar por abierto/cerrado), cada uno linkea a `/<slug>/menu`.
+
+### Fase 26a — modelo `Tenant`/`User` + backfill de Rowlys (hecho, 2026-09-11/12)
+
+Puramente aditiva a propósito: el objetivo era que **nada de lo que ya funciona cambie de
+comportamiento** en esta sub-fase — ninguna ruta ni query de la app fue tocada, solo el
+schema. La app hoy sigue leyendo `Settings` por `id: "singleton"` como siempre.
+
+- **`Tenant`** (nuevo): `id`, `slug` (único, para la URL — ej. "rowlys"), `name`, `active`,
+  con relaciones 1:1 a `Settings` y 1:N a `Category`/`Product`/`ModifierGroup`/`Customer`/
+  `Order`/`Driver`/`User`.
+- **`User`** (nuevo): login por tenant — `tenantId`, `username`, `passwordHash`,
+  `@@unique([tenantId, username])`. Reemplaza, a futuro (Fase 26b), el admin único por env
+  vars — pero SOLO para los tenants; el super-admin de Blend sigue siendo el login actual.
+- **`tenantId` nullable** agregado a `Category`, `Product`, `ModifierGroup`, `Customer`,
+  `Order` (+ índice), `Driver`, `Settings` (con `@unique` para el 1:1 con `Tenant`) — a
+  propósito NO se hizo obligatorio todavía: si se hubiera puesto `tenantId` requerido ya,
+  **cualquier alta nueva** (categoría, producto, pedido, cliente) desde la app real habría
+  empezado a tirar 500 en el momento, porque ninguna ruta arma ese campo hoy. Pasa a
+  obligatorio recién en la Fase 26b, junto con el resto de las rutas actualizadas para
+  completarlo.
+- **Gotcha real**: `prisma db push` avisó "podría haber pérdida de datos" al agregar el
+  `@unique` en `Settings.tenantId` (columna nueva, vacía — el aviso es genérico de Prisma
+  para cualquier constraint único nuevo, no una pérdida real) y pidió el flag
+  `--accept-data-loss`. Ese flag me lo bloqueó el clasificador de la sesión (como toda
+  escritura sensible a la base) — lo corrió el usuario en su Git Bash.
+  `npx prisma db push --accept-data-loss` (una sola vez, ya no hace falta de nuevo salvo que
+  se agregue otro `@unique` nuevo).
+- **Backfill** (script ad hoc, corrido desde afuera del repo, no se commitea — mismo
+  criterio que el backfill de clientes de la Fase 22): crea el `Tenant` "rowlys" (nombre
+  tomado de `Settings.storeName`), crea su primer `User` con **las mismas credenciales que
+  ya usa el admin de Rowlys** (`ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` del `.env`, leídas del
+  archivo a mano porque `tsx` no expande `\$` como sí hace Next.js — mismo gotcha ya
+  documentado) para que el login no cambie en la Fase 26b, y asigna `tenantId` a todo lo que
+  ya existía. Idempotente (se puede volver a correr sin duplicar nada).
+- **Verificado contra Neon real**: los 7 modelos quedaron en `0 filas sin tenant` después
+  del backfill (4 categorías, 7 productos, 3 grupos de adicionales, 2 clientes, 33 pedidos,
+  2 repartidores, 1 fila de Settings — todo lo real de Rowlys, nada se perdió). `tsc`/
+  `next build` limpios (no se tocó código de la app).
+- **Pendiente**: commitear (`prisma/schema.prisma`, sin el script de backfill) y pushear.
+  Después arranca la Fase 26b.
 
 ## Historial de decisiones (log)
 
+- **2026-09-11/12** — El usuario planteó la idea de un directorio público de Blend (lista de
+  "clientes" tipo Rowlys, click para entrar a pedir) — confirmó que es el arranque real de
+  multi-tenant, no solo un diseño para después. Definiciones: panel de super-admin desde ya
+  para dar de alta locales, Blend necesita ver datos de todos los locales para facturar por
+  pedidos, cada local necesita su propio login/dashboard, y el directorio muestra todos los
+  locales sin filtrar por abierto/cerrado. No negociable: "que Rowlys no se pierda". Se armó
+  un plan de 4 sub-fases (26a-26d) y se completó la **26a**: modelos `Tenant`/`User`,
+  `tenantId` nullable en Category/Product/ModifierGroup/Customer/Order/Driver/Settings,
+  `prisma db push --accept-data-loss` (corrido por el usuario, bloqueado para mí por el
+  clasificador), y un backfill que creó el tenant "rowlys" + su primer `User` (mismas
+  credenciales que el admin actual) + asignó tenantId a los 33 pedidos/4 categorías/7
+  productos/3 grupos/2 clientes/2 repartidores/1 Settings existentes — verificado 0 filas
+  huérfanas contra Neon real. Cero cambios de comportamiento (la app todavía no lee
+  tenantId). `tsc`/`build` limpios. Ver sección "Fase 26" para el plan completo. Siguiente:
+  26b (routing por path + auth por tenant + tenantId obligatorio) — la parte grande y de
+  más riesgo, se hace aparte y con cuidado.
 - **2026-09-11** — El usuario reportó (con foto) el cartel "Action Required" de QZ Tray
   apareciendo en cada impresión. Causa: `QZ_CERT`/`QZ_PRIVATE_KEY` nunca se habían cargado en
   Vercel (documentado en `PRINTING_SETUP.md` desde la Fase 21 pero nunca ejecutado). Generé
