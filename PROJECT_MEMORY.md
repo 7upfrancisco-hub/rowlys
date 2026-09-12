@@ -2030,6 +2030,28 @@ próxima sub-fase (routing por slug para las páginas públicas).
   `tenantId` obligatorio en todos los modelos, `Customer.phone` a
   `@@unique([tenantId, phone])`, panel de super-admin (26c), directorio público (26d).
 
+### Segundo tenant de prueba — "Pizzería Demo" (2026-09-12)
+
+Antes de decidir si construir primero el super-admin (26c) o el directorio (26d), el
+usuario pidió crear un **segundo local ficticio** para poder probar de una vez que el
+aislamiento multi-tenant de la 26b funciona de verdad (no solo con Rowlys, el único que
+había hasta ahora). Creado a mano (script ad hoc, no commiteado, mismo criterio que los
+backfills anteriores):
+
+- **Tenant** `pizzeria-demo` ("Pizzería Demo"), con su propio `Settings` (color azul
+  `#2563eb`, tipografía Playfair Display — a propósito bien distinto de Rowlys, para que se
+  note a simple vista si algo se mezcla), un `User` (`demo` / `demo1234`), y un catálogo de
+  prueba mínimo (categoría "Pizzas", productos "Muzzarella" y "Napolitana").
+- **Verificado el aislamiento real contra Neon**: logueado como `demo`, `/api/admin/
+  categories` y `/api/admin/products` devuelven SOLO el catálogo de Pizzería Demo (1
+  categoría, 2 productos) y `/api/orders` da vacío; logueado como `EVO`, `/api/admin/
+  categories` sigue devolviendo únicamente las 4 categorías reales de Rowlys — ningún dato
+  se mezcla entre los dos locales. Esto confirma en la práctica que toda la Fase 26b
+  funciona como se diseñó, no solo con un tenant de juguete.
+- **Pendiente de decidir**: con dos tenants ya reales en la base, el próximo paso natural es
+  construir 26c (super-admin, para no tener que dar de alta locales a mano por script) y/o
+  26d (directorio público, que recién ahora tiene sentido mostrar con más de un local).
+
 ## Historial de decisiones (log)
 
 - **2026-09-12** — Al probar el login de la Fase 26b en el navegador, el usuario no podía
