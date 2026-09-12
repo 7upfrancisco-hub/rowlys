@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 import {
   ORDER_STATUS_LABELS,
   PAYMENT_PROVIDER_LABELS,
@@ -71,6 +72,7 @@ function payStatusLabel(status: string): string {
 // (?month=YYYY-MM, default: mes actual de Argentina). La columna "Facturable"
 // permite auditar el número por el que se cobra. Horario de Argentina.
 export async function GET(request: NextRequest) {
+  const tenantId = requireTenantId(request);
   const current = arParts(new Date());
   let sy = current.year;
   let sm = current.month;
@@ -90,7 +92,7 @@ export async function GET(request: NextRequest) {
   const end = arMidnight(sy, sm + 1, 1);
 
   const orders = await prisma.order.findMany({
-    where: { createdAt: { gte: start, lt: end } },
+    where: { tenantId, createdAt: { gte: start, lt: end } },
     orderBy: { number: "asc" },
     select: {
       number: true,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 import type { CustomerDTO } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -17,20 +18,24 @@ const BILLABLE: OrderStatus[] = [
 type Sort = "recent" | "orders" | "spent" | "name";
 
 export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
   const { searchParams } = new URL(request.url);
   const search = (searchParams.get("search") ?? "").trim();
   const sort = (searchParams.get("sort") ?? "recent") as Sort;
 
   const digits = search.replace(/\D/g, "");
-  const where = search
-    ? {
-        OR: [
-          { firstName: { contains: search, mode: "insensitive" as const } },
-          { lastName: { contains: search, mode: "insensitive" as const } },
-          ...(digits ? [{ phone: { contains: digits } }] : []),
-        ],
-      }
-    : {};
+  const where = {
+    tenantId,
+    ...(search
+      ? {
+          OR: [
+            { firstName: { contains: search, mode: "insensitive" as const } },
+            { lastName: { contains: search, mode: "insensitive" as const } },
+            ...(digits ? [{ phone: { contains: digits } }] : []),
+          ],
+        }
+      : {}),
+  };
 
   const customers = await prisma.customer.findMany({
     where,

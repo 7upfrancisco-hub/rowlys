@@ -29,10 +29,16 @@ const UNPAID_MP: Prisma.OrderWhereInput = {
 };
 
 // Cancela los pedidos MP sin pagar de más de PHANTOM_ORDER_HOURS. Idempotente.
-// Devuelve cuántos canceló.
-export async function sweepPhantomOrders(): Promise<number> {
+// Devuelve cuántos canceló. `tenantId` acota el barrido a un local (siempre
+// se pasa desde rutas protegidas, Fase 26b); sin él barre todos los tenants —
+// lo sigue usando el checkout público, que todavía no resuelve tenant.
+export async function sweepPhantomOrders(tenantId?: string): Promise<number> {
   const { count } = await prisma.order.updateMany({
-    where: { ...UNPAID_MP, createdAt: { lt: cutoff() } },
+    where: {
+      ...UNPAID_MP,
+      createdAt: { lt: cutoff() },
+      ...(tenantId ? { tenantId } : {}),
+    },
     data: { status: "CANCELLED", cancelReason: PHANTOM_CANCEL_REASON },
   });
   return count;
@@ -40,14 +46,14 @@ export async function sweepPhantomOrders(): Promise<number> {
 
 // Para el contador de la UI: cuántos pedidos MP sin pagar hay en total y
 // cuántos ya están vencidos (se cancelarían ahora).
-export async function countUnpaidOrders(): Promise<{
-  pending: number;
-  stale: number;
-}> {
+export async function countUnpaidOrders(
+  tenantId?: string
+): Promise<{ pending: number; stale: number }> {
+  const where = tenantId ? { ...UNPAID_MP, tenantId } : UNPAID_MP;
   const [pending, stale] = await Promise.all([
-    prisma.order.count({ where: UNPAID_MP }),
+    prisma.order.count({ where }),
     prisma.order.count({
-      where: { ...UNPAID_MP, createdAt: { lt: cutoff() } },
+      where: { ...where, createdAt: { lt: cutoff() } },
     }),
   ]);
   return { pending, stale };

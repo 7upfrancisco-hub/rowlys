@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 import type { OrderStatus, OrderType, PaymentProvider } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,7 @@ const emptyPair = (): Pair => ({ orders: 0, revenue: 0 });
 // desde el primer mes del negocio (para un local son pocas filas) y hace todo
 // el agregado en memoria.
 export async function GET(request: NextRequest) {
+  const tenantId = requireTenantId(request);
   const now = new Date();
   const current = arParts(now);
 
@@ -86,6 +88,7 @@ export async function GET(request: NextRequest) {
 
   // La tabla de historial arranca en el mes del primer pedido del negocio.
   const firstOrder = await prisma.order.findFirst({
+    where: { tenantId },
     orderBy: { createdAt: "asc" },
     select: { createdAt: true },
   });
@@ -93,7 +96,7 @@ export async function GET(request: NextRequest) {
   const historyStart = arMidnight(first.year, first.month, 1);
 
   const rows = await prisma.order.findMany({
-    where: { createdAt: { gte: historyStart } },
+    where: { tenantId, createdAt: { gte: historyStart } },
     select: {
       createdAt: true,
       status: true,

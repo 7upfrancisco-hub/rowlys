@@ -4,6 +4,7 @@ import {
   countUnpaidOrders,
   sweepPhantomOrders,
 } from "@/lib/phantom-orders";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +13,14 @@ export const dynamic = "force-dynamic";
 // GET  -> contador para la UI ({ pending, stale, hours }).
 // POST -> cancela ahora los pedidos MP sin pagar vencidos ({ cancelled }).
 
-export async function GET() {
-  const counts = await countUnpaidOrders();
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
+  const counts = await countUnpaidOrders(tenantId);
   return NextResponse.json({ ...counts, hours: PHANTOM_ORDER_HOURS });
 }
 
-export async function POST() {
-  const cancelled = await sweepPhantomOrders();
+export async function POST(request: Request) {
+  const tenantId = requireTenantId(request);
+  const cancelled = await sweepPhantomOrders(tenantId);
   return NextResponse.json({ cancelled });
 }

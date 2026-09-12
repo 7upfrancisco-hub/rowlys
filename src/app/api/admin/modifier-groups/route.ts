@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
   const groups = await prisma.modifierGroup.findMany({
+    where: { tenantId },
     orderBy: { name: "asc" },
     include: { options: { orderBy: { title: "asc" } } },
   });
@@ -35,6 +38,7 @@ const createGroupSchema = z
   });
 
 export async function POST(request: Request) {
+  const tenantId = requireTenantId(request);
   const parsed = createGroupSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -53,6 +57,7 @@ export async function POST(request: Request) {
       min: body.min,
       max: body.max,
       active: body.active,
+      tenantId,
       options: { create: body.options },
     },
     include: { options: true },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createOrder, type CreateOrderInput } from "@/lib/orders";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ const staffOrderSchema = z
   });
 
 export async function POST(request: Request) {
+  const tenantId = requireTenantId(request);
   const parsed = staffOrderSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -58,6 +60,7 @@ export async function POST(request: Request) {
   const result = await createOrder(input, {
     enforceStoreStatus: false,
     initialStatus: "CONFIRMED",
+    tenantId,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });

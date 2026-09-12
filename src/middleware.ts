@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { TENANT_HEADER } from "@/lib/tenant";
 
 export const config = {
   matcher: [
@@ -28,9 +29,9 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const valid = token ? await verifySessionToken(token) : false;
+  const session = token ? await verifySessionToken(token) : null;
 
-  if (!valid) {
+  if (!session) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         { error: "No autorizado." },
@@ -42,5 +43,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Propaga el tenant de la sesión a la route handler vía un header interno
+  // (Fase 26b). Primero se borra cualquier valor que haya mandado el propio
+  // cliente, para que nadie pueda falsear su tenant seteando el header a
+  // mano — el único que lo escribe es este middleware, después de validar
+  // la firma del JWT.
+  const headers = new Headers(request.headers);
+  headers.delete(TENANT_HEADER);
+  headers.set(TENANT_HEADER, session.tenantId);
+  return NextResponse.next({ request: { headers } });
 }

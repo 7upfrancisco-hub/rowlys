@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyOrderConfirmed } from "@/lib/notifications/whatsapp";
+import { requireTenantId } from "@/lib/tenant";
 import type { WhatsAppSendResult } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   const parsed = patchOrderSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -65,8 +67,8 @@ export async function PATCH(
   const { status, markPaid, driverId, extraDelayMinutes, cancelReason } =
     parsed.data;
 
-  const existing = await prisma.order.findUnique({
-    where: { id: params.id },
+  const existing = await prisma.order.findFirst({
+    where: { id: params.id, tenantId },
     include: { payment: true },
   });
   if (!existing) {
@@ -83,7 +85,9 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+    const driver = await prisma.driver.findFirst({
+      where: { id: driverId, tenantId },
+    });
     if (!driver) {
       return NextResponse.json(
         { error: "El repartidor no existe." },
@@ -149,7 +153,7 @@ export async function PATCH(
     let whatsappNotification: WhatsAppSendResult | undefined;
     if (status === "CONFIRMED" && existing.status !== "CONFIRMED") {
       const settings = await prisma.settings.findUnique({
-        where: { id: "singleton" },
+        where: { tenantId },
       });
       whatsappNotification = await notifyOrderConfirmed(
         {

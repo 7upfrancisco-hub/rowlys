@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 import type { OrderStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,7 @@ function serialize(b: Bucket) {
 // Ventas por categoría y por producto del mes, desglosadas día por día, para el
 // panel "Ventas por categoría" de /admin/metricas.
 export async function GET(request: NextRequest) {
+  const tenantId = requireTenantId(request);
   const now = new Date();
   const current = arParts(now);
 
@@ -110,7 +112,7 @@ export async function GET(request: NextRequest) {
   const daysInMonth = new Date(Date.UTC(sy, sm + 1, 0)).getUTCDate();
 
   const orders = await prisma.order.findMany({
-    where: { createdAt: { gte: start, lt: end } },
+    where: { tenantId, createdAt: { gte: start, lt: end } },
     select: {
       createdAt: true,
       status: true,

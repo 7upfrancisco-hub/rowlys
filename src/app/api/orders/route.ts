@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createOrder, createOrderSchema } from "@/lib/orders";
 import { sweepPhantomOrders } from "@/lib/phantom-orders";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,11 @@ export const dynamic = "force-dynamic";
 const SWEEP_EVERY_MS = 10 * 60 * 1000;
 let lastSweepAt = 0;
 
-function maybeSweepPhantomOrders() {
+function maybeSweepPhantomOrders(tenantId: string) {
   const now = Date.now();
   if (now - lastSweepAt < SWEEP_EVERY_MS) return;
   lastSweepAt = now;
-  sweepPhantomOrders()
+  sweepPhantomOrders(tenantId)
     .then((n) => {
       if (n > 0) console.log(`Pedidos fantasma cancelados: ${n}`);
     })
@@ -33,7 +34,8 @@ const orderStatusSchema = z.enum([
 ]);
 
 export async function GET(request: Request) {
-  maybeSweepPhantomOrders();
+  const tenantId = requireTenantId(request);
+  maybeSweepPhantomOrders(tenantId);
 
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status");
@@ -54,6 +56,7 @@ export async function GET(request: Request) {
 
   const orders = await prisma.order.findMany({
     where: {
+      tenantId,
       status: statuses ? { in: statuses } : { notIn: ["DELIVERED", "CANCELLED"] },
       // Un pedido que se paga con Mercado Pago no llega a la comanda hasta que
       // el webhook confirma el pago. Si el cliente no termina de pagar, queda

@@ -38,19 +38,20 @@ model Tenant {
   updatedAt      DateTime        @updatedAt
 }
 
-// Login de cada local (reemplaza, para los tenants, el admin único por env
-// vars que sigue usando Blend para su propio super-admin). Un tenant puede
-// tener más de un usuario a futuro; hoy alcanza con uno (el dueño).
+// Login de cada local. `username` es único GLOBAL (no por tenant) a propósito
+// (Fase 26b): así /login sigue siendo un solo formulario simple (usuario +
+// contraseña, sin pedir "de qué local sos") y el tenant se resuelve solo con
+// encontrar el User — no hace falta que el que inicia sesión sepa ningún
+// slug. El super-admin de Blend (panel aparte, Fase 26c) NO usa esta tabla:
+// sigue con su login propio por env vars, para no pisarse con esto.
 model User {
   id           String   @id @default(cuid())
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId     String
-  username     String
+  username     String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  @@unique([tenantId, username])
 }
 
 model Category {
@@ -272,7 +273,11 @@ model Payment {
 }
 
 model Settings {
-  id                      String   @id @default("singleton")
+  // Rowlys (el único Settings que existía antes de la Fase 26) quedó con
+  // id literal "singleton" — no se migra, sigue siendo válido como cualquier
+  // otro id. El default cambia a cuid() para que un tenant NUEVO (Fase 26c)
+  // no choque intentando reusar el mismo id "singleton".
+  id                      String   @id @default(cuid())
   deliveryFee             Float    @default(0)
   storeName               String   @default("Rowlys")
   storePhone              String?

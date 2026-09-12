@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,10 @@ const imageUrlSchema = z
     message: "La imagen debe ser una URL válida o una imagen subida.",
   });
 
-export async function GET() {
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
   const products = await prisma.product.findMany({
+    where: { tenantId },
     orderBy: { name: "asc" },
     include: {
       category: true,
@@ -60,6 +63,7 @@ const productSchema = z
   );
 
 export async function POST(request: Request) {
+  const tenantId = requireTenantId(request);
   const parsed = productSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -69,8 +73,8 @@ export async function POST(request: Request) {
   }
   const body = parsed.data;
 
-  const category = await prisma.category.findUnique({
-    where: { id: body.categoryId },
+  const category = await prisma.category.findFirst({
+    where: { id: body.categoryId, tenantId },
   });
   if (!category) {
     return NextResponse.json(
@@ -82,7 +86,7 @@ export async function POST(request: Request) {
   const groupIds = [...new Set(body.modifierGroupIds)];
   if (groupIds.length > 0) {
     const groups = await prisma.modifierGroup.findMany({
-      where: { id: { in: groupIds }, active: true },
+      where: { id: { in: groupIds }, active: true, tenantId },
     });
     if (groups.length !== groupIds.length) {
       return NextResponse.json(
@@ -103,6 +107,7 @@ export async function POST(request: Request) {
       available: body.available,
       availableDelivery: body.availableDelivery,
       availablePickup: body.availablePickup,
+      tenantId,
       modifierGroups: {
         create: groupIds.map((groupId, index) => ({
           groupId,

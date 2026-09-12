@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   const parsed = updateDriverSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -34,45 +35,33 @@ export async function PATCH(
     );
   }
 
-  try {
-    const driver = await prisma.driver.update({
-      where: { id: params.id },
-      data: parsed.data,
-    });
-    return NextResponse.json(driver);
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2025"
-    ) {
-      return NextResponse.json(
-        { error: "El repartidor no existe." },
-        { status: 404 }
-      );
-    }
-    throw err;
+  const existing = await prisma.driver.findFirst({
+    where: { id: params.id, tenantId },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "El repartidor no existe." }, { status: 404 });
   }
+
+  const driver = await prisma.driver.update({
+    where: { id: params.id },
+    data: parsed.data,
+  });
+  return NextResponse.json(driver);
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   // Se puede borrar siempre: los pedidos que lo tenían asignado quedan sin
   // repartidor (`onDelete: SetNull`), no se pierde el pedido.
-  try {
-    await prisma.driver.delete({ where: { id: params.id } });
-    return new NextResponse(null, { status: 204 });
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2025"
-    ) {
-      return NextResponse.json(
-        { error: "El repartidor no existe." },
-        { status: 404 }
-      );
-    }
-    throw err;
+  const existing = await prisma.driver.findFirst({
+    where: { id: params.id, tenantId },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "El repartidor no existe." }, { status: 404 });
   }
+  await prisma.driver.delete({ where: { id: params.id } });
+  return new NextResponse(null, { status: 204 });
 }

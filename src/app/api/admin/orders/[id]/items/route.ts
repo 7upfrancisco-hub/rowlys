@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { editOrderItemsSchema, updateOrderItems } from "@/lib/orders";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,7 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   const parsed = editOrderItemsSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -19,7 +21,7 @@ export async function POST(
     );
   }
 
-  const result = await updateOrderItems(params.id, parsed.data);
+  const result = await updateOrderItems(params.id, parsed.data, tenantId);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

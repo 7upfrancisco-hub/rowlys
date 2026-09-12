@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
   const categories = await prisma.category.findMany({
+    where: { tenantId },
     orderBy: { order: "asc" },
     include: { _count: { select: { products: true } } },
   });
@@ -18,6 +21,7 @@ const createCategorySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const tenantId = requireTenantId(request);
   const parsed = createCategorySchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -28,6 +32,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const category = await prisma.category.create({ data: parsed.data });
+  const category = await prisma.category.create({
+    data: { ...parsed.data, tenantId },
+  });
   return NextResponse.json(category, { status: 201 });
 }

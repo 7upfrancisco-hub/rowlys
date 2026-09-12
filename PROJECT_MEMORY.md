@@ -1888,13 +1888,15 @@ antes de avanzar a la siguiente — esta es, con diferencia, la migración más 
 proyecto hasta ahora):
 
 - **26a (hecha)**: modelo de datos + backfill de Rowlys. Ver detalle abajo.
-- **26b (pendiente, la parte grande y de más riesgo)**: routing por local (decidido:
-  **por path**, `/<slug>/menu`, `/<slug>/checkout`, `/<slug>/admin`, `/<slug>/comanda` — NO
-  por subdominio, porque eso requeriría comprar un dominio propio + DNS wildcard, que hoy no
-  existe, todo corre sobre `rowlys.vercel.app`); auth real por tenant (login valida contra
-  `User`, cada request queda scopeado a `tenantId`); pasar `tenantId` de nullable a
-  obligatorio en todos los modelos (recién ahí, una vez que TODAS las rutas de creación lo
-  completen); `Customer.phone` pasa de `@unique` global a `@@unique([tenantId, phone])`.
+- **26b (hecha, recortada en 2 partes)**: auth real por tenant (login valida contra `User`) +
+  que **todas las rutas admin/comanda** filtren por `tenantId` de la sesión — sin mover
+  `/admin`/`/comanda` de URL (la sesión decide el tenant, no la URL). Ver detalle abajo.
+  **Falta todavía** (misma fase, pendiente): routing por slug para el checkout público
+  (decidido: **por path**, `/<slug>/menu`, `/<slug>/checkout` — NO por subdominio, porque
+  eso requeriría comprar un dominio propio + DNS wildcard, que hoy no existe, todo corre
+  sobre `rowlys.vercel.app`), pasar `tenantId` de nullable a obligatorio en todos los
+  modelos (recién cuando el checkout público también lo complete), y `Customer.phone` de
+  `@unique` global a `@@unique([tenantId, phone])`.
 - **26c (pendiente)**: panel de super-admin de Blend (alta de locales con slug/nombre/
   credenciales iniciales, activar/desactivar, vista agregada de pedidos por local por mes
   para facturar). Sigue protegido por el login actual por env vars (ADMIN_USERNAME/
@@ -1940,11 +1942,98 @@ schema. La app hoy sigue leyendo `Settings` por `id: "singleton"` como siempre.
   del backfill (4 categorías, 7 productos, 3 grupos de adicionales, 2 clientes, 33 pedidos,
   2 repartidores, 1 fila de Settings — todo lo real de Rowlys, nada se perdió). `tsc`/
   `next build` limpios (no se tocó código de la app).
-- **Pendiente**: commitear (`prisma/schema.prisma`, sin el script de backfill) y pushear.
-  Después arranca la Fase 26b.
+- **Commiteado y pusheado** (`897bc6b`).
+
+### Fase 26b — auth por tenant + scoping de todas las rutas admin (hecho, 2026-09-12)
+
+El usuario confirmó seguir de una: "Rowlys todavía no está en producción con Blend" (menos
+riesgo que si ya hubiera clientes reales pagando), así que se avanzó con la parte grande.
+**Alcance de esta sub-fase, recortado a propósito** para no intentar todo junto: auth real
+por tenant + que TODAS las rutas de `/admin`/`/comanda` filtren por tenant. **Quedó afuera a
+propósito** (sigue como en la Fase 25): el checkout público (`/menu`, `/checkout`,
+`/pedido/[id]`, `/api/menu`, `/api/settings`, `POST /api/orders`) todavía no resuelve tenant
+por URL — sigue implícitamente "el único Settings que existe" (`id: "singleton"`). Eso es la
+próxima sub-fase (routing por slug para las páginas públicas).
+
+- **Diseño de auth que evita un problema real**: el backfill de la 26a le puso a `User` de
+  Rowlys **las mismas credenciales** que ya usa el admin por env vars — si el login de
+  tenant hubiera revisado primero `User` y si no, caído a las env vars (o viceversa), esas
+  credenciales compartidas habrían sido ambiguas (¿te logueás como Rowlys o como
+  super-admin de Blend?). Se resolvió separando del todo los dos sistemas: `/login` (el de
+  siempre) pasa a validar **solo** contra la tabla `User` — las env vars
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` quedan reservadas, sin tocar, para un login
+  **aparte** que va a tener el panel de super-admin en la Fase 26c. Por eso también
+  `User.username` pasó a ser único GLOBAL (no `@@unique([tenantId, username])` como se
+  había armado en la 26a) — así el form de login sigue siendo solo usuario+contraseña, sin
+  preguntar de qué local sos: el tenant se resuelve solo con encontrar el `User`.
+- **`src/lib/auth.ts`**: `verifySessionToken` devolvía `boolean`, ahora devuelve
+  `SessionPayload | null` (`{ sub, tenantId }`) — hace falta leer el tenant, no solo saber
+  si la sesión es válida. El JWT ahora lleva `tenantId` además de `sub`.
+- **`src/lib/tenant.ts`** (nuevo): `TENANT_HEADER` (`x-tenant-id`) + `requireTenantId(request)`
+  — lee el header que puso `middleware.ts`, tira si falta (bug de configuración, no un 4xx
+  de negocio).
+- **`middleware.ts`**: después de validar la sesión, propaga `tenantId` a la route handler
+  vía ese header — primero borra cualquier valor que haya mandado el propio cliente (para
+  que nadie pueda falsear su tenant seteando el header a mano), y recién ahí pone el valor
+  validado. Las páginas (`/admin/*`, `/comanda/*`) y las API (`/api/admin/*`,
+  `/api/orders/*`) protegidas no cambiaron de URL — la sesión decide el tenant, no la URL
+  (por eso no hizo falta mover ni una sola página a `/<slug>/admin` en esta sub-fase).
+- **`POST /api/auth/login`**: valida `username`+`password` contra `User` (bcrypt), ya no
+  contra las env vars.
+- **Barrido de las 15 rutas API admin** (todas protegidas por `middleware.ts`): cada
+  `findMany`/`create` suma `tenantId`; cada `findUnique`/`update`/`delete` por `id` pasó a
+  `findFirst({ id, tenantId })` primero (404 si no es de ese tenant) y recién después el
+  update/delete — reemplaza varios catch de `P2025` que ya no hacían falta.
+  `categories`, `products` (+ valida que `categoryId`/`modifierGroupIds` sean del mismo
+  tenant), `modifier-groups`, `customers`, `drivers`, `settings` (pasa de `id:"singleton"` a
+  `where:{tenantId}` — el `id` de `Settings` ahora tiene `@default(cuid())` en vez de
+  `@default("singleton")`, para que un tenant nuevo en la 26c no choque intentando reusar
+  ese id), `orders` (list/create/patch/items/cleanup-unpaid), y las 4 rutas de `metrics`.
+- **`src/lib/orders.ts`**: `resolveItems`/`createOrder` ganan un `tenantId?` opcional
+  (presente siempre desde la carga admin, todavía ausente desde el checkout público);
+  `updateOrderItems` lo pide obligatorio (siempre viene de una ruta protegida). El pedido
+  creado, sus ítems resueltos contra productos del tenant, y el cliente (`Customer.upsert`)
+  ya guardan `tenantId` cuando se conoce.
+- **`src/lib/phantom-orders.ts`**: `sweepPhantomOrders`/`countUnpaidOrders` ganan un
+  `tenantId?` opcional — con él acotan el barrido a un local; sin él (el checkout público
+  vía `GET /api/orders`... espera, este es admin) siguen barriendo global. Nota: el
+  throttle de 10 min del barrido (`GET /api/orders`) es una variable global compartida por
+  todos los tenants — con un solo tenant no importa, pero el día que haya dos, el barrido
+  de uno puede "tapar" el del otro por 10 min. Gap conocido, no se resolvió (bajo impacto).
+- **Verificado end-to-end contra Neon real** (usuario de prueba temporal, borrado después,
+  nunca commiteado): login OK con la tabla `User` (contraseña incorrecta → 401, sin cookie →
+  401), `GET /api/admin/categories`/`customers`/`drivers`/`modifier-groups`/`products`/
+  `settings`/`metrics`/`orders` devuelven los datos reales de Rowlys con `tenantId` correcto,
+  crear+editar+borrar una categoría de prueba funciona, `PATCH` sobre un id inexistente da
+  404 (el chequeo de ownership funciona), y crear un pedido manual vía
+  `POST /api/admin/orders` efectivamente guarda `tenantId`. Pedido y usuario de prueba
+  borrados de la base al terminar.
+- **Gotcha de esta sesión**: corrí `next build` en background mientras el `dev server`
+  seguía levantado — los dos comparten la carpeta `.next` y el build falló con un error
+  confuso (`Cannot find module for page: /admin/clientes`). No es un bug del código: hay
+  que parar el `dev` antes de un `build` (o viceversa). Build limpio después de matar el
+  dev server y borrar `.next`.
+- `tsc` y `next build` limpios. **Pendiente**: commitear/pushear. Sigue afuera de esta fase
+  (para la próxima): routing por slug del checkout público, `tenantId` obligatorio en todos
+  los modelos, `Customer.phone` a `@@unique([tenantId, phone])`, panel de super-admin
+  (26c), directorio público (26d).
 
 ## Historial de decisiones (log)
 
+- **2026-09-12** — El usuario confirmó seguir con la Fase 26b ("Rowlys todavía no está en
+  producción con Blend", menos riesgo). Se implementó auth real por tenant: `/login` valida
+  contra la tabla `User` (ya no contra las env vars — esas quedan reservadas para el futuro
+  login del super-admin de Blend, Fase 26c, evitando que las credenciales compartidas de
+  Rowlys sean ambiguas), `User.username` pasó a único global (no por-tenant, para que el
+  login siga siendo solo usuario+contraseña), y el JWT de sesión ahora lleva `tenantId`, que
+  `middleware.ts` propaga a cada route handler por header. Se barrieron las 15 rutas API de
+  `/admin` (categorías, productos, adicionales, clientes, repartidores, settings, pedidos,
+  métricas) para que filtren por ese tenant, con chequeo de ownership (404 si el id no es de
+  ese tenant) en vez de dejar pasar cualquier id. `/admin` y `/comanda` no cambiaron de URL —
+  la sesión decide el tenant. Verificado end-to-end contra Neon con un usuario de prueba
+  (login, listados, crear/editar/borrar, 404 por ownership, pedido manual con tenantId
+  correcto) — todo borrado después. Queda afuera de esta fase (a propósito): el checkout
+  público todavía no resuelve tenant por URL. `tsc`/`build` limpios. Ver "Fase 26b".
 - **2026-09-11/12** — El usuario planteó la idea de un directorio público de Blend (lista de
   "clientes" tipo Rowlys, click para entrar a pedir) — confirmó que es el arranque real de
   multi-tenant, no solo un diseño para después. Definiciones: panel de super-admin desde ya

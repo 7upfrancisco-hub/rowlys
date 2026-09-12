@@ -78,11 +78,14 @@ type ResolvedItems =
 // precios recalculados. Nunca confía en lo que manda el cliente.
 async function resolveItems(
   items: ItemInput[],
-  orderType: "PICKUP" | "DELIVERY"
+  orderType: "PICKUP" | "DELIVERY",
+  // undefined = el checkout público todavía sin resolver tenant (Fase 26b-3
+  // pendiente); siempre viene presente desde la carga/edición admin.
+  tenantId?: string
 ): Promise<ResolvedItems> {
   const productIds = [...new Set(items.map((i) => i.productId))];
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds } },
+    where: { id: { in: productIds }, ...(tenantId ? { tenantId } : {}) },
     include: {
       modifierGroups: {
         include: { group: { include: { options: true } } },
@@ -211,10 +214,11 @@ const EDITABLE_STATUSES = [
 
 export async function updateOrderItems(
   orderId: string,
-  input: EditOrderItemsInput
+  input: EditOrderItemsInput,
+  tenantId: string
 ): Promise<CreateOrderResult> {
-  const existing = await prisma.order.findUnique({
-    where: { id: orderId },
+  const existing = await prisma.order.findFirst({
+    where: { id: orderId, tenantId },
     include: { items: { include: { options: true } }, payment: true },
   });
   if (!existing) {
@@ -260,7 +264,7 @@ export async function updateOrderItems(
   }
 
   if (fresh.length > 0) {
-    const resolved = await resolveItems(fresh, existing.orderType);
+    const resolved = await resolveItems(fresh, existing.orderType, tenantId);
     if (!resolved.ok) return resolved;
     itemsTotal += resolved.itemsTotal;
     create.push(...resolved.create);
@@ -304,15 +308,20 @@ interface CreateOrderOptions {
   enforceStoreStatus: boolean;
   // Un pedido cargado por el staff ya está aceptado.
   initialStatus?: "PENDING" | "CONFIRMED";
+  // Tenant dueño del pedido (Fase 26b). Siempre viene desde la carga manual
+  // admin (sesión ya resuelta); el checkout público todavía no lo manda
+  // (Fase 26b-3 pendiente: routing por slug) — en ese caso el pedido queda
+  // sin tenant asignado, igual que pasaba antes de esta fase.
+  tenantId?: string;
 }
 
 export async function createOrder(
   body: CreateOrderInput,
   opts: CreateOrderOptions
 ): Promise<CreateOrderResult> {
-  const settings = await prisma.settings.findUnique({
-    where: { id: "singleton" },
-  });
+  const settings = opts.tenantId
+    ? await prisma.settings.findUnique({ where: { tenantId: opts.tenantId } })
+    : await prisma.settings.findUnique({ where: { id: "singleton" } });
 
   if (opts.enforceStoreStatus && settings) {
     if (!settings.storeOpen) {
@@ -338,7 +347,7 @@ export async function createOrder(
     }
   }
 
-  const resolved = await resolveItems(body.items, body.orderType);
+  const resolved = await resolveItems(body.items, body.orderType, opts.tenantId);
   if (!resolved.ok) return resolved;
 
   const deliveryFee =
@@ -359,6 +368,7 @@ export async function createOrder(
         firstName: body.customerFirstName,
         lastName: body.customerLastName,
         email: body.customerEmail,
+        ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
       },
       update: {
         firstName: body.customerFirstName,
@@ -384,6 +394,7 @@ export async function createOrder(
       total,
       status: opts.initialStatus ?? "PENDING",
       notes: body.notes,
+      ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
       items: { create: resolved.create },
       payment: {
         create: {

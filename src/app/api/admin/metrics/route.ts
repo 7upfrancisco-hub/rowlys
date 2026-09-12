@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 import type { OrderStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,12 @@ function argentinaDayStart(): Date {
 
 // Métricas del día para la barra de /comanda. "Hoy" = desde la medianoche de
 // Argentina. Se calcula en memoria (un día son pocas filas).
-export async function GET() {
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
   const dayStart = argentinaDayStart();
 
   const orders = await prisma.order.findMany({
-    where: { createdAt: { gte: dayStart } },
+    where: { tenantId, createdAt: { gte: dayStart } },
     select: {
       status: true,
       total: true,

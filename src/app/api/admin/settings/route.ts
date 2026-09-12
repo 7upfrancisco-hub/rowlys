@@ -3,19 +3,17 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isValidHex, isOnAccentChoice } from "@/lib/theme-color";
 import { isStorefrontFontKey } from "@/lib/storefront-fonts";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-const SETTINGS_ID = "singleton";
-
-export async function GET() {
-  const settings = await prisma.settings.findUnique({
-    where: { id: SETTINGS_ID },
-  });
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
+  const settings = await prisma.settings.findUnique({ where: { tenantId } });
   if (settings) return NextResponse.json(settings);
 
   return NextResponse.json({
-    id: SETTINGS_ID,
+    tenantId,
     deliveryFee: 0,
     storeName: "Rowlys",
     storePhone: null,
@@ -70,6 +68,7 @@ const settingsSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
+  const tenantId = requireTenantId(request);
   const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -79,9 +78,13 @@ export async function PATCH(request: Request) {
   }
   const body = parsed.data;
 
+  // storeName es obligatorio al CREAR la fila (no tiene default razonable);
+  // si todavía no existe Settings para este tenant y el PATCH no lo manda
+  // (ej. el toggle suelto del header de /comanda), usamos "Mi local" en vez
+  // de fallar — se corrige después desde /admin/configuracion.
   const settings = await prisma.settings.upsert({
-    where: { id: SETTINGS_ID },
-    create: { id: SETTINGS_ID, ...body },
+    where: { tenantId },
+    create: { tenantId, storeName: "Mi local", ...body },
     update: body,
   });
 

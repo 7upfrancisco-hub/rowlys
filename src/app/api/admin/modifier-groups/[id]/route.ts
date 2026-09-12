@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   const parsed = updateGroupSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -44,8 +45,8 @@ export async function PATCH(
   }
   const { options, ...scalars } = parsed.data;
 
-  const existing = await prisma.modifierGroup.findUnique({
-    where: { id: params.id },
+  const existing = await prisma.modifierGroup.findFirst({
+    where: { id: params.id, tenantId },
     include: { options: true },
   });
   if (!existing) {
@@ -100,22 +101,16 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  try {
-    await prisma.modifierGroup.delete({ where: { id: params.id } });
-    return new NextResponse(null, { status: 204 });
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2025"
-    ) {
-      return NextResponse.json(
-        { error: "El grupo no existe." },
-        { status: 404 }
-      );
-    }
-    throw err;
+  const tenantId = requireTenantId(request);
+  const existing = await prisma.modifierGroup.findFirst({
+    where: { id: params.id, tenantId },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "El grupo no existe." }, { status: 404 });
   }
+  await prisma.modifierGroup.delete({ where: { id: params.id } });
+  return new NextResponse(null, { status: 204 });
 }

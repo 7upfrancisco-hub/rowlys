@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   const parsed = updateCategorySchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -24,24 +25,18 @@ export async function PATCH(
     );
   }
 
-  try {
-    const category = await prisma.category.update({
-      where: { id: params.id },
-      data: parsed.data,
-    });
-    return NextResponse.json(category);
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2025"
-    ) {
-      return NextResponse.json(
-        { error: "La categoría no existe." },
-        { status: 404 }
-      );
-    }
-    throw err;
+  const existing = await prisma.category.findFirst({
+    where: { id: params.id, tenantId },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "La categoría no existe." }, { status: 404 });
   }
+
+  const category = await prisma.category.update({
+    where: { id: params.id },
+    data: parsed.data,
+  });
+  return NextResponse.json(category);
 }
 
 // DELETE /api/admin/categories/[id]?moveProductsTo=<id>
@@ -54,10 +49,11 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const tenantId = requireTenantId(request);
   const moveProductsTo = new URL(request.url).searchParams.get("moveProductsTo");
 
-  const category = await prisma.category.findUnique({
-    where: { id: params.id },
+  const category = await prisma.category.findFirst({
+    where: { id: params.id, tenantId },
   });
   if (!category) {
     return NextResponse.json({ error: "La categoría no existe." }, { status: 404 });
@@ -70,8 +66,8 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    const target = await prisma.category.findUnique({
-      where: { id: moveProductsTo },
+    const target = await prisma.category.findFirst({
+      where: { id: moveProductsTo, tenantId },
     });
     if (!target) {
       return NextResponse.json(

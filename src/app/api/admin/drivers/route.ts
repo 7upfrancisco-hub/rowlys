@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const tenantId = requireTenantId(request);
   const drivers = await prisma.driver.findMany({
+    where: { tenantId },
     orderBy: [{ active: "desc" }, { name: "asc" }],
   });
   return NextResponse.json(drivers);
@@ -23,6 +26,7 @@ const createDriverSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const tenantId = requireTenantId(request);
   const parsed = createDriverSchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -32,6 +36,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const driver = await prisma.driver.create({ data: parsed.data });
+  const driver = await prisma.driver.create({ data: { ...parsed.data, tenantId } });
   return NextResponse.json(driver, { status: 201 });
 }

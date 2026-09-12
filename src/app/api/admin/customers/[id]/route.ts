@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireTenantId } from "@/lib/tenant";
 import type { CustomerDetailDTO } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -19,18 +20,19 @@ const ORDER_INCLUDE = {
 } as const;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  const customer = await prisma.customer.findUnique({
-    where: { id: params.id },
+  const tenantId = requireTenantId(request);
+  const customer = await prisma.customer.findFirst({
+    where: { id: params.id, tenantId },
   });
   if (!customer) {
     return NextResponse.json({ error: "El cliente no existe." }, { status: 404 });
   }
 
   const orders = await prisma.order.findMany({
-    where: { customerId: customer.id },
+    where: { customerId: customer.id, tenantId },
     include: ORDER_INCLUDE,
     orderBy: { createdAt: "desc" },
   });
