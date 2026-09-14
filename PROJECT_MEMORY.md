@@ -2101,13 +2101,29 @@ cambios de schema — `Tenant.active` ya existía desde la 26a.
   duplicado → 409, login inmediato con las credenciales recién creadas, catálogo vacío y
   aislado (no ve nada de Rowlys ni de Pizzería Demo); tenant de prueba borrado después
   (cascada a su `User`/`Settings`). `tsc`/`next build` limpios.
-- **Pendiente**: commitear/pushear. El toggle activo/inactivo todavía no tiene ningún efecto
-  visible fuera del panel (el storefront de ese local no lo consulta) — queda para cuando
-  haga falta. Sigue afuera de esta fase: directorio público (26d), routing por slug del
-  checkout público, `tenantId` obligatorio.
+- El toggle activo/inactivo todavía no tiene ningún efecto visible fuera del panel (el
+  storefront de ese local no lo consulta) — queda para cuando haga falta. Sigue afuera de
+  esta fase: directorio público (26d), routing por slug del checkout público, `tenantId`
+  obligatorio.
+- **Pusheado y DEPLOYADO en producción real** (2026-09-14): las 5 fases 26a-26c
+  (`897bc6b`..`8857556`) estaban commiteadas hacía 2 días pero nunca se habían pusheado —
+  `origin/main` seguía en el commit de la Fase 21g. Corrido por el usuario, Vercel
+  auto-deployó (`rowlys-mcc0wz5eo`, `● Ready`). **Verificado end-to-end contra
+  `https://rowlys.vercel.app` real** (no solo Neon vía local): `/` y `/menu` públicos OK;
+  login de Rowlys (`EVO`/`evolution27`) ya pasa por la tabla `User` y `/admin` devuelve solo
+  sus datos; login del super-admin (mismas credenciales, sistema aparte) OK; `/blend-admin`
+  lista Rowlys y Pizzería Demo con pedidos/facturado reales del mes. Todo el trabajo de
+  multi-tenant de esta semana está, por primera vez, realmente en producción.
 
 ## Historial de decisiones (log)
 
+- **2026-09-14** — El usuario pidió "terminar de configurar Blend". Se detectó que las
+  Fases 26a-26c (multi-tenant + super-admin) estaban commiteadas pero **nunca pusheadas** —
+  `origin/main` seguía 2 días atrás. El usuario corrió el push, Vercel auto-deployó, y se
+  verificó todo end-to-end contra la producción real (no solo Neon vía local): login de
+  Rowlys, `/admin` scopeado, login de super-admin, `/blend-admin` con datos reales. Primera
+  vez que el trabajo de multi-tenant está realmente en vivo. Ver nota en "Fase 26c". Queda
+  para decidir: directorio público (26d) y/o routing por slug del checkout público.
 - **2026-09-12** — El usuario pidió crear la "interfaz de Blend" — aclaramos que eran dos
   cosas distintas (super-admin vs. directorio público) y eligió el **super-admin primero**
   ("para no tener que crear locales a mano por script"). Implementada la **Fase 26c**:
