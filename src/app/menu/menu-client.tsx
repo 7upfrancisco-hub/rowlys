@@ -323,7 +323,7 @@ function ProductCard({
         <img
           src={product.imageUrl}
           alt={product.name}
-          className="mb-3 h-32 w-full rounded-lg object-cover"
+          className="mb-3 aspect-[4/3] w-full rounded-lg object-cover"
         />
       )}
       <p className="font-medium text-fg">{product.name}</p>
@@ -440,7 +440,7 @@ function ProductDetailOverlay({
           <img
             src={product.imageUrl}
             alt={product.name}
-            className="mb-4 h-48 w-full rounded-lg object-cover"
+            className="mb-4 aspect-[4/3] w-full rounded-lg object-cover"
           />
         )}
         <h2 className="text-lg font-bold text-fg">{product.name}</h2>

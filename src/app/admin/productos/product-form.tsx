@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { downscaleImage, uploadImage } from "@/lib/image";
+import { uploadImage } from "@/lib/image";
+import ImageCropModal from "@/components/ImageCropModal";
 import type { ModifierGroupDTO } from "@/types";
+
+// Proporción fija de la foto de producto en toda la carta (tarjeta y
+// detalle) — el recorte al subir usa esta misma proporción, ver
+// src/app/menu/menu-client.tsx.
+const PRODUCT_IMAGE_ASPECT = 4 / 3;
 
 export interface AdminCategory {
   id: string;
@@ -63,15 +69,22 @@ export default function ProductForm({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite volver a elegir el mismo archivo
     if (!file) return;
     setUploadErr(null);
+    setCropFile(file);
+  }
+
+  async function handleCropConfirm(blob: Blob) {
+    if (!cropFile) return;
+    setCropFile(null);
     setUploading(true);
     try {
-      const url = await uploadImage(await downscaleImage(file), file.name);
+      const url = await uploadImage(blob, cropFile.name);
       setImageUrl(url);
     } catch (err) {
       setUploadErr((err as Error).message);
@@ -131,6 +144,7 @@ export default function ProductForm({
   }
 
   return (
+    <>
     <form
       onSubmit={handleSubmit}
       className="mb-8 flex flex-col gap-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
@@ -208,16 +222,20 @@ export default function ProductForm({
 
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-700">Imagen</label>
+        <p className="-mt-1 text-xs text-neutral-500">
+          Formato fijo (4:3) en toda la carta — al subir una foto vas a poder
+          ajustar qué parte se recorta.
+        </p>
         <div className="flex items-start gap-4">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={imageUrl}
               alt=""
-              className="h-24 w-24 shrink-0 rounded-lg border border-neutral-200 object-cover"
+              className="aspect-[4/3] w-32 shrink-0 rounded-lg border border-neutral-200 object-cover"
             />
           ) : (
-            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 text-center text-xs text-neutral-400">
+            <div className="flex aspect-[4/3] w-32 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 text-center text-xs text-neutral-400">
               Sin imagen
             </div>
           )}
@@ -329,5 +347,14 @@ export default function ProductForm({
         </button>
       </div>
     </form>
+    {cropFile && (
+      <ImageCropModal
+        file={cropFile}
+        aspect={PRODUCT_IMAGE_ASPECT}
+        onCancel={() => setCropFile(null)}
+        onConfirm={handleCropConfirm}
+      />
+    )}
+    </>
   );
 }
