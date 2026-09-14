@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { downscaleImage, uploadImage } from "@/lib/image";
 import {
   DEFAULT_THEME_COLOR,
   ON_ACCENT_CHOICES,
@@ -24,6 +25,7 @@ import {
 // nada de lo que edita la otra pantalla.
 interface ThemeSettings {
   storeName: string;
+  coverImageUrl: string | null;
   themeColor: string;
   themeFont: string;
   themeOnAccent: string;
@@ -31,6 +33,7 @@ interface ThemeSettings {
 
 export default function PersonalizacionClient() {
   const [storeName, setStoreName] = useState("");
+  const [coverImageUrl, setCoverImageUrl] = useState("");
   const [themeColor, setThemeColor] = useState(DEFAULT_THEME_COLOR);
   const [themeFont, setThemeFont] = useState(DEFAULT_STOREFRONT_FONT);
   const [themeOnAccent, setThemeOnAccent] = useState<OnAccentChoice>("white");
@@ -38,11 +41,14 @@ export default function PersonalizacionClient() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<ThemeSettings>("/api/admin/settings")
       .then((settings) => {
         setStoreName(settings.storeName);
+        setCoverImageUrl(settings.coverImageUrl ?? "");
         setThemeColor(settings.themeColor || DEFAULT_THEME_COLOR);
         setThemeFont(settings.themeFont || DEFAULT_STOREFRONT_FONT);
         setThemeOnAccent(
@@ -52,6 +58,25 @@ export default function PersonalizacionClient() {
       .catch((err: ApiError) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo
+    if (!file) return;
+    setUploadErr(null);
+    setUploading(true);
+    try {
+      const url = await uploadImage(
+        await downscaleImage(file, 1600),
+        file.name
+      );
+      setCoverImageUrl(url);
+    } catch (err) {
+      setUploadErr((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   // Preview en vivo: misma fórmula que usa el storefront real
   // (src/lib/theme-color.ts), así lo que se ve acá es exactamente lo que va
@@ -86,6 +111,7 @@ export default function PersonalizacionClient() {
       await apiFetch("/api/admin/settings", {
         method: "PATCH",
         body: JSON.stringify({
+          coverImageUrl: coverImageUrl.trim() || null,
           themeColor: isValidHex(themeColor) ? themeColor : undefined,
           themeFont,
           themeOnAccent,
@@ -105,14 +131,68 @@ export default function PersonalizacionClient() {
     <div>
       <h2 className="mb-1 text-2xl font-bold text-navy-900">Personalización</h2>
       <p className="mb-6 max-w-xl text-sm text-neutral-600">
-        Color de marca y tipografía de /menu, /checkout y el seguimiento del
-        pedido — para que tu carta se diferencie de la de otros locales en
-        Blend.
+        Portada, color de marca y tipografía de /menu, /checkout y el
+        seguimiento del pedido — para que tu carta se diferencie de la de
+        otros locales en Blend.
       </p>
       <form
         onSubmit={handleSubmit}
         className="flex max-w-xl flex-col gap-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
+        <div className="flex flex-col gap-2 border-b border-neutral-100 pb-4">
+          <label className="text-sm font-medium text-neutral-700">
+            Foto de portada
+          </label>
+          <p className="-mt-1 text-xs text-neutral-500">
+            Banner que se muestra arriba de todo en /menu, atrás del nombre
+            del local y el selector de Retiro/Envío.
+          </p>
+          <div className="flex items-start gap-4">
+            {coverImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={coverImageUrl}
+                alt=""
+                className="h-24 w-40 shrink-0 rounded-lg border border-neutral-200 object-cover"
+              />
+            ) : (
+              <div className="flex h-24 w-40 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 text-center text-xs text-neutral-400">
+                Sin portada
+              </div>
+            )}
+            <div className="flex flex-1 flex-col gap-2">
+              <label
+                className={
+                  "inline-flex w-fit cursor-pointer items-center rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 " +
+                  (uploading ? "pointer-events-none opacity-60" : "")
+                }
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverFile}
+                  className="hidden"
+                />
+                {uploading
+                  ? "Subiendo..."
+                  : coverImageUrl
+                    ? "Cambiar portada"
+                    : "Subir portada"}
+              </label>
+              {coverImageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setCoverImageUrl("")}
+                  className="w-fit text-xs font-medium text-red-600 hover:underline"
+                >
+                  Quitar portada
+                </button>
+              )}
+              {uploadErr && <p className="text-xs text-red-600">{uploadErr}</p>}
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-neutral-700">

@@ -32,7 +32,10 @@ function pickExt(type: string, originalName: string): string {
 }
 
 // Guarda la imagen y devuelve su URL pública (absoluta con Blob, relativa en
-// el fallback de dev).
+// el fallback de dev). Usado tanto para imágenes de producto como para otras
+// imágenes del panel (portada de /menu, cartel de cerrado) — todas comparten
+// el mismo endpoint de subida (`/api/admin/upload`), no hay distinción de
+// carpeta por tipo de imagen.
 export async function storeProductImage(
   file: Blob,
   originalName: string

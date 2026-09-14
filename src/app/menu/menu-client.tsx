@@ -21,6 +21,7 @@ interface StoreInfo {
   closedTitle: string | null;
   closedMessage: string | null;
   closedImageUrl: string | null;
+  coverImageUrl: string | null;
 }
 
 function channelEnabled(info: StoreInfo | null, type: OrderType): boolean {
@@ -158,33 +159,43 @@ export default function MenuClient() {
         </div>
       )}
 
-      <header className="border-b border-line bg-surface px-6 py-4">
-        <h1 className="text-xl font-bold text-accent">Rowlys</h1>
-
-        {!readOnly && (
-          <div className="mt-3 flex gap-1">
-            {(Object.keys(ORDER_TYPE_LABELS) as OrderType[]).map((type) => {
-              const enabled = channelEnabled(storeInfo, type);
-              return (
-                <button
-                  key={type}
-                  onClick={() => setOrderType(type)}
-                  disabled={!enabled}
-                  className={
-                    "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-40 " +
-                    (orderType === type
-                      ? "bg-accent-solid text-on-accent"
-                      : "border border-line text-muted")
-                  }
-                >
-                  {ORDER_TYPE_LABELS[type]}
-                  {!enabled ? " (pausado)" : ""}
-                </button>
-              );
-            })}
+      {storeInfo?.coverImageUrl ? (
+        <header className="relative h-48 overflow-hidden border-b border-line sm:h-64">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={storeInfo.coverImageUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+          <div className="relative flex h-full flex-col justify-end px-6 py-4">
+            <h1 className="text-xl font-bold text-white drop-shadow-sm sm:text-2xl">
+              {storeInfo?.storeName || "Rowlys"}
+            </h1>
+            {!readOnly && (
+              <ChannelToggle
+                storeInfo={storeInfo}
+                orderType={orderType}
+                setOrderType={setOrderType}
+                overlay
+              />
+            )}
           </div>
-        )}
-      </header>
+        </header>
+      ) : (
+        <header className="border-b border-line bg-surface px-6 py-4">
+          <h1 className="text-xl font-bold text-accent">
+            {storeInfo?.storeName || "Rowlys"}
+          </h1>
+          {!readOnly && (
+            <ChannelToggle
+              storeInfo={storeInfo}
+              orderType={orderType}
+              setOrderType={setOrderType}
+            />
+          )}
+        </header>
+      )}
 
       {error && <p className="px-6 py-4 text-sm text-red-500">{error}</p>}
 
@@ -247,6 +258,45 @@ export default function MenuClient() {
           onCheckout={() => router.push("/checkout")}
         />
       )}
+    </div>
+  );
+}
+
+function ChannelToggle({
+  storeInfo,
+  orderType,
+  setOrderType,
+  overlay = false,
+}: {
+  storeInfo: StoreInfo | null;
+  orderType: OrderType;
+  setOrderType: (type: OrderType) => void;
+  overlay?: boolean;
+}) {
+  return (
+    <div className="mt-3 flex gap-1">
+      {(Object.keys(ORDER_TYPE_LABELS) as OrderType[]).map((type) => {
+        const enabled = channelEnabled(storeInfo, type);
+        const active = orderType === type;
+        return (
+          <button
+            key={type}
+            onClick={() => setOrderType(type)}
+            disabled={!enabled}
+            className={
+              "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-40 " +
+              (active
+                ? "bg-accent-solid text-on-accent"
+                : overlay
+                  ? "border border-white/50 bg-black/20 text-white backdrop-blur-sm"
+                  : "border border-line text-muted")
+            }
+          >
+            {ORDER_TYPE_LABELS[type]}
+            {!enabled ? " (pausado)" : ""}
+          </button>
+        );
+      })}
     </div>
   );
 }

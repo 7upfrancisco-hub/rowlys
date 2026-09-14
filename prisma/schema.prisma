@@ -305,6 +305,10 @@ model Settings {
   // el botón) se DERIVA de este valor en src/lib/theme-color.ts, nunca se
   // guarda calculado, para poder ajustar la fórmula sin migrar datos.
   // themeFont es la clave de una tipografía curada (src/lib/storefront-fonts.ts).
+  // coverImageUrl: foto de portada del header de /menu (mismo mecanismo de
+  // subida que las imágenes de producto, ver src/lib/blob.ts). Null = header
+  // plano de siempre, sin banner.
+  coverImageUrl           String?
   themeColor              String   @default("#c92a2a")
   themeFont               String   @default("inter")
   // "Color secundario" en la jerga del local: blanco o negro, el texto/
