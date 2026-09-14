@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -47,6 +47,17 @@ export default function MenuClient() {
   const setOrderType = useCartStore((s) => s.setOrderType);
   const lines = useCartStore((s) => s.lines);
 
+  // Secciones de categoría montadas, para el scrollspy del nav sticky y para
+  // hacer scroll al tocar un tab.
+  const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const registerSectionRef = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) sectionRefs.current.set(id, el);
+    else sectionRefs.current.delete(id);
+  }, []);
+  // Mientras dura el scroll animado de un click en el nav, el scrollspy no
+  // debe pisar la categoría recién elegida con la que va cruzando de paso.
+  const suppressSpyUntil = useRef(0);
+
   useEffect(() => {
     try {
       if (sessionStorage.getItem(BYPASS_KEY) === "1") setViewMenuAnyway(true);
@@ -63,6 +74,33 @@ export default function MenuClient() {
       .then((s) => setStoreInfo(s))
       .catch(() => {});
   }, []);
+
+  // Scrollspy: a medida que se scrollea, marca en el nav la categoría cuya
+  // sección está pasando por la franja de arriba de la pantalla (debajo del
+  // nav sticky).
+  useEffect(() => {
+    if (!categories || categories.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (Date.now() < suppressSpyUntil.current) return;
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length === 0) return;
+        const id = visible[0].target.id.replace("category-", "");
+        setActiveCategoryId(id);
+      },
+      { rootMargin: "-120px 0px -70% 0px", threshold: 0 }
+    );
+    sectionRefs.current.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [categories]);
+
+  function scrollToCategory(id: string) {
+    setActiveCategoryId(id);
+    suppressSpyUntil.current = Date.now() + 700;
+    sectionRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function viewMenu() {
     try {
@@ -81,7 +119,6 @@ export default function MenuClient() {
     setViewMenuAnyway(false);
   }
 
-  const activeCategory = categories?.find((c) => c.id === activeCategoryId) ?? null;
   const subtotal = useMemo(() => cartSubtotal(lines), [lines]);
 
   const storeClosed = !!storeInfo && !storeInfo.storeOpen;
@@ -203,13 +240,18 @@ export default function MenuClient() {
         <p className="px-6 py-8 text-muted">Cargando...</p>
       ) : (
         <>
-          <nav className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-6 py-3">
+          <nav
+            className={
+              "sticky z-10 flex gap-1 overflow-x-auto border-b border-line bg-surface px-6 py-3 " +
+              (readOnly ? "top-10" : "top-0")
+            }
+          >
             {categories.map((category) => (
               <button
                 key={category.id}
-                onClick={() => setActiveCategoryId(category.id)}
+                onClick={() => scrollToCategory(category.id)}
                 className={
-                  "whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium " +
+                  "whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors " +
                   (activeCategoryId === category.id
                     ? "bg-accent/15 text-accent"
                     : "text-muted hover:bg-surface-2")
@@ -220,16 +262,15 @@ export default function MenuClient() {
             ))}
           </nav>
 
-          <div className="grid grid-cols-1 gap-4 px-6 py-6 sm:grid-cols-2 lg:grid-cols-3">
-            {activeCategory?.products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                readOnly={readOnly}
-                onOpen={() => setDetailProduct(product)}
-              />
-            ))}
-          </div>
+          {categories.map((category) => (
+            <CategorySection
+              key={category.id}
+              category={category}
+              readOnly={readOnly}
+              registerRef={registerSectionRef}
+              onOpenProduct={setDetailProduct}
+            />
+          ))}
         </>
       )}
 
@@ -298,6 +339,72 @@ function ChannelToggle({
         );
       })}
     </div>
+  );
+}
+
+// Revela una sola vez (no vuelve a ocultarse si se scrollea para atrás) el
+// elemento apenas entra en el viewport, para el efecto "van apareciendo" de
+// las secciones de categoría.
+function useRevealOnScroll<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -10% 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, visible };
+}
+
+function CategorySection({
+  category,
+  readOnly,
+  registerRef,
+  onOpenProduct,
+}: {
+  category: CategoryDTO;
+  readOnly: boolean;
+  registerRef: (id: string, el: HTMLElement | null) => void;
+  onOpenProduct: (product: ProductDTO) => void;
+}) {
+  const { ref, visible } = useRevealOnScroll<HTMLElement>();
+
+  return (
+    <section
+      id={`category-${category.id}`}
+      ref={(el) => {
+        ref.current = el;
+        registerRef(category.id, el);
+      }}
+      className="scroll-mt-28 px-6 py-6"
+    >
+      <h2 className="mb-4 text-lg font-bold text-fg">{category.name}</h2>
+      <div
+        className={
+          "grid grid-cols-1 gap-4 transition-all duration-700 ease-out sm:grid-cols-2 lg:grid-cols-3 " +
+          (visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0")
+        }
+      >
+        {category.products.map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            readOnly={readOnly}
+            onOpen={() => onOpenProduct(product)}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
