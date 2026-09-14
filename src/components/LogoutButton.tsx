@@ -9,9 +9,11 @@ import { useRouter } from "next/navigation";
 export default function LogoutButton({
   endpoint = "/api/auth/logout",
   redirectTo = "/login",
+  className = "text-sm font-medium text-neutral-500 hover:text-brand-600 hover:underline",
 }: {
   endpoint?: string;
   redirectTo?: string;
+  className?: string;
 }) {
   const router = useRouter();
 
@@ -22,10 +24,7 @@ export default function LogoutButton({
   }
 
   return (
-    <button
-      onClick={handleLogout}
-      className="text-sm font-medium text-neutral-500 hover:text-brand-600 hover:underline"
-    >
+    <button onClick={handleLogout} className={className}>
       Cerrar sesión
     </button>
   );

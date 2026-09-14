@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/types";
-import LogoutButton from "@/components/LogoutButton";
+import BlendAdminHeader from "@/components/BlendAdminHeader";
+import DailyRevenueChart, { type DailyPoint } from "@/components/DailyRevenueChart";
 
 interface TenantRow {
   id: string;
@@ -16,6 +17,12 @@ interface TenantRow {
   revenueThisMonth: number;
 }
 
+interface PlatformMetrics {
+  month: string;
+  todayDay: number | null;
+  daily: DailyPoint[];
+}
+
 function slugify(s: string): string {
   return s
     .normalize("NFD")
@@ -25,10 +32,21 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function KpiCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-neutral-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-navy-900">{value}</p>
+    </div>
+  );
+}
+
 export default function BlendAdminClient() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
+  const [metrics, setMetrics] = useState<PlatformMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [enteringId, setEnteringId] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -46,13 +64,26 @@ export default function BlendAdminClient() {
   } | null>(null);
 
   function load() {
-    apiFetch<TenantRow[]>("/api/blend-admin/tenants")
-      .then(setTenants)
+    Promise.all([
+      apiFetch<TenantRow[]>("/api/blend-admin/tenants"),
+      apiFetch<PlatformMetrics>("/api/blend-admin/metrics"),
+    ])
+      .then(([t, m]) => {
+        setTenants(t);
+        setMetrics(m);
+      })
       .catch((err: ApiError) => setError(err.message))
       .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
+
+  const kpis = useMemo(() => {
+    const active = tenants.filter((t) => t.active).length;
+    const orders = tenants.reduce((s, t) => s + t.ordersThisMonth, 0);
+    const revenue = tenants.reduce((s, t) => s + t.revenueThisMonth, 0);
+    return { active, total: tenants.length, orders, revenue };
+  }, [tenants]);
 
   function handleNameChange(v: string) {
     setName(v);
@@ -93,7 +124,6 @@ export default function BlendAdminClient() {
         body: JSON.stringify({ active: !t.active }),
       });
     } catch (err) {
-      // revierte si falló
       setTenants((prev) =>
         prev.map((x) => (x.id === t.id ? { ...x, active: t.active } : x))
       );
@@ -101,26 +131,50 @@ export default function BlendAdminClient() {
     }
   }
 
+  // "Entrar a este local": arma una sesión de tenant para soporte y navega
+  // a SU /admin, sin pedir la contraseña de ese local.
+  async function enterTenant(t: TenantRow) {
+    setEnteringId(t.id);
+    try {
+      await apiFetch(`/api/blend-admin/tenants/${t.id}/impersonate`, {
+        method: "POST",
+      });
+      window.location.href = "/admin";
+    } catch (err) {
+      setError((err as ApiError).message);
+      setEnteringId(null);
+    }
+  }
+
   return (
     <div>
-      <header className="border-b border-neutral-200 bg-navy-900">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-white">
-              Blend
-            </h1>
-            <p className="text-sm text-navy-200">Super-admin</p>
-          </div>
-          <LogoutButton
-            endpoint="/api/blend-admin/logout"
-            redirectTo="/blend-admin/login"
-          />
-        </div>
-      </header>
+      <BlendAdminHeader />
 
       <main className="mx-auto max-w-5xl px-6 py-10">
+        <h2 className="mb-6 text-2xl font-bold text-navy-900">Dashboard</h2>
+
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <KpiCard label="Locales activos" value={`${kpis.active} / ${kpis.total}`} />
+          <KpiCard label="Pedidos (mes, todos los locales)" value={String(kpis.orders)} />
+          <KpiCard label="Facturado (mes, todos los locales)" value={formatCurrency(kpis.revenue)} />
+          <KpiCard label="Usuarios totales" value={String(tenants.reduce((s, t) => s + t.userCount, 0))} />
+        </div>
+
+        {metrics && (
+          <div className="mb-8">
+            <DailyRevenueChart
+              daily={metrics.daily}
+              month={metrics.month}
+              todayDay={metrics.todayDay}
+              title="Facturado por día — toda la plataforma"
+              color="#1e293b"
+              emptyLabel="Sin ventas facturables este mes en ningún local."
+            />
+          </div>
+        )}
+
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-navy-900">Clientes de Blend</h2>
+          <h3 className="text-xl font-bold text-navy-900">Clientes de Blend</h3>
           <button
             onClick={() => setShowForm((v) => !v)}
             className="rounded-lg bg-navy-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-navy-900"
@@ -223,6 +277,7 @@ export default function BlendAdminClient() {
                   <th className="px-4 py-3 font-medium">Pedidos (mes)</th>
                   <th className="px-4 py-3 font-medium">Facturado (mes)</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
+                  <th className="px-4 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -254,11 +309,20 @@ export default function BlendAdminClient() {
                         {t.active ? "Activo" : "Inactivo"}
                       </button>
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => enterTenant(t)}
+                        disabled={enteringId === t.id}
+                        className="text-xs font-semibold text-navy-700 hover:underline disabled:opacity-50"
+                      >
+                        {enteringId === t.id ? "Entrando..." : "Entrar →"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {tenants.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                    <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
                       Todavía no hay locales cargados.
                     </td>
                   </tr>

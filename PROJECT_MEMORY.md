@@ -2115,8 +2115,63 @@ cambios de schema — `Tenant.active` ya existía desde la 26a.
   lista Rowlys y Pizzería Demo con pedidos/facturado reales del mes. Todo el trabajo de
   multi-tenant de esta semana está, por primera vez, realmente en producción.
 
+### Fase 27 — dashboard de Blend: KPIs, gráfico, acceso a locales y clientes globales (hecho, 2026-09-14)
+
+El usuario pidió "mi propio dashboard" para `/blend-admin` — eligió una mezcla de varias
+ideas (KPIs, gráfico, entrar directo a cada local, base de clientes global), aclarando que
+se va a seguir sumando de a poco. Sin cambios de schema.
+
+- **Refactor previo**: se extrajo el gráfico SVG de línea "a mano" de `/admin/metricas`
+  (`DailyChart` + sus helpers `smoothPath`/`axisDays`) a un componente compartido
+  **`src/components/DailyRevenueChart.tsx`** (props genéricas: `daily`, `month`, `todayDay`,
+  más `title`/`color`/`emptyLabel` opcionales) — así se pudo reusar tal cual en el dashboard
+  de Blend sin duplicar ~150 líneas de SVG. `/admin/metricas` no cambió de comportamiento,
+  solo de dónde vive el componente.
+- **`GET /api/blend-admin/metrics`** (nuevo): ventas por día del mes en curso sumando TODOS
+  los tenants (mismo criterio "facturable" y misma cuenta de huso horario Argentina que el
+  resto de las métricas, duplicada a propósito en esta rama de rutas de super-admin).
+- **`/blend-admin` (dashboard)**: 4 tarjetas de KPI arriba (locales activos/total, pedidos
+  del mes de TODA la plataforma, facturado de TODA la plataforma, usuarios totales —
+  calculadas en el cliente sumando el array de tenants que ya traía `GET
+  /api/blend-admin/tenants`, sin pegarle a una API nueva para esto) + el
+  `DailyRevenueChart` (color navy, para distinguirlo visualmente del naranja de
+  `/admin/metricas`) + la tabla de locales de siempre.
+- **"Entrar →" por local** (`POST /api/blend-admin/tenants/[id]/impersonate`, nuevo): le arma
+  al super-admin una sesión de TENANT válida (la misma cookie `rowlys_session` de
+  `/login`) sin necesitar la contraseña de ese local — pensado para soporte. El JWT queda
+  identificado como `sub: "blend-support:<username o slug>"` (se nota en logs que no es un
+  login real del dueño del local). Protegido por `middleware.ts` como sesión de
+  super-admin — nadie más puede pedirlo.
+- **`GET /api/blend-admin/customers`** (nuevo) + **`/blend-admin/clientes`** (nueva
+  pantalla, con su propio nav en `BlendAdminHeader.tsx` — Dashboard/Clientes): base de
+  **todos los consumidores finales de toda la plataforma** (no solo de un local), con qué
+  local compró cada uno — la pieza que el usuario pidió específicamente ("mi propia base de
+  datos con todos los clientes que usen la app Blend"). Sin `where` de tenant, a propósito:
+  es la vista exclusiva de super-admin (`/admin/clientes` de cada tenant sigue viendo solo
+  lo suyo).
+- **`LogoutButton`** ganó un prop `className` (antes tenía el estilo hardcodeado) para poder
+  usarlo también en el header navy de Blend sin que quede con contraste bajo.
+- **Verificado end-to-end contra Neon real**: login super-admin, `GET /api/blend-admin/
+  metrics` con datos reales del mes, `GET /api/blend-admin/customers` con clientes reales +
+  su local correcto, impersonar Rowlys y confirmar que `/api/admin/categories` devuelve las
+  4 categorías reales de Rowlys, intento de impersonar sin sesión de super-admin → 401,
+  páginas `/blend-admin` y `/blend-admin/clientes` cargan (200) con sesión válida.
+  `tsc`/`next build` limpios.
+- **Pendiente**: commitear/pushear. El usuario ya avisó que va a seguir sumando cosas a este
+  dashboard con el tiempo.
+
 ## Historial de decisiones (log)
 
+- **2026-09-14** — El usuario pidió su propio dashboard en `/blend-admin` (mezcla de KPIs,
+  gráfico, acceso directo a cada local, y una base de clientes global de toda la
+  plataforma), aclarando que se va sumando de a poco. Implementada la **Fase 27**: se
+  extrajo el gráfico de `/admin/metricas` a `DailyRevenueChart.tsx` compartido, KPIs
+  calculados en el cliente sobre los datos que ya traía la tabla de tenants, nuevo
+  `GET /api/blend-admin/metrics` (ventas por día de TODA la plataforma), "Entrar →" por
+  local (`POST /api/blend-admin/tenants/[id]/impersonate` — sesión de tenant para soporte,
+  sin necesitar su contraseña), y `/blend-admin/clientes` + `GET /api/blend-admin/customers`
+  (clientes de todos los locales, con cuál compró cada uno). Verificado end-to-end contra
+  Neon real. `tsc`/`build` limpios. Ver "Fase 27".
 - **2026-09-14** — El usuario pidió "terminar de configurar Blend". Se detectó que las
   Fases 26a-26c (multi-tenant + super-admin) estaban commiteadas pero **nunca pusheadas** —
   `origin/main` seguía 2 días atrás. El usuario corrió el push, Vercel auto-deployó, y se
