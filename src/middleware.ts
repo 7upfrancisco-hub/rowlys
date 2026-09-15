@@ -52,8 +52,14 @@ export async function middleware(request: NextRequest) {
     request.method === "POST" && pathname === "/api/orders";
   const isPublicOrderLookup =
     request.method === "GET" && /^\/api\/orders\/[^/]+$/.test(pathname);
+  // Activar/desactivar notificaciones push desde /pedido/[id] (Fase 30):
+  // mismo modelo de confianza que el lookup de arriba (id-cuid no adivinable
+  // como token), pero con un segmento extra en el path.
+  const isPublicPushSubscribe =
+    (request.method === "POST" || request.method === "DELETE") &&
+    /^\/api\/orders\/[^/]+\/push-subscribe$/.test(pathname);
 
-  if (isPublicOrderCreate || isPublicOrderLookup) {
+  if (isPublicOrderCreate || isPublicOrderLookup || isPublicPushSubscribe) {
     return NextResponse.next();
   }
 
