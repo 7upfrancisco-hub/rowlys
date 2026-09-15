@@ -2386,3 +2386,56 @@ se va a seguir sumando de a poco. Sin cambios de schema.
     Datos de prueba borrados después. Commit `c9b9fbc`, deployado y
     verificado (`● Ready`). Con esto, Marketing (Cupones + Descuentos) queda
     funcionando de punta a punta.
+  - **Fase 28e — code review + corrección de bugs críticos de la 28d
+    (2026-09-15)**: un review general (agentes en paralelo sobre el diff de
+    `c9b9fbc`) encontró 9 bugs en el motor de descuentos automáticos; se
+    corrigieron los 5 críticos (los que afectan plata cobrada de verdad),
+    quedan pendientes 4 menores (ver lista abajo). Arreglados:
+    1. **Fuga entre tenants**: `GET /api/discounts` y `POST
+       /api/coupons/validate` traían reglas de descuento de TODOS los
+       tenants (sin filtrar por `tenantId`), a diferencia de `createOrder`.
+       Con "Pizzería Demo" como segundo tenant real, sus reglas podían
+       colarse en el preview del checkout de Rowlys. Fix: mismo criterio de
+       resolución de tenant que `createOrder` (tenant dueño de la fila
+       "singleton" de `Settings`) en ambas rutas.
+    2. **Envío gratis descontado dos veces si se borra la regla**:
+       `updateOrderItems` distinguía FREE_SHIPPING mirando
+       `discountApplication.discount?.kind`, relación que se pierde
+       (`onDelete: SetNull`) si el admin borra la regla — al editar un
+       pedido así desde `/comanda`, el monto se restaba una segunda vez.
+       Fix: `DiscountApplication` ganó un campo propio `kind` (snapshot al
+       crearse, mismo criterio que `productName`/`price` en `OrderItem`),
+       nullable porque las filas viejas no lo tienen. Requirió `prisma db
+       push` contra Neon (columna aditiva, sin downtime).
+    3. **Descuentos por medio de pago se acumulaban**: si había dos reglas
+       `PAYMENT_METHOD` activas para el mismo medio (ej. dos de 8% para
+       CASH), se aplicaban ambas en cadena (~15.4% en vez de 8% o 16%). Fix:
+       un solo ganador (el de mayor descuento), mismo criterio que ya tenía
+       DIRECT.
+    4. **Combos podían descontar la misma unidad física dos veces**: dos
+       reglas COMBO premiando el mismo producto no llevaban cuenta de
+       cuántas unidades ya había tomado una regla anterior, y encima el
+       código promediaba el descuento parcial sobre toda la línea
+       (corrompiendo el precio que leía la siguiente regla). Fix: se agregó
+       `comboAvailableQty` por línea (unidades del producto premiado
+       todavía no tomadas por ningún combo) y se dejó de tocar `line.unit`
+       en este paso — cada combo calcula su descuento sobre el precio
+       post-DIRECT, estable.
+    5. **Regla de producto vacía bloqueaba el fallback a categoría**: si un
+       producto tenía una regla DIRECT a nivel producto activa pero mal
+       cargada (`value`/`valueType` en null, por ejemplo a medio editar en
+       el panel), el `??` la tomaba igual (por ser un objeto truthy) y nunca
+       caía al descuento de categoría — ese producto quedaba sin descuento
+       mientras el resto de su categoría sí lo tenía. Fix: el lookup ahora
+       filtra de entrada solo reglas DIRECT con `value`/`valueType`
+       utilizables.
+    Verificado con un script puntual (`priceAutomaticDiscounts` sin DB) para
+    los casos 3, 4 y 5 — los tres dieron el total esperado. `tsc --noEmit` y
+    `next build` limpios. **Pendiente, no crítico** (no tocan plata
+    cobrada): monto de cupón aplicado queda congelado si el carrito cambia
+    después de aplicarlo (se corrige solo al confirmar); keys de React
+    duplicadas al listar `discountApplications` en `/comanda` y
+    `/pedido/[id]` si dos líneas comparten la misma regla de categoría; sin
+    `orderBy`, dos reglas DIRECT activas sobre el mismo producto "empatan"
+    de forma no determinística; el motor de descuentos automáticos no
+    redondea a centavos como sí hace `priceCoupon`.
