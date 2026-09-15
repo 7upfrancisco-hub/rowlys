@@ -76,7 +76,7 @@ const GROUPS = [
       {
         href: "/admin/descuentos",
         label: "Descuentos",
-        desc: "Descuento automático por medio de pago",
+        desc: "Directo, 2x1/Combo, medio de pago o envío gratis",
       },
     ],
   },

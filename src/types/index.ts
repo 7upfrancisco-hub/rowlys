@@ -161,6 +161,39 @@ export interface CouponDTO {
   createdAt: string;
 }
 
+export type DiscountKind = "DIRECT" | "COMBO" | "PAYMENT_METHOD" | "FREE_SHIPPING";
+
+export const DISCOUNT_KIND_LABELS: Record<DiscountKind, string> = {
+  DIRECT: "Directo",
+  COMBO: "2x1 / Combo",
+  PAYMENT_METHOD: "Método de pago",
+  FREE_SHIPPING: "Envío gratis",
+};
+
+export type DiscountValueType = "PERCENT" | "FIXED";
+
+export type DiscountTarget = "PRODUCT" | "CATEGORY";
+
+export interface DiscountDTO {
+  id: string;
+  kind: DiscountKind;
+  title: string;
+  active: boolean;
+  target: DiscountTarget | null;
+  productId: string | null;
+  product: { id: string; name: string } | null;
+  categoryId: string | null;
+  category: { id: string; name: string } | null;
+  valueType: DiscountValueType | null;
+  value: number | null;
+  triggerProductId: string | null;
+  triggerProduct: { id: string; name: string } | null;
+  rewardProductId: string | null;
+  rewardProduct: { id: string; name: string } | null;
+  paymentProvider: PaymentProvider | null;
+  createdAt: string;
+}
+
 export interface DriverDTO {
   id: string;
   name: string;

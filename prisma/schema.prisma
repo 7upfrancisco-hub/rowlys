@@ -35,6 +35,7 @@ model Tenant {
   orders         Order[]
   drivers        Driver[]
   coupons        Coupon[]
+  discounts      Discount[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -56,14 +57,15 @@ model User {
 }
 
 model Category {
-  id        String    @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
-  order     Int       @default(0)
+  order     Int        @default(0)
   products  Product[]
-  tenant    Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  discounts Discount[]
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model Product {
@@ -82,6 +84,9 @@ model Product {
   orderItems        OrderItem[]
   tenant            Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId          String?
+  discountsAsTarget  Discount[] @relation("DiscountProduct")
+  discountsAsTrigger Discount[] @relation("DiscountTrigger")
+  discountsAsReward  Discount[] @relation("DiscountReward")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 }
@@ -281,6 +286,65 @@ model CouponRedemption {
   createdAt      DateTime @default(now())
 
   @@unique([couponId, customerPhone])
+}
+
+// Marketing / Descuentos (Fase 28c, en construcción — solo el CRUD del panel
+// por ahora, todavía no se aplica en el checkout). 4 tipos, tal como los
+// pidió el usuario mirando el panel de RestoSimple:
+//  - DIRECT: descuento (% o monto) sobre un producto puntual o toda una
+//    categoría (uno de los dos, nunca ambos).
+//  - COMBO ("2x1 / Combo"): comprás `triggerProduct`, se descuenta (% o
+//    monto) `rewardProduct` — si son el mismo producto, es un 2x1 clásico.
+//  - PAYMENT_METHOD: descuento (% o monto) sobre el total cuando el cliente
+//    paga con un medio puntual (ej. 8% off en Transferencia).
+//  - FREE_SHIPPING: bonifica el envío entero, no usa valueType/value.
+enum DiscountKind {
+  DIRECT
+  COMBO
+  PAYMENT_METHOD
+  FREE_SHIPPING
+}
+
+enum DiscountValueType {
+  PERCENT
+  FIXED
+}
+
+enum DiscountTarget {
+  PRODUCT
+  CATEGORY
+}
+
+model Discount {
+  id              String             @id @default(cuid())
+  kind            DiscountKind
+  title           String
+  active          Boolean            @default(true)
+
+  // DIRECT
+  target          DiscountTarget?
+  product         Product?           @relation("DiscountProduct", fields: [productId], references: [id], onDelete: Cascade)
+  productId       String?
+  category        Category?          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId      String?
+
+  // DIRECT, COMBO y PAYMENT_METHOD lo usan; FREE_SHIPPING no.
+  valueType       DiscountValueType?
+  value           Float?
+
+  // COMBO
+  triggerProduct   Product?          @relation("DiscountTrigger", fields: [triggerProductId], references: [id], onDelete: Cascade)
+  triggerProductId String?
+  rewardProduct    Product?          @relation("DiscountReward", fields: [rewardProductId], references: [id], onDelete: Cascade)
+  rewardProductId  String?
+
+  // PAYMENT_METHOD
+  paymentProvider PaymentProvider?
+
+  tenant          Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId        String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 }
 
 model OrderItem {
