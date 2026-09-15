@@ -52,6 +52,12 @@ export function renderPwaIcon(
       width: size,
       height: size,
       fonts: [{ name: "PwaIcon", data: loadIconFont(), style: "normal", weight: 400 }],
+      // `ImageResponse` cachea 1 año (`immutable`) por default, pensado para
+      // imágenes que no cambian — pero esta SÍ cambia (storeName/themeColor
+      // se editan desde /admin/personalizacion). Sin este override, un
+      // cambio de marca tardaría hasta un año en reflejarse en el CDN y en
+      // los navegadores que ya la cachearon.
+      headers: { "Cache-Control": "public, max-age=300, must-revalidate" },
     }
   );
 }
