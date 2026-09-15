@@ -2363,3 +2363,26 @@ se va a seguir sumando de a poco. Sin cambios de schema.
     producto/categoría, % > 100) rechazan con 400, borrado OK. Datos de
     prueba borrados después. Commit `6f9d039`, deployado y verificado
     (`● Ready`).
+  - **Fase 28d — aplicar los descuentos automáticos en el checkout**: los 4
+    tipos de `/admin/descuentos` ahora pesan de verdad al crear un pedido,
+    solos, sin que el cliente cargue nada. Nuevo `src/lib/discount-pricing.ts`
+    (motor puro, sin Prisma) con el orden de aplicación documentado:
+    Directo → Combo → Método de pago → Envío gratis → (afuera de este motor)
+    el cupón, sobre lo que quede. Modelo `DiscountApplication` nuevo (como
+    `CouponRedemption` pero sin "uso único" — las reglas se re-evalúan en
+    cada pedido). `GET /api/discounts` (nuevo, público) + `POST
+    /api/coupons/validate` actualizado para que el preview del checkout
+    combine ambos sistemas igual que `createOrder`. `updateOrderItems` (editar
+    pedido desde `/comanda`) resta los montos YA congelados en vez de
+    re-derivarlos, mismo criterio que ya se usaba con el cupón. `CartLine`
+    ganó `categoryId` (necesario para el Directo por categoría). UI en
+    `/checkout`, `/pedido/[id]` y la tarjeta de `/comanda`. Verificado
+    end-to-end contra Neon: los 4 tipos a la vez en un mismo pedido (Directo
+    10% + 2x1 + 8% método de pago + envío gratis) dieron el total correcto
+    calculado a mano ($17.986 sobre un carrito con Bee Melt XL + 2 Coca
+    Colas); el cupón cotizó bien sobre el subtotal post-automáticos
+    ($1.798,60 = 10% de $17.986); editar los ítems de un pedido con
+    descuentos ya aplicados preservó esos montos en vez de recalcularlos.
+    Datos de prueba borrados después. Commit `c9b9fbc`, deployado y
+    verificado (`● Ready`). Con esto, Marketing (Cupones + Descuentos) queda
+    funcionando de punta a punta.
