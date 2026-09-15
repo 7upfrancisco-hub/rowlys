@@ -2661,3 +2661,22 @@ de Service Worker que dejó la Fase 29 (PWA).
   ahora es `status === "READY" && existing.status !== "READY"`. La UI de
   `/pedido/[id]` también deja de ofrecer "activar notificaciones" una vez
   que el pedido ya está Listo (ya cumplió su propósito).
+- **Probado end-to-end en un iPhone real (2026-09-15) — con un gotcha
+  para recordar**: el usuario probó desde la PWA instalada y el push NO
+  llegaba. Diagnóstico con un script puntual contra Neon + `web-push`
+  directo: la suscripción SÍ se guardaba bien (`PushSubscription` con
+  endpoint de `web.push.apple.com`) y el envío desde el server SÍ era
+  aceptado por Apple (201) — pero no se mostraba en el teléfono. Causa:
+  **service worker viejo**. El usuario había instalado la PWA con la
+  versión de `sw.js` de la Fase 29 (sin listener de `push`); cuando la
+  Fase 30 le agregó ese listener, su teléfono no había refrescado el SW
+  todavía (los navegadores solo chequean actualizaciones en
+  navegaciones nuevas, y el nuevo SW se activa recién cuando cierran
+  todas las instancias de la app vieja). Se resolvió pidiéndole que
+  cerrara la app del todo (multitareas) y la reabriera desde el ícono —
+  eso disparó la actualización del SW (se vio reflejado en que se creó
+  una suscripción nueva, con otro endpoint) y a partir de ahí la
+  notificación de prueba llegó bien. **Para la próxima vez que se toque
+  `public/sw.js`**: avisar al usuario que cierre y reabra la PWA
+  instalada después de deployar, no alcanza con que el sitio se
+  actualice solo en el navegador de escritorio.
