@@ -192,8 +192,27 @@ export default function PedidoClient({ id }: { id: string }) {
               </li>
             ))}
           </ul>
+          {order.discountApplications.map((app, i) => (
+            <div
+              key={app.discountId ?? i}
+              className={
+                "flex justify-between text-sm text-accent " +
+                (i === 0 ? "mt-3 border-t border-line pt-3" : "mt-1")
+              }
+            >
+              <span>{app.title}</span>
+              <span>−{formatCurrency(app.amount)}</span>
+            </div>
+          ))}
           {order.couponRedemption && (
-            <div className="mt-3 flex justify-between border-t border-line pt-3 text-sm text-accent">
+            <div
+              className={
+                "flex justify-between text-sm text-accent " +
+                (order.discountApplications.length === 0
+                  ? "mt-3 border-t border-line pt-3"
+                  : "mt-1")
+              }
+            >
               <span>Cupón {order.couponRedemption.coupon.code}</span>
               <span>−{formatCurrency(order.couponRedemption.discountAmount)}</span>
             </div>
@@ -201,7 +220,9 @@ export default function PedidoClient({ id }: { id: string }) {
           <div
             className={
               "flex justify-between font-semibold text-fg " +
-              (order.couponRedemption ? "mt-1 pt-1" : "mt-3 border-t border-line pt-3")
+              (order.couponRedemption || order.discountApplications.length > 0
+                ? "mt-1 pt-1"
+                : "mt-3 border-t border-line pt-3")
             }
           >
             <span>Total</span>

@@ -70,6 +70,9 @@ export async function GET(request: Request) {
       couponRedemption: {
         select: { discountAmount: true, coupon: { select: { code: true } } },
       },
+      discountApplications: {
+        select: { discountId: true, title: true, amount: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   });

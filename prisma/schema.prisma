@@ -214,8 +214,12 @@ model Order {
   // el pedido queda sin asignar pero no se pierde.
   driver            Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
   driverId          String?
-  // Cupón usado en este pedido, si lo hubo (Fase 28b, todavía sin aplicar).
+  // Cupón usado en este pedido, si lo hubo.
   couponRedemption  CouponRedemption?
+  // Descuentos automáticos (Directo/Combo/Método de pago/Envío gratis) que
+  // se aplicaron solos a este pedido (Fase 28d). Distinto del cupón: acá no
+  // hay "uso único", se recalculan reglas activas en cada pedido nuevo.
+  discountApplications DiscountApplication[]
   tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId          String?
   createdAt         DateTime    @default(now())
@@ -341,10 +345,31 @@ model Discount {
   // PAYMENT_METHOD
   paymentProvider PaymentProvider?
 
+  applications    DiscountApplication[]
   tenant          Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId        String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+}
+
+// Registro de que una regla de Discount se aplicó de verdad a un pedido, y
+// por cuánto (Fase 28d). Separado del pedido para poder mostrar el detalle
+// ("Directo -$500", "8% off en Efectivo -$1.200") igual que ya se hace con
+// CouponRedemption. `discountId` es SetNull (no Cascade): si el local borra
+// la regla después, el pedido ya facturado conserva el registro histórico
+// (título y monto quedan congelados acá, no dependen de que la regla siga
+// existiendo).
+model DiscountApplication {
+  id         String    @id @default(cuid())
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  discount   Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  discountId String?
+  title      String
+  amount     Float
+  createdAt  DateTime  @default(now())
+
+  @@index([orderId])
 }
 
 model OrderItem {

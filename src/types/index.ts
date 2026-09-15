@@ -74,6 +74,7 @@ export interface CartLineOption {
 
 export interface CartLine {
   productId: string;
+  categoryId?: string;
   name: string;
   price: number;
   quantity: number;
@@ -235,6 +236,7 @@ export interface OrderDTO {
   driverId: string | null;
   driver: OrderDriverDTO | null;
   couponRedemption: { discountAmount: number; coupon: { code: string } } | null;
+  discountApplications: { discountId: string | null; title: string; amount: number }[];
   createdAt: string;
   updatedAt: string;
 }

@@ -462,6 +462,7 @@ function ProductCard({
               e.stopPropagation();
               addLine({
                 productId: product.id,
+                categoryId: product.categoryId,
                 name: product.name,
                 price: product.discountPrice ?? product.price,
               });
@@ -530,6 +531,7 @@ function ProductDetailOverlay({
     });
     addLine({
       productId: product.id,
+      categoryId: product.categoryId,
       name: product.name,
       price: unitPrice,
       quantity,

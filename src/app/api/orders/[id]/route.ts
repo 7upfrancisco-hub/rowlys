@@ -19,6 +19,9 @@ export async function GET(
       couponRedemption: {
         select: { discountAmount: true, coupon: { select: { code: true } } },
       },
+      discountApplications: {
+        select: { discountId: true, title: true, amount: true },
+      },
     },
   });
 

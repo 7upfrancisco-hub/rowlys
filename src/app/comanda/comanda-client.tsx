@@ -1440,6 +1440,12 @@ function OrderCard({
           </p>
         )}
 
+      {order.discountApplications.map((app, i) => (
+        <p key={app.discountId ?? i} className="mt-1 text-xs text-amber-700">
+          {app.title}: −{formatCurrency(app.amount)}
+        </p>
+      ))}
+
       {order.couponRedemption && (
         <p className="mt-1 text-xs text-amber-700">
           Cupón {order.couponRedemption.coupon.code}: −

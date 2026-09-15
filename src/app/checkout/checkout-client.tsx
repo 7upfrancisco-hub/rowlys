@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useCartStore, cartSubtotal } from "@/lib/cart-store";
 import { formatCurrency, ORDER_TYPE_LABELS, type OrderDTO } from "@/types";
+import {
+  priceAutomaticDiscounts,
+  type DiscountRule,
+  type PricingLine,
+} from "@/lib/discount-pricing";
 
 interface PublicSettings {
   storeName: string;
@@ -72,15 +77,52 @@ export default function CheckoutClient() {
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkingCoupon, setCheckingCoupon] = useState(false);
+  const [discountRules, setDiscountRules] = useState<DiscountRule[]>([]);
 
   useEffect(() => {
     apiFetch<PublicSettings>("/api/settings").then(setSettings).catch(() => {});
+    apiFetch<DiscountRule[]>("/api/discounts").then(setDiscountRules).catch(() => {});
   }, []);
 
   const itemsSubtotal = cartSubtotal(lines);
-  const deliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
-  const discountAmount = appliedCoupon?.discountAmount ?? 0;
-  const total = Math.max(0, itemsSubtotal - discountAmount) + deliveryFee;
+  const baseDeliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
+
+  // "Transferencia" va por Mercado Pago solo si el local lo tiene activo.
+  const mpTransfer = paymentMethod === "TRANSFER" && !!settings?.mpEnabled;
+  // Medio de pago real (el que ve el server): CASH, o MP/transferencia
+  // bancaria manual según si el local tiene Mercado Pago activo.
+  const provider = paymentMethod === "CASH" ? "CASH" : mpTransfer ? "MP" : "BANK_TRANSFER";
+
+  // Descuentos automáticos (Directo/Combo/Método de pago/Envío gratis): se
+  // recalculan solos con cada cambio del carrito o el medio de pago, sin que
+  // el cliente haga nada — a diferencia del cupón. Es solo preview: el
+  // server vuelve a calcular todo esto de cero en `createOrder`.
+  const pricingLines: PricingLine[] = useMemo(
+    () =>
+      lines.map((line) => ({
+        productId: line.productId,
+        categoryId: line.categoryId ?? null,
+        quantity: line.quantity,
+        unitPrice: line.price,
+        optionsPricePerUnit: (line.options ?? []).reduce((s, o) => s + o.price, 0),
+      })),
+    [lines]
+  );
+  const automatic = useMemo(
+    () =>
+      priceAutomaticDiscounts(
+        pricingLines,
+        orderType,
+        provider,
+        baseDeliveryFee,
+        discountRules
+      ),
+    [pricingLines, orderType, provider, baseDeliveryFee, discountRules]
+  );
+
+  const couponDiscountAmount = appliedCoupon?.discountAmount ?? 0;
+  const deliveryFee = automatic.deliveryFee;
+  const total = Math.max(0, automatic.itemsTotal - couponDiscountAmount) + deliveryFee;
 
   async function handleApplyCoupon() {
     setCouponError(null);
@@ -99,6 +141,7 @@ export default function CheckoutClient() {
             code: couponCode.trim(),
             phone: `${dialCode} ${phone.trim()}`,
             orderType,
+            paymentMethod: provider,
             items: lines.map((line) => ({
               productId: line.productId,
               quantity: line.quantity,
@@ -122,8 +165,14 @@ export default function CheckoutClient() {
     setCouponError(null);
   }
 
-  // "Transferencia" va por Mercado Pago solo si el local lo tiene activo.
-  const mpTransfer = paymentMethod === "TRANSFER" && !!settings?.mpEnabled;
+  // Cambiar el medio de pago puede cambiar cuánto descuenta un cupón ya
+  // aplicado (se cotiza sobre el subtotal post-descuentos automáticos, que
+  // depende del medio elegido) — se pide re-aplicarlo para no mostrar un
+  // monto viejo.
+  function selectPaymentMethod(method: PaymentMethod) {
+    setPaymentMethod(method);
+    if (appliedCoupon) removeCoupon();
+  }
 
   // Pedir queda bloqueado si el local está cerrado o el canal elegido pausado.
   const storeClosed = !!settings && !settings.storeOpen;
@@ -156,15 +205,6 @@ export default function CheckoutClient() {
       setError("Falta la dirección de envío.");
       return;
     }
-
-    // Transferencia con Mercado Pago activo => pago MP (redirección + webhook).
-    // Sin MP configurado => transferencia bancaria manual (alias/CBU).
-    const provider =
-      paymentMethod === "CASH"
-        ? "CASH"
-        : mpTransfer
-          ? "MP"
-          : "BANK_TRANSFER";
 
     setSubmitting(true);
     try {
@@ -334,14 +374,14 @@ export default function CheckoutClient() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setPaymentMethod("CASH")}
+                onClick={() => selectPaymentMethod("CASH")}
                 className={pillClass(paymentMethod === "CASH")}
               >
                 Efectivo
               </button>
               <button
                 type="button"
-                onClick={() => setPaymentMethod("TRANSFER")}
+                onClick={() => selectPaymentMethod("TRANSFER")}
                 className={pillClass(paymentMethod === "TRANSFER")}
               >
                 Transferencia
@@ -443,16 +483,31 @@ export default function CheckoutClient() {
               <span>Subtotal</span>
               <span>{formatCurrency(itemsSubtotal)}</span>
             </div>
+            {automatic.applications.map((app, i) => (
+              <div key={i} className="flex justify-between text-sm text-accent">
+                <span>{app.title}</span>
+                <span>−{formatCurrency(app.amount)}</span>
+              </div>
+            ))}
             {appliedCoupon && (
               <div className="flex justify-between text-sm text-accent">
                 <span>Cupón {appliedCoupon.code}</span>
-                <span>−{formatCurrency(discountAmount)}</span>
+                <span>−{formatCurrency(couponDiscountAmount)}</span>
               </div>
             )}
             {orderType === "DELIVERY" && (
               <div className="flex justify-between text-sm text-muted">
                 <span>Envío</span>
-                <span>{formatCurrency(deliveryFee)}</span>
+                {deliveryFee < baseDeliveryFee ? (
+                  <span>
+                    <span className="mr-1 line-through">
+                      {formatCurrency(baseDeliveryFee)}
+                    </span>
+                    {formatCurrency(deliveryFee)}
+                  </span>
+                ) : (
+                  <span>{formatCurrency(deliveryFee)}</span>
+                )}
               </div>
             )}
             <div className="mt-2 flex justify-between border-t border-line pt-2 font-semibold text-fg">

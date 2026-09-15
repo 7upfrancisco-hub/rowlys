@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalizeArPhone } from "@/lib/phone";
 import { priceCoupon } from "@/lib/coupons";
+import { priceAutomaticDiscounts, type PricingLine } from "@/lib/discount-pricing";
 
 // Lógica compartida de creación de pedidos. La usan dos rutas:
 //  - POST /api/orders        (checkout público, respeta el estado del local)
@@ -51,6 +52,9 @@ const orderInclude = {
   couponRedemption: {
     select: { discountAmount: true, coupon: { select: { code: true } } },
   },
+  discountApplications: {
+    select: { discountId: true, title: true, amount: true },
+  },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithRelations = Prisma.OrderGetPayload<{
@@ -75,6 +79,7 @@ type ResolvedItems =
       ok: true;
       create: Prisma.OrderItemUncheckedCreateWithoutOrderInput[];
       itemsTotal: number;
+      pricingLines: PricingLine[];
     }
   | { ok: false; status: number; error: string };
 
@@ -160,12 +165,20 @@ export async function resolveItems(
   }
 
   let itemsTotal = 0;
+  const pricingLines: PricingLine[] = [];
   const create: Prisma.OrderItemUncheckedCreateWithoutOrderInput[] = items.map((item) => {
     const product = productMap.get(item.productId)!;
     const unitPrice = product.discountPrice ?? product.price;
     const chosenOptions = optionsFor(item.productId, item.optionIds);
     const optionsPrice = chosenOptions.reduce((s, o) => s + o.price, 0);
     itemsTotal += (unitPrice + optionsPrice) * item.quantity;
+    pricingLines.push({
+      productId: product.id,
+      categoryId: product.categoryId,
+      quantity: item.quantity,
+      unitPrice,
+      optionsPricePerUnit: optionsPrice,
+    });
     return {
       productId: product.id,
       productName: product.name,
@@ -178,7 +191,7 @@ export async function resolveItems(
     };
   });
 
-  return { ok: true, create, itemsTotal };
+  return { ok: true, create, itemsTotal, pricingLines };
 }
 
 // --- Editar los ítems de un pedido existente (desde /comanda) ----------------
@@ -228,6 +241,7 @@ export async function updateOrderItems(
       items: { include: { options: true } },
       payment: true,
       couponRedemption: true,
+      discountApplications: { select: { amount: true, discount: { select: { kind: true } } } },
     },
   });
   if (!existing) {
@@ -279,11 +293,18 @@ export async function updateOrderItems(
     create.push(...resolved.create);
   }
 
-  // Si el pedido tenía un cupón aplicado, el descuento ya congelado en
-  // CouponRedemption se sigue restando — editar los ítems no le da la
-  // posibilidad de "reaplicar" el cupón a un total distinto.
-  const discountAmount = existing.couponRedemption?.discountAmount ?? 0;
-  const total = Math.max(0, itemsTotal - discountAmount) + existing.deliveryFee;
+  // Si el pedido tenía cupón y/o descuentos automáticos, esos montos ya
+  // congelados se siguen restando tal cual — editar los ítems no reaplica
+  // las reglas contra un total distinto. FREE_SHIPPING queda afuera de esta
+  // cuenta porque ya está reflejado en `existing.deliveryFee` (no es un
+  // descuento sobre el subtotal de productos).
+  const couponDiscountAmount = existing.couponRedemption?.discountAmount ?? 0;
+  const automaticDiscountAmount = existing.discountApplications
+    .filter((a) => a.discount?.kind !== "FREE_SHIPPING")
+    .reduce((s, a) => s + a.amount, 0);
+  const total =
+    Math.max(0, itemsTotal - couponDiscountAmount - automaticDiscountAmount) +
+    existing.deliveryFee;
 
   const order = await prisma.$transaction(async (tx) => {
     await tx.order.update({
@@ -372,19 +393,36 @@ export async function createOrder(
   const resolved = await resolveItems(body.items, body.orderType, tenantId);
   if (!resolved.ok) return resolved;
 
+  // Descuentos automáticos (Directo/Combo/Método de pago/Envío gratis):
+  // reglas activas del local, se aplican solas, sin que el cliente cargue
+  // nada (a diferencia del cupón). Se calculan ANTES del cupón — el cupón
+  // se aplica sobre lo que ya quedó del subtotal.
+  const baseDeliveryFee =
+    body.orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
+  const discountRules = tenantId
+    ? await prisma.discount.findMany({ where: { tenantId, active: true } })
+    : [];
+  const automatic = priceAutomaticDiscounts(
+    resolved.pricingLines,
+    body.orderType,
+    body.paymentMethod,
+    baseDeliveryFee,
+    discountRules
+  );
+
   // Cupón opcional: se valida y se cotiza ANTES de tocar la base (cliente,
   // pedido) — si el código no sirve, no se crea nada. `discountAmount` sale
-  // siempre de acá, nunca de lo que mande el cliente.
+  // siempre de acá, nunca de lo que mande el cliente. Se cotiza contra el
+  // subtotal YA con los descuentos automáticos aplicados.
   let couponPricing: Awaited<ReturnType<typeof priceCoupon>> | null = null;
   if (body.couponCode) {
-    couponPricing = await priceCoupon(body.couponCode, body.customerPhone, resolved.itemsTotal);
+    couponPricing = await priceCoupon(body.couponCode, body.customerPhone, automatic.itemsTotal);
     if (!couponPricing.ok) return couponPricing;
   }
-  const discountAmount = couponPricing?.ok ? couponPricing.discountAmount : 0;
+  const couponDiscountAmount = couponPricing?.ok ? couponPricing.discountAmount : 0;
 
-  const deliveryFee =
-    body.orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
-  const total = Math.max(0, resolved.itemsTotal - discountAmount) + deliveryFee;
+  const deliveryFee = automatic.deliveryFee;
+  const total = Math.max(0, automatic.itemsTotal - couponDiscountAmount) + deliveryFee;
 
   // Cliente: se deduplica por teléfono normalizado. Si el pedido no trae un
   // teléfono normalizable (algunas cargas manuales del staff), no se asocia a
@@ -447,6 +485,17 @@ export async function createOrder(
           orderId: created.id,
           discountAmount: couponPricing.discountAmount,
         },
+      });
+    }
+
+    if (automatic.applications.length > 0) {
+      await tx.discountApplication.createMany({
+        data: automatic.applications.map((a) => ({
+          orderId: created.id,
+          discountId: a.discountId,
+          title: a.title,
+          amount: a.amount,
+        })),
       });
     }
 
