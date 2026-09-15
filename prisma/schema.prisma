@@ -220,6 +220,10 @@ model Order {
   // se aplicaron solos a este pedido (Fase 28d). Distinto del cupón: acá no
   // hay "uso único", se recalculan reglas activas en cada pedido nuevo.
   discountApplications DiscountApplication[]
+  // Suscripciones a notificaciones push del navegador para el seguimiento de
+  // ESTE pedido (Fase 30) — no del cliente en general, así no hace falta
+  // cuenta ni manejar consentimiento entre pedidos distintos.
+  pushSubscriptions PushSubscription[]
   tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId          String?
   createdAt         DateTime    @default(now())
@@ -374,6 +378,26 @@ model DiscountApplication {
   title      String
   amount     Float
   createdAt  DateTime  @default(now())
+
+  @@index([orderId])
+}
+
+// Notificaciones push del navegador (Fase 30): el cliente que sigue su
+// pedido en /pedido/[id] activa esto para enterarse del cambio de estado sin
+// tener la pestaña abierta. Alcance por PEDIDO (no por cliente/teléfono) a
+// propósito — más simple que manejar consentimiento entre pedidos distintos,
+// y se borra sola en cascada cuando el pedido se borra.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  // Identifica el dispositivo/navegador ante el servicio push (FCM/Mozilla/
+  // Apple); único porque suscribirse dos veces desde el mismo browser debe
+  // pisar la fila anterior, no duplicarla.
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
 
   @@index([orderId])
 }

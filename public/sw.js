@@ -38,3 +38,39 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+// Notificaciones push del seguimiento de pedido (Fase 30) — el payload lo
+// arma src/lib/push.ts como JSON: { title, body, url }.
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    return;
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "Blend", {
+      body: payload.body,
+      data: { url: payload.url || "/" },
+      icon: "/api/pwa-icon?size=192",
+    })
+  );
+});
+
+// Al tocar la notificación, enfoca una pestaña ya abierta del pedido si
+// existe; si no, abre una nueva.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).pathname === targetUrl && "focus" in client) {
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })
+  );
+});

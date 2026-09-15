@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
+import PushSubscribe from "@/components/PushSubscribe";
 import {
   formatCurrency,
   ORDER_STATUS_FLOW,
@@ -130,6 +131,10 @@ export default function PedidoClient({ id }: { id: string }) {
           {ORDER_TYPE_LABELS[order.orderType]}
           {order.deliveryAddress && ` · ${order.deliveryAddress}`}
         </p>
+
+        {order.status !== "CANCELLED" && order.status !== "DELIVERED" && (
+          <PushSubscribe orderId={order.id} />
+        )}
 
         {showEta && (
           <p className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg">

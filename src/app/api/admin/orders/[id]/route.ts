@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyOrderConfirmed } from "@/lib/notifications/whatsapp";
+import { notifyOrderStatusPush } from "@/lib/push";
 import { requireTenantId } from "@/lib/tenant";
 import type { WhatsAppSendResult } from "@/types";
 
@@ -166,6 +167,15 @@ export async function PATCH(
         console.error("WhatsApp: aviso de confirmación falló:", err);
         return { status: "failed", error: String(err?.message ?? err) };
       });
+    }
+
+    // Push del navegador: cubre CUALQUIER cambio de estado (no solo
+    // Confirmado como WhatsApp, que está atado a una plantilla pre-aprobada
+    // de Meta) — se `await`ea (no fire-and-forget) porque una función
+    // serverless puede cortarse apenas responde, matando una promesa
+    // colgada; internamente nunca tira (mismo criterio que WhatsApp).
+    if (status && status !== existing.status) {
+      await notifyOrderStatusPush(order.id, status, order.orderType);
     }
 
     return NextResponse.json({ ...order, whatsappNotification });
