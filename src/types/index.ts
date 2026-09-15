@@ -201,6 +201,7 @@ export interface OrderDTO {
   payment: PaymentDTO | null;
   driverId: string | null;
   driver: OrderDriverDTO | null;
+  couponRedemption: { discountAmount: number; coupon: { code: string } } | null;
   createdAt: string;
   updatedAt: string;
 }

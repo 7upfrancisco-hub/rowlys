@@ -65,6 +65,13 @@ export default function CheckoutClient() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmount: number;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [checkingCoupon, setCheckingCoupon] = useState(false);
 
   useEffect(() => {
     apiFetch<PublicSettings>("/api/settings").then(setSettings).catch(() => {});
@@ -72,7 +79,48 @@ export default function CheckoutClient() {
 
   const itemsSubtotal = cartSubtotal(lines);
   const deliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
-  const total = itemsSubtotal + deliveryFee;
+  const discountAmount = appliedCoupon?.discountAmount ?? 0;
+  const total = Math.max(0, itemsSubtotal - discountAmount) + deliveryFee;
+
+  async function handleApplyCoupon() {
+    setCouponError(null);
+    if (!couponCode.trim()) return;
+    if (!phone.trim()) {
+      setCouponError("Completá tu teléfono antes de aplicar un cupón.");
+      return;
+    }
+    setCheckingCoupon(true);
+    try {
+      const result = await apiFetch<{ code: string; discountAmount: number }>(
+        "/api/coupons/validate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            code: couponCode.trim(),
+            phone: `${dialCode} ${phone.trim()}`,
+            orderType,
+            items: lines.map((line) => ({
+              productId: line.productId,
+              quantity: line.quantity,
+              optionIds: line.options?.map((o) => o.optionId),
+            })),
+          }),
+        }
+      );
+      setAppliedCoupon(result);
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError((err as ApiError).message);
+    } finally {
+      setCheckingCoupon(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError(null);
+  }
 
   // "Transferencia" va por Mercado Pago solo si el local lo tiene activo.
   const mpTransfer = paymentMethod === "TRANSFER" && !!settings?.mpEnabled;
@@ -131,6 +179,7 @@ export default function CheckoutClient() {
           deliveryAddress: orderType === "DELIVERY" ? address.trim() : undefined,
           notes: notes.trim() || undefined,
           paymentMethod: provider,
+          couponCode: appliedCoupon?.code,
           changeFor:
             paymentMethod === "CASH" && changeFor.trim()
               ? Number(changeFor)
@@ -336,6 +385,45 @@ export default function CheckoutClient() {
             />
           </section>
 
+          <section className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-6 shadow-sm">
+            <label className="text-sm font-medium text-fg">Código de cupón</label>
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+                <span className="text-fg">
+                  <span className="font-mono font-semibold text-accent">
+                    {appliedCoupon.code}
+                  </span>{" "}
+                  aplicado: −{formatCurrency(appliedCoupon.discountAmount)}
+                </span>
+                <button
+                  type="button"
+                  onClick={removeCoupon}
+                  className="shrink-0 font-medium text-muted underline hover:text-fg"
+                >
+                  Quitar
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="Ej: ROWLYSXARG"
+                  className={inputClass + " flex-1 font-mono uppercase"}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={checkingCoupon || !couponCode.trim()}
+                  className="shrink-0 rounded-lg border border-line px-4 py-2 text-sm font-medium text-fg transition hover:bg-surface-2 disabled:opacity-60"
+                >
+                  {checkingCoupon ? "Verificando..." : "Aplicar"}
+                </button>
+              </div>
+            )}
+            {couponError && <p className="text-sm text-red-500">{couponError}</p>}
+          </section>
+
           <section className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
             <h2 className="mb-3 font-semibold text-fg">Resumen</h2>
             <ul className="mb-3 flex flex-col gap-1 text-sm text-muted">
@@ -355,6 +443,12 @@ export default function CheckoutClient() {
               <span>Subtotal</span>
               <span>{formatCurrency(itemsSubtotal)}</span>
             </div>
+            {appliedCoupon && (
+              <div className="flex justify-between text-sm text-accent">
+                <span>Cupón {appliedCoupon.code}</span>
+                <span>−{formatCurrency(discountAmount)}</span>
+              </div>
+            )}
             {orderType === "DELIVERY" && (
               <div className="flex justify-between text-sm text-muted">
                 <span>Envío</span>

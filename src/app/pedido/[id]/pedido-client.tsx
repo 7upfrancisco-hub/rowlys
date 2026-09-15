@@ -192,7 +192,18 @@ export default function PedidoClient({ id }: { id: string }) {
               </li>
             ))}
           </ul>
-          <div className="mt-3 flex justify-between border-t border-line pt-3 font-semibold text-fg">
+          {order.couponRedemption && (
+            <div className="mt-3 flex justify-between border-t border-line pt-3 text-sm text-accent">
+              <span>Cupón {order.couponRedemption.coupon.code}</span>
+              <span>−{formatCurrency(order.couponRedemption.discountAmount)}</span>
+            </div>
+          )}
+          <div
+            className={
+              "flex justify-between font-semibold text-fg " +
+              (order.couponRedemption ? "mt-1 pt-1" : "mt-3 border-t border-line pt-3")
+            }
+          >
             <span>Total</span>
             <span>{formatCurrency(order.total)}</span>
           </div>

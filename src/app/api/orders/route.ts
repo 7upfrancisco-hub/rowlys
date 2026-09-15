@@ -67,6 +67,9 @@ export async function GET(request: Request) {
       items: { include: { options: true } },
       payment: true,
       driver: { select: { id: true, name: true, phone: true } },
+      couponRedemption: {
+        select: { discountAmount: true, coupon: { select: { code: true } } },
+      },
     },
     orderBy: { createdAt: "asc" },
   });

@@ -1440,6 +1440,13 @@ function OrderCard({
           </p>
         )}
 
+      {order.couponRedemption && (
+        <p className="mt-1 text-xs text-amber-700">
+          Cupón {order.couponRedemption.coupon.code}: −
+          {formatCurrency(order.couponRedemption.discountAmount)}
+        </p>
+      )}
+
       {isDelivery &&
         (activeDrivers.length === 0 && !order.driver ? (
           <p className="mt-2 text-xs text-neutral-400">

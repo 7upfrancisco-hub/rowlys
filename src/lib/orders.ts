@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalizeArPhone } from "@/lib/phone";
+import { priceCoupon } from "@/lib/coupons";
 
 // Lógica compartida de creación de pedidos. La usan dos rutas:
 //  - POST /api/orders        (checkout público, respeta el estado del local)
@@ -20,6 +21,7 @@ export const createOrderSchema = z
     notes: z.string().optional(),
     paymentMethod: z.enum(["CASH", "MP", "MODO", "BANK_TRANSFER"]),
     changeFor: z.number().positive().optional(),
+    couponCode: z.string().trim().optional(),
     items: z
       .array(
         z.object({
@@ -46,6 +48,9 @@ const orderInclude = {
   items: { include: { options: true } },
   payment: true,
   driver: { select: { id: true, name: true, phone: true } },
+  couponRedemption: {
+    select: { discountAmount: true, coupon: { select: { code: true } } },
+  },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithRelations = Prisma.OrderGetPayload<{
@@ -58,7 +63,7 @@ export type CreateOrderResult =
 
 // --- Validación + precios de ítems (compartido entre crear y editar) ---------
 
-interface ItemInput {
+export interface ItemInput {
   productId: string;
   quantity: number;
   notes?: string;
@@ -76,7 +81,7 @@ type ResolvedItems =
 // Revalida cada ítem contra la base (producto existe / disponible en el canal /
 // adicionales válidos y dentro de min-max) y arma el `create` anidado con los
 // precios recalculados. Nunca confía en lo que manda el cliente.
-async function resolveItems(
+export async function resolveItems(
   items: ItemInput[],
   orderType: "PICKUP" | "DELIVERY",
   // undefined = el checkout público todavía sin resolver tenant (Fase 26b-3
@@ -219,7 +224,11 @@ export async function updateOrderItems(
 ): Promise<CreateOrderResult> {
   const existing = await prisma.order.findFirst({
     where: { id: orderId, tenantId },
-    include: { items: { include: { options: true } }, payment: true },
+    include: {
+      items: { include: { options: true } },
+      payment: true,
+      couponRedemption: true,
+    },
   });
   if (!existing) {
     return { ok: false, status: 404, error: "El pedido no existe." };
@@ -270,7 +279,11 @@ export async function updateOrderItems(
     create.push(...resolved.create);
   }
 
-  const total = itemsTotal + existing.deliveryFee;
+  // Si el pedido tenía un cupón aplicado, el descuento ya congelado en
+  // CouponRedemption se sigue restando — editar los ítems no le da la
+  // posibilidad de "reaplicar" el cupón a un total distinto.
+  const discountAmount = existing.couponRedemption?.discountAmount ?? 0;
+  const total = Math.max(0, itemsTotal - discountAmount) + existing.deliveryFee;
 
   const order = await prisma.$transaction(async (tx) => {
     await tx.order.update({
@@ -309,9 +322,13 @@ interface CreateOrderOptions {
   // Un pedido cargado por el staff ya está aceptado.
   initialStatus?: "PENDING" | "CONFIRMED";
   // Tenant dueño del pedido (Fase 26b). Siempre viene desde la carga manual
-  // admin (sesión ya resuelta); el checkout público todavía no lo manda
-  // (Fase 26b-3 pendiente: routing por slug) — en ese caso el pedido queda
-  // sin tenant asignado, igual que pasaba antes de esta fase.
+  // admin (sesión ya resuelta). El checkout público todavía no lo manda
+  // (Fase 26b-3 pendiente: routing por slug) — se resuelve unas líneas más
+  // abajo a partir del tenant dueño de la fila "singleton" de Settings, para
+  // que el pedido no quede huérfano (BUG real detectado 2026-09-15: sin
+  // esto, todo pedido creado desde /checkout quedaba con tenantId null y
+  // era invisible para /comanda y /admin/pedidos, que sí filtran por tenant
+  // desde la Fase 26b).
   tenantId?: string;
 }
 
@@ -322,6 +339,11 @@ export async function createOrder(
   const settings = opts.tenantId
     ? await prisma.settings.findUnique({ where: { tenantId: opts.tenantId } })
     : await prisma.settings.findUnique({ where: { id: "singleton" } });
+
+  // El checkout público no manda tenantId (todavía no hay routing por slug) —
+  // mientras eso no exista, el pedido pasa a pertenecer al mismo tenant que
+  // la fila "singleton" de Settings (hoy, Rowlys), en vez de quedar sin dueño.
+  const tenantId = opts.tenantId ?? settings?.tenantId ?? undefined;
 
   if (opts.enforceStoreStatus && settings) {
     if (!settings.storeOpen) {
@@ -347,12 +369,22 @@ export async function createOrder(
     }
   }
 
-  const resolved = await resolveItems(body.items, body.orderType, opts.tenantId);
+  const resolved = await resolveItems(body.items, body.orderType, tenantId);
   if (!resolved.ok) return resolved;
+
+  // Cupón opcional: se valida y se cotiza ANTES de tocar la base (cliente,
+  // pedido) — si el código no sirve, no se crea nada. `discountAmount` sale
+  // siempre de acá, nunca de lo que mande el cliente.
+  let couponPricing: Awaited<ReturnType<typeof priceCoupon>> | null = null;
+  if (body.couponCode) {
+    couponPricing = await priceCoupon(body.couponCode, body.customerPhone, resolved.itemsTotal);
+    if (!couponPricing.ok) return couponPricing;
+  }
+  const discountAmount = couponPricing?.ok ? couponPricing.discountAmount : 0;
 
   const deliveryFee =
     body.orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
-  const total = resolved.itemsTotal + deliveryFee;
+  const total = Math.max(0, resolved.itemsTotal - discountAmount) + deliveryFee;
 
   // Cliente: se deduplica por teléfono normalizado. Si el pedido no trae un
   // teléfono normalizable (algunas cargas manuales del staff), no se asocia a
@@ -368,7 +400,7 @@ export async function createOrder(
         firstName: body.customerFirstName,
         lastName: body.customerLastName,
         email: body.customerEmail,
-        ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
+        ...(tenantId ? { tenantId } : {}),
       },
       update: {
         firstName: body.customerFirstName,
@@ -380,31 +412,48 @@ export async function createOrder(
     customerId = customer.id;
   }
 
-  const order = await prisma.order.create({
-    data: {
-      orderType: body.orderType,
-      ...(customerId ? { customerId } : {}),
-      customerFirstName: body.customerFirstName,
-      customerLastName: body.customerLastName,
-      customerPhone: body.customerPhone,
-      customerEmail: body.customerEmail,
-      deliveryAddress:
-        body.orderType === "DELIVERY" ? body.deliveryAddress : null,
-      deliveryFee,
-      total,
-      status: opts.initialStatus ?? "PENDING",
-      notes: body.notes,
-      ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
-      items: { create: resolved.create },
-      payment: {
-        create: {
-          provider: body.paymentMethod,
-          amount: total,
-          changeFor: body.changeFor,
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await tx.order.create({
+      data: {
+        orderType: body.orderType,
+        ...(customerId ? { customerId } : {}),
+        customerFirstName: body.customerFirstName,
+        customerLastName: body.customerLastName,
+        customerPhone: body.customerPhone,
+        customerEmail: body.customerEmail,
+        deliveryAddress:
+          body.orderType === "DELIVERY" ? body.deliveryAddress : null,
+        deliveryFee,
+        total,
+        status: opts.initialStatus ?? "PENDING",
+        notes: body.notes,
+        ...(tenantId ? { tenantId } : {}),
+        items: { create: resolved.create },
+        payment: {
+          create: {
+            provider: body.paymentMethod,
+            amount: total,
+            changeFor: body.changeFor,
+          },
         },
       },
-    },
-    include: orderInclude,
+    });
+
+    if (couponPricing?.ok) {
+      await tx.couponRedemption.create({
+        data: {
+          couponId: couponPricing.coupon.id,
+          customerPhone: couponPricing.phoneKey,
+          orderId: created.id,
+          discountAmount: couponPricing.discountAmount,
+        },
+      });
+    }
+
+    return tx.order.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
   });
 
   return { ok: true, order };
