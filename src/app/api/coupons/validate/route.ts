@@ -38,12 +38,22 @@ export async function POST(request: Request) {
   }
   const { code, phone, orderType, paymentMethod, items } = parsed.data;
 
-  const resolved = await resolveItems(items as ItemInput[], orderType);
+  // Mismo criterio de resolución de tenant que `createOrder` (el checkout
+  // público todavía no manda tenantId — Fase 26b-3 pendiente): sin esto, las
+  // reglas de descuento activas de OTRO tenant (ya hay un segundo, "Pizzería
+  // Demo") se colaban en la cotización del cupón, dando un preview que no
+  // coincide con lo que `createOrder` termina cobrando.
+  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
+  const tenantId = settings?.tenantId ?? undefined;
+
+  const resolved = await resolveItems(items as ItemInput[], orderType, tenantId);
   if (!resolved.ok) {
     return NextResponse.json({ error: resolved.error }, { status: resolved.status });
   }
 
-  const discountRules = await prisma.discount.findMany({ where: { active: true } });
+  const discountRules = await prisma.discount.findMany({
+    where: { active: true, ...(tenantId ? { tenantId } : {}) },
+  });
   const automatic = priceAutomaticDiscounts(
     resolved.pricingLines,
     orderType,

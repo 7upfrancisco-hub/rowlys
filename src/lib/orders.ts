@@ -241,7 +241,7 @@ export async function updateOrderItems(
       items: { include: { options: true } },
       payment: true,
       couponRedemption: true,
-      discountApplications: { select: { amount: true, discount: { select: { kind: true } } } },
+      discountApplications: { select: { amount: true, kind: true } },
     },
   });
   if (!existing) {
@@ -297,10 +297,13 @@ export async function updateOrderItems(
   // congelados se siguen restando tal cual — editar los ítems no reaplica
   // las reglas contra un total distinto. FREE_SHIPPING queda afuera de esta
   // cuenta porque ya está reflejado en `existing.deliveryFee` (no es un
-  // descuento sobre el subtotal de productos).
+  // descuento sobre el subtotal de productos). Se filtra por `a.kind`
+  // (snapshot propio de la fila) y no por `a.discount?.kind` — la regla
+  // original se puede borrar después (onDelete: SetNull en discountId), y
+  // ahí `discount` pasa a null silenciosamente sin decir qué tipo era.
   const couponDiscountAmount = existing.couponRedemption?.discountAmount ?? 0;
   const automaticDiscountAmount = existing.discountApplications
-    .filter((a) => a.discount?.kind !== "FREE_SHIPPING")
+    .filter((a) => a.kind !== "FREE_SHIPPING")
     .reduce((s, a) => s + a.amount, 0);
   const total =
     Math.max(0, itemsTotal - couponDiscountAmount - automaticDiscountAmount) +
@@ -493,6 +496,7 @@ export async function createOrder(
         data: automatic.applications.map((a) => ({
           orderId: created.id,
           discountId: a.discountId,
+          kind: a.kind,
           title: a.title,
           amount: a.amount,
         })),

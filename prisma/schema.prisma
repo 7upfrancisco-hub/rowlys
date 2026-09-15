@@ -365,6 +365,12 @@ model DiscountApplication {
   orderId    String
   discount   Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
   discountId String?
+  // Snapshot de discount.kind al momento de aplicarse (mismo criterio que
+  // productName/price en OrderItem): discount.kind se pierde si se borra la
+  // regla (onDelete: SetNull), y updateOrderItems necesita distinguir
+  // FREE_SHIPPING de forma confiable aunque eso pase. Nullable porque las
+  // filas creadas antes de este campo no lo tienen.
+  kind       DiscountKind?
   title      String
   amount     Float
   createdAt  DateTime  @default(now())

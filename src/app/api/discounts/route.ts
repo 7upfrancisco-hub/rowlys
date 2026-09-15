@@ -8,8 +8,14 @@ export const dynamic = "force-dynamic";
 // sensible (mismos datos que ya se ven en /admin/descuentos). El pedido real
 // siempre se recalcula server-side en createOrder — esto es solo preview.
 export async function GET() {
+  // El checkout público todavía no manda tenantId (Fase 26b-3 pendiente), así
+  // que se resuelve igual que en `createOrder`: el tenant dueño de la fila
+  // "singleton" de Settings. Sin esto, reglas activas de OTRO tenant (ya hay
+  // un segundo, "Pizzería Demo") se colaban acá sin filtro alguno y el
+  // preview no coincidía con lo que createOrder termina cobrando.
+  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
   const discounts = await prisma.discount.findMany({
-    where: { active: true },
+    where: { active: true, ...(settings?.tenantId ? { tenantId: settings.tenantId } : {}) },
     select: {
       id: true,
       kind: true,
