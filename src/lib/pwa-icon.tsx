@@ -30,7 +30,7 @@ export function renderPwaIcon(
   const letter = (storeName.trim()[0] ?? "B").toUpperCase();
   const fg = themeOnAccent === "black" ? "#171717" : "#ffffff";
 
-  return new ImageResponse(
+  const response = new ImageResponse(
     (
       <div
         style={{
@@ -52,12 +52,21 @@ export function renderPwaIcon(
       width: size,
       height: size,
       fonts: [{ name: "PwaIcon", data: loadIconFont(), style: "normal", weight: 400 }],
-      // `ImageResponse` cachea 1 año (`immutable`) por default, pensado para
-      // imágenes que no cambian — pero esta SÍ cambia (storeName/themeColor
-      // se editan desde /admin/personalizacion). Sin este override, un
-      // cambio de marca tardaría hasta un año en reflejarse en el CDN y en
-      // los navegadores que ya la cachearon.
-      headers: { "Cache-Control": "public, max-age=300, must-revalidate" },
     }
   );
+
+  // `ImageResponse` pone Cache-Control immutable de 1 año por default,
+  // pensado para imágenes que no cambian — pero esta SÍ cambia
+  // (storeName/themeColor se editan desde /admin/personalizacion). Pasar
+  // `headers` al constructor no reemplaza el default, lo CONCATENA (queda
+  // un Cache-Control con dos valores separados por coma, inválido/
+  // ambiguo) — hay que reconstruir la Response y usar `.set()`, que sí
+  // reemplaza.
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "public, max-age=300, must-revalidate");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
