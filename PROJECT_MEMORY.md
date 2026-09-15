@@ -2475,3 +2475,75 @@ se va a seguir sumando de a poco. Sin cambios de schema.
     uno de redondeo con precios no enteros) — los cuatro dieron el
     resultado exacto esperado. `tsc --noEmit` y `next build` limpios. Con
     esto, Marketing (Cupones + Descuentos) queda sin bugs conocidos.
+
+## Fase 29 — PWA instalable del storefront (2026-09-15)
+
+Pedido explícito del usuario para diferenciarse de apps tipo PedidosYa: que
+el cliente pueda instalar la carta como una app (ícono en la pantalla de
+inicio), como base para funciones futuras de fidelización/recompra propias
+del local (sin depender de una plataforma de terceros que se queda con los
+datos del cliente).
+
+- **`src/app/manifest.ts`** (convención de Next.js, se sirve solo en
+  `/manifest.webmanifest` y Next lo enlaza automáticamente en TODAS las
+  páginas — inofensivo en `/admin`/`/comanda`, que quedan atrás de login
+  igual; instalar `/comanda` como PWA en una tablet de cocina es hasta un
+  plus). Lee `Settings` (singleton, mismo criterio de siempre) para
+  `name`/`theme_color`/ícono — `start_url: "/menu"`, `display: "standalone"`.
+  **`dynamic = "force-dynamic"`** a propósito: sin esto Next intenta
+  generarlo estático en build time y hornea el storeName/color de ESE
+  momento para siempre, ignorando cambios futuros desde /admin.
+- **`Settings.iconUrl`** (nuevo, nullable): ícono cuadrado subido por el
+  local para la PWA, mismo mecanismo de subida que la portada
+  (`/api/admin/upload`). Mientras no lo suban, se usa un ícono generado
+  automáticamente (inicial de `storeName` sobre `themeColor`/
+  `themeOnAccent`) vía `next/og` (`src/lib/pwa-icon.tsx`, `/api/pwa-icon` y
+  `src/app/apple-icon.tsx`) — así es instalable desde el día 1 sin depender
+  de que alguien cargue un logo. Uploader nuevo en `/admin/personalizacion`
+  (junto a portada/color/tipografía).
+  - **Gotcha real de Windows encontrado en el camino**: `next/og`
+    (`ImageResponse`) en Next 14.2.35 rompe en `next dev` sobre Windows con
+    `TypeError: Invalid URL` — el módulo hace `path.join()` (que en Windows
+    usa backslashes y convierte mal una `file://` URL con letra de unidad)
+    sobre su fuente default al importarse, ANTES de que el código propio
+    corra. Se evita pasando una fuente propia explícita al `fonts:` de
+    `ImageResponse` (`src/lib/fonts/pwa-icon.ttf`, copiada de la misma
+    fuente que trae Next internamente para esto, con la misma licencia
+    OFL) — pero el bug es en un `var` a nivel de módulo que corre igual
+    aunque se le pase `fonts` propio, así que localmente en Windows
+    `/api/pwa-icon` y `/apple-icon` **no se pudieron probar corriendo
+    `next dev`** (tiran 500). Razonamiento de por qué debería andar en
+    producción igual: el bug depende de `path.join` tratando una URL
+    `file://` como un path de Windows (backslashes + `C:`); en Linux
+    (Vercel) `path.posix.join` no tiene ese problema — es un patrón de bug
+    ampliamente documentado como específico de Windows, y `next/og` es una
+    de las APIs más usadas de Next en producción (no sería viable si
+    rompiera en Linux). **Pendiente de confirmar con un smoke test real
+    contra la producción después de deployar** (ver más abajo si ya se
+    hizo).
+- **`src/components/InstallPwa.tsx`** (cliente): registra `public/sw.js`,
+  escucha `beforeinstallprompt` (Chrome/Edge/Android — botón "Instalar" con
+  el diálogo nativo) y muestra instructivo manual para iOS Safari (no tiene
+  ese evento). Se descarta solo si ya está instalada (`display-mode:
+  standalone` o `navigator.standalone`) o si el usuario la cierra
+  (`localStorage`, no vuelve a aparecer). Montada en Home (`/`) y `/menu`
+  únicamente — **no** en `/checkout` ni `/pedido/[id]`, para no interrumpir
+  el pago. Posicionada arriba (`top-16`), no abajo, porque `/menu` tiene un
+  botón fijo de carrito pegado al piso cuando hay ítems.
+- **`public/sw.js`**: service worker mínimo a propósito — cachea SOLO
+  `/_next/static/...` (assets con hash, seguros para siempre) y
+  `/uploads/...`. Nunca cachea HTML ni `/api/*`: el menú, los precios y el
+  estado del pedido tienen que ser siempre datos frescos del servidor (un
+  service worker más agresivo es exactamente el tipo de bug de "carta
+  vieja" que el usuario no quiere).
+- `layout.tsx` ganó `appleWebApp: { capable: true }` (site-wide, para que
+  "Agregar a inicio" en iOS abra sin la barra de Safari).
+- `tsc --noEmit` y `next build` limpios (con `dynamic = "force-dynamic"` en
+  las 3 rutas nuevas, ninguna se ejecuta en build time). `prisma db push`
+  aplicado contra Neon (columna `iconUrl` nueva, nullable).
+- **Pendiente**: commitear/pushear/deployar y correr el smoke test de
+  producción de `/manifest.webmanifest`, `/api/pwa-icon?size=512` (¿PNG
+  real?) y `/apple-icon`. Si el bug de Windows resulta NO ser solo de
+  Windows y también rompe en Vercel, hay que reemplazar la generación de
+  ícono automático por otra vía (ícono estático pre-generado, por ejemplo)
+  — quedaría como próximo paso inmediato de esta misma fase.
