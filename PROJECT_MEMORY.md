@@ -2631,5 +2631,33 @@ de Service Worker que dejó la Fase 29 (PWA).
   `/admin`) siguen intactas.
 - **No se pudo probar el envío real de una notificación de punta a punta**
   (hace falta un navegador real suscripto de verdad, no se puede simular
-  por script) — queda pendiente que el usuario lo pruebe en su
-  celular/notebook después de cargar las VAPID keys en Vercel.
+  por script) — el usuario cargó las VAPID keys en Vercel y probó en
+  producción real: el flujo de instalación PWA + suscripción push
+  funciona de punta a punta.
+- **Bug crítico #3, encontrado por el usuario probando en producción**:
+  cambiar el estado de un pedido con descuentos/cupón aplicado desde
+  `/comanda` rompía la pantalla entera (`TypeError: Cannot read
+  properties of undefined (reading 'map')`). Causa: `PATCH
+  /api/admin/orders/[id]` tenía su propio `ORDER_INCLUDE` duplicado (sin
+  `discountApplications`/`couponRedemption`), a diferencia del
+  `orderInclude` compartido de `src/lib/orders.ts` que sí los trae. Al
+  aceptar/avanzar un pedido con descuentos, la respuesta pisaba el estado
+  local de `/comanda` con un objeto incompleto, y
+  `discountApplications.map()` explotaba sobre `undefined`. Bug
+  preexistente desde la Fase 28 (nadie lo había notado porque hace falta
+  un pedido CON descuento para dispararlo), no relacionado con las
+  Fases 29/30. Fix: se exportó `orderInclude` desde `src/lib/orders.ts` y
+  se reemplazó el duplicado — una sola fuente de verdad para el include de
+  `Order` en toda la app. Verificado con un script puntual contra Neon
+  (shape viejo → `discountApplications: undefined`; shape nuevo → array
+  correcto) y confirmado por el usuario en producción real.
+- **Ajuste de producto pedido por el usuario después de probarlo**: el
+  push iba a disparar en CUALQUIER cambio de estado; el usuario pidió que
+  avise SOLO cuando el pedido pasa a "Listo" (el momento en que
+  realmente hace falta que el cliente actúe). Se simplificó
+  `src/lib/push.ts`: `notifyOrderStatusPush(status, ...)` genérico pasó a
+  ser `notifyOrderReady(orderId, orderType)` (se sacó el `switch` con el
+  copy de los otros 4 estados, ya no hacía falta). El trigger en el PATCH
+  ahora es `status === "READY" && existing.status !== "READY"`. La UI de
+  `/pedido/[id]` también deja de ofrecer "activar notificaciones" una vez
+  que el pedido ya está Listo (ya cumplió su propósito).
