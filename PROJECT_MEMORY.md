@@ -2511,16 +2511,29 @@ datos del cliente).
     fuente que trae Next internamente para esto, con la misma licencia
     OFL) — pero el bug es en un `var` a nivel de módulo que corre igual
     aunque se le pase `fonts` propio, así que localmente en Windows
-    `/api/pwa-icon` y `/apple-icon` **no se pudieron probar corriendo
-    `next dev`** (tiran 500). Razonamiento de por qué debería andar en
-    producción igual: el bug depende de `path.join` tratando una URL
-    `file://` como un path de Windows (backslashes + `C:`); en Linux
-    (Vercel) `path.posix.join` no tiene ese problema — es un patrón de bug
-    ampliamente documentado como específico de Windows, y `next/og` es una
-    de las APIs más usadas de Next en producción (no sería viable si
-    rompiera en Linux). **Pendiente de confirmar con un smoke test real
-    contra la producción después de deployar** (ver más abajo si ya se
-    hizo).
+    `/api/pwa-icon` y `/apple-icon` no se pudieron probar corriendo
+    `next dev` (tiran 500). **Confirmado con un smoke test real contra
+    producción** (2026-09-15, después de deployar): `/api/pwa-icon?size=512`,
+    `?size=192` y `/apple-icon` devuelven 200 con PNGs válidos (verificados
+    por firma de bytes y visualmente — se ve la inicial correcta sobre el
+    color de marca real de Rowlys) — el bug era 100% específico de
+    `next dev` en Windows (`path.join` tratando una URL `file://` como path
+    de Windows, con backslashes y letra de unidad; en Linux/Vercel
+    `path.posix.join` no tiene ese problema), no afecta producción.
+  - **Segundo bug encontrado en el mismo smoke test**: `ImageResponse` pone
+    `Cache-Control: public, immutable, max-age=31536000` (1 año) por
+    default. Como el ícono automático SÍ cambia (depende de
+    storeName/themeColor, editables en vivo desde /admin/personalizacion),
+    eso hornearía una marca vieja en el CDN y en los navegadores por hasta
+    un año tras un cambio. Primer intento de fix (pasar `headers` al
+    constructor de `ImageResponse`) resultó en un bug nuevo: `headers` ahí
+    CONCATENA con el default en vez de reemplazarlo (quedaba un solo header
+    `Cache-Control` con dos valores separados por coma, inválido/ambiguo
+    para cachés/navegadores) — visto también en el smoke test de
+    producción. Fix real: reconstruir la `Response` a mano y usar
+    `Headers.set()` (que sí reemplaza) en `src/lib/pwa-icon.tsx`. Reverificado
+    contra producción: `Cache-Control: public, max-age=300, must-revalidate`
+    limpio, un solo valor.
 - **`src/components/InstallPwa.tsx`** (cliente): registra `public/sw.js`,
   escucha `beforeinstallprompt` (Chrome/Edge/Android — botón "Instalar" con
   el diálogo nativo) y muestra instructivo manual para iOS Safari (no tiene
@@ -2541,9 +2554,14 @@ datos del cliente).
 - `tsc --noEmit` y `next build` limpios (con `dynamic = "force-dynamic"` en
   las 3 rutas nuevas, ninguna se ejecuta en build time). `prisma db push`
   aplicado contra Neon (columna `iconUrl` nueva, nullable).
-- **Pendiente**: commitear/pushear/deployar y correr el smoke test de
-  producción de `/manifest.webmanifest`, `/api/pwa-icon?size=512` (¿PNG
-  real?) y `/apple-icon`. Si el bug de Windows resulta NO ser solo de
-  Windows y también rompe en Vercel, hay que reemplazar la generación de
-  ícono automático por otra vía (ícono estático pre-generado, por ejemplo)
-  — quedaría como próximo paso inmediato de esta misma fase.
+- Commiteado, pusheado y deployado (3 commits: feature + 2 fixes de
+  Cache-Control encontrados en el smoke test). Verificado contra
+  producción real (no solo Neon vía local): manifest, ambos tamaños de
+  ícono y apple-icon, los tres con contenido e headers correctos.
+- **Pendiente / próximos pasos naturales** (no pedidos todavía, ideas que
+  surgieron charlando con el usuario sobre diferenciarse de PedidosYa):
+  recompra en un toque ("repetir mi último pedido" usando `Customer` por
+  teléfono), fidelización con el motor de Descuentos/Cupones ya existente,
+  notificaciones push reales de estado de pedido (la base de Service
+  Worker ya está, falta el registro de push subscription + VAPID keys +
+  disparar la notificación desde `updateOrderStatus`).
