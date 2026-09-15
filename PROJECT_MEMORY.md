@@ -2561,7 +2561,64 @@ datos del cliente).
 - **Pendiente / próximos pasos naturales** (no pedidos todavía, ideas que
   surgieron charlando con el usuario sobre diferenciarse de PedidosYa):
   recompra en un toque ("repetir mi último pedido" usando `Customer` por
-  teléfono), fidelización con el motor de Descuentos/Cupones ya existente,
-  notificaciones push reales de estado de pedido (la base de Service
-  Worker ya está, falta el registro de push subscription + VAPID keys +
-  disparar la notificación desde `updateOrderStatus`).
+  teléfono), fidelización con el motor de Descuentos/Cupones ya existente.
+
+## Fase 30 — Notificaciones push reales de estado de pedido (2026-09-15)
+
+Complementa el aviso de WhatsApp (Fase 5, que solo cubre la transición a
+Confirmado por la plantilla pre-aprobada que exige Meta, y sigue sin cuenta
+de Meta Business real, solo mock): esto avisa CUALQUIER cambio de estado, no
+necesita cuenta de terceros ni aprobación, y funciona ya mismo. Usa la base
+de Service Worker que dejó la Fase 29 (PWA).
+
+- **`PushSubscription`** (modelo nuevo): alcance por PEDIDO, no por cliente —
+  se suscribe desde `/pedido/[id]` para avisos de ESE pedido puntual, no hay
+  que manejar consentimiento entre pedidos distintos ni cuenta de cliente.
+  `endpoint` único (identifica navegador+sitio ante el servicio push);
+  cascada al borrar el pedido.
+- **`src/lib/push.ts`** (server-only): `notifyOrderStatusPush(orderId,
+  status, orderType)` — copy en español por estado (Confirmado/En
+  preparación/Listo — con wording distinto para pickup vs delivery en
+  "Listo"/Entregado/Cancelado). Nunca tira (mismo criterio que
+  `notifyOrderConfirmed` de WhatsApp): un push que falla no debe tumbar el
+  PATCH de `/comanda`. Si el envío devuelve 404/410 (suscripción vencida o
+  borrada del otro lado), borra la fila sola en vez de reintentar para
+  siempre.
+- **`POST /api/orders/[id]/push-subscribe`** (público, mismo modelo de
+  confianza que `GET /api/orders/[id]`: el id-cuid hace de token) guarda la
+  suscripción; `DELETE` la borra (botón "Desactivar" en la UI).
+- **`PATCH /api/admin/orders/[id]`**: además del aviso de WhatsApp (solo en
+  la transición a Confirmado), ahora dispara `notifyOrderStatusPush` en
+  CUALQUIER cambio de status. Se `await`ea (no fire-and-forget) a propósito
+  — una función serverless puede cortarse apenas responde, matando una
+  promesa colgada.
+- **`src/components/PushSubscribe.tsx`** (cliente, montado en
+  `/pedido/[id]`, oculto si el pedido ya está Cancelado/Entregado): botón
+  "Avisame cuando cambie el estado" → pide permiso del navegador, suscribe
+  vía el Service Worker de la Fase 29, manda la suscripción al server. No
+  se renderiza nada si el navegador no soporta Push (Safari viejo, algunos
+  in-app browsers) o si `NEXT_PUBLIC_VAPID_PUBLIC_KEY` no está configurada.
+- **`public/sw.js`** ganó los listeners `push` (muestra la notificación con
+  el ícono de la PWA) y `notificationclick` (enfoca la pestaña del pedido si
+  ya está abierta, si no abre una nueva).
+- **VAPID keys**: generadas una sola vez con `npx web-push generate-vapid-keys`
+  (`NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY`, mismas en todos los
+  entornos, no rotan por local). Cargadas en `.env` local; **pendiente que
+  el usuario las cargue también en Vercel** (`vercel env add`, mismo
+  procedimiento de siempre — Claude no puede escribir env vars de Vercel).
+  Sin ellas en producción, el botón de activar notificaciones no aparece
+  (se apaga solo, no rompe nada).
+- **Bug encontrado y corregido en el camino**: `web-push` exige que el
+  `subject` de VAPID sea `https:` o `mailto:` — el fallback a `baseUrl()`
+  rompía en dev local (`http://localhost:3000`, inválido). Se agregó un
+  `mailto:` de respaldo cuando `baseUrl()` no es https. Detectado con un
+  script de verificación puntual (creaba un pedido + suscripción falsos
+  contra Neon, llamaba `notifyOrderStatusPush` con un endpoint inválido a
+  propósito para confirmar que el error se atrapa sin crashear el flujo, y
+  borraba todo al final).
+- `tsc --noEmit` y `next build` limpios. `prisma db push` aplicado contra
+  Neon (tabla `PushSubscription` nueva). **No se pudo probar el envío real
+  de una notificación de punta a punta** (hace falta un navegador real
+  suscripto de verdad, no se puede simular por script) — queda pendiente
+  que el usuario lo prueble en su celular/notebook después de deployar y
+  cargar las VAPID keys en Vercel.
