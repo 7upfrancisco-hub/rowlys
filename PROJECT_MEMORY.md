@@ -2617,8 +2617,19 @@ de Service Worker que dejó la Fase 29 (PWA).
   propósito para confirmar que el error se atrapa sin crashear el flujo, y
   borraba todo al final).
 - `tsc --noEmit` y `next build` limpios. `prisma db push` aplicado contra
-  Neon (tabla `PushSubscription` nueva). **No se pudo probar el envío real
-  de una notificación de punta a punta** (hace falta un navegador real
-  suscripto de verdad, no se puede simular por script) — queda pendiente
-  que el usuario lo prueble en su celular/notebook después de deployar y
-  cargar las VAPID keys en Vercel.
+  Neon (tabla `PushSubscription` nueva).
+- **Bug real #2, encontrado en el smoke test de producción**: `POST`/`DELETE
+  /api/orders/[id]/push-subscribe` devolvía 401. `middleware.ts` protege
+  `/api/orders/:path*` con sesión de admin y solo tenía una excepción
+  pública para `GET /api/orders/<id>` (un solo segmento) — la ruta nueva
+  tiene un segmento extra (`/push-subscribe`) que esa excepción no
+  contemplaba. Fix: nueva excepción `isPublicPushSubscribe` en
+  `middleware.ts` para POST/DELETE a `/api/orders/<id>/push-subscribe`,
+  mismo modelo de confianza (id-cuid no adivinable). Reverificado contra
+  producción: 400 con body inválido, 404 con pedido inexistente, 200 en
+  DELETE — el resto de las rutas protegidas (`GET /api/orders` sin id,
+  `/admin`) siguen intactas.
+- **No se pudo probar el envío real de una notificación de punta a punta**
+  (hace falta un navegador real suscripto de verdad, no se puede simular
+  por script) — queda pendiente que el usuario lo pruebe en su
+  celular/notebook después de cargar las VAPID keys en Vercel.
