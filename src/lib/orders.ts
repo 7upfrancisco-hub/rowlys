@@ -402,8 +402,15 @@ export async function createOrder(
   // se aplica sobre lo que ya quedó del subtotal.
   const baseDeliveryFee =
     body.orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
+  // orderBy determinístico: si el admin deja dos reglas DIRECT (o
+  // PAYMENT_METHOD) activas sobre el mismo producto/medio de pago, gana
+  // siempre la más vieja — antes no había orden y dependía de cómo Postgres
+  // devolviera las filas, pudiendo variar entre pedidos idénticos.
   const discountRules = tenantId
-    ? await prisma.discount.findMany({ where: { tenantId, active: true } })
+    ? await prisma.discount.findMany({
+        where: { tenantId, active: true },
+        orderBy: { createdAt: "asc" },
+      })
     : [];
   const automatic = priceAutomaticDiscounts(
     resolved.pricingLines,

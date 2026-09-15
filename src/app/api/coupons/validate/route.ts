@@ -51,8 +51,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: resolved.error }, { status: resolved.status });
   }
 
+  // Mismo orderBy que `createOrder` (src/lib/orders.ts): sin esto, cuál
+  // regla "gana" entre dos activas sobre el mismo producto podía variar
+  // entre el preview y el cobro real.
   const discountRules = await prisma.discount.findMany({
     where: { active: true, ...(tenantId ? { tenantId } : {}) },
+    orderBy: { createdAt: "asc" },
   });
   const automatic = priceAutomaticDiscounts(
     resolved.pricingLines,

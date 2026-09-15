@@ -1441,7 +1441,10 @@ function OrderCard({
         )}
 
       {order.discountApplications.map((app, i) => (
-        <p key={app.discountId ?? i} className="mt-1 text-xs text-amber-700">
+        // Una regla DIRECT por categoría puede generar dos aplicaciones con
+        // el mismo discountId (una por línea del carrito en esa categoría) —
+        // el índice garantiza una key única aunque eso pase.
+        <p key={`${app.discountId ?? "auto"}-${i}`} className="mt-1 text-xs text-amber-700">
           {app.title}: −{formatCurrency(app.amount)}
         </p>
       ))}

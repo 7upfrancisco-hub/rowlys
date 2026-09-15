@@ -194,7 +194,11 @@ export default function PedidoClient({ id }: { id: string }) {
           </ul>
           {order.discountApplications.map((app, i) => (
             <div
-              key={app.discountId ?? i}
+              // Una regla DIRECT por categoría puede generar dos
+              // aplicaciones con el mismo discountId (una por línea del
+              // carrito en esa categoría) — el índice garantiza una key
+              // única aunque eso pase.
+              key={`${app.discountId ?? "auto"}-${i}`}
               className={
                 "flex justify-between text-sm text-accent " +
                 (i === 0 ? "mt-3 border-t border-line pt-3" : "mt-1")

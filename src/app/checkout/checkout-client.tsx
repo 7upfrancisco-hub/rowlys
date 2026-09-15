@@ -74,6 +74,10 @@ export default function CheckoutClient() {
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
     discountAmount: number;
+    // Subtotal post-descuentos-automáticos contra el que se cotizó este
+    // monto — si cambia (el cliente modifica el carrito, cambia de canal,
+    // etc.), el monto mostrado queda desactualizado y hay que invalidarlo.
+    quotedAgainst: number;
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkingCoupon, setCheckingCoupon] = useState(false);
@@ -150,7 +154,7 @@ export default function CheckoutClient() {
           }),
         }
       );
-      setAppliedCoupon(result);
+      setAppliedCoupon({ ...result, quotedAgainst: automatic.itemsTotal });
     } catch (err) {
       setAppliedCoupon(null);
       setCouponError((err as ApiError).message);
@@ -165,14 +169,21 @@ export default function CheckoutClient() {
     setCouponError(null);
   }
 
-  // Cambiar el medio de pago puede cambiar cuánto descuenta un cupón ya
-  // aplicado (se cotiza sobre el subtotal post-descuentos automáticos, que
-  // depende del medio elegido) — se pide re-aplicarlo para no mostrar un
-  // monto viejo.
-  function selectPaymentMethod(method: PaymentMethod) {
-    setPaymentMethod(method);
-    if (appliedCoupon) removeCoupon();
-  }
+  // El monto de un cupón aplicado se cotiza contra `automatic.itemsTotal` en
+  // ese momento. Si esa base cambia después (el cliente vuelve al carrito y
+  // agrega/saca cosas, cambia de canal, o cambia el medio de pago y eso
+  // mueve el subtotal por un descuento de PAYMENT_METHOD), el monto
+  // mostrado queda desactualizado — se invalida acá para no mostrar un
+  // número que no coincide con lo que se va a cobrar. Queda el código
+  // cargado para que sea un click volver a aplicarlo.
+  useEffect(() => {
+    if (appliedCoupon && appliedCoupon.quotedAgainst !== automatic.itemsTotal) {
+      setAppliedCoupon(null);
+      setCouponError("El total cambió — volvé a aplicar el cupón.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automatic.itemsTotal]);
+
 
   // Pedir queda bloqueado si el local está cerrado o el canal elegido pausado.
   const storeClosed = !!settings && !settings.storeOpen;
@@ -374,14 +385,14 @@ export default function CheckoutClient() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => selectPaymentMethod("CASH")}
+                onClick={() => setPaymentMethod("CASH")}
                 className={pillClass(paymentMethod === "CASH")}
               >
                 Efectivo
               </button>
               <button
                 type="button"
-                onClick={() => selectPaymentMethod("TRANSFER")}
+                onClick={() => setPaymentMethod("TRANSFER")}
                 className={pillClass(paymentMethod === "TRANSFER")}
               >
                 Transferencia

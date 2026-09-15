@@ -16,6 +16,10 @@ export async function GET() {
   const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
   const discounts = await prisma.discount.findMany({
     where: { active: true, ...(settings?.tenantId ? { tenantId: settings.tenantId } : {}) },
+    // Mismo orderBy que `createOrder` (src/lib/orders.ts): sin esto, cuál
+    // regla "gana" entre dos activas sobre el mismo producto podía variar
+    // entre el preview y el cobro real.
+    orderBy: { createdAt: "asc" },
     select: {
       id: true,
       kind: true,

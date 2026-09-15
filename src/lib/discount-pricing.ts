@@ -60,9 +60,13 @@ export interface AutomaticDiscountResult {
   applications: DiscountApplicationResult[];
 }
 
+// Redondea a centavos, mismo criterio que `priceCoupon` (src/lib/coupons.ts)
+// — antes este motor no redondeaba y podía arrastrar ruido de punto
+// flotante que después contaminaba el total final.
 function reduceByRule(unit: number, valueType: DiscountValueType, value: number): number {
   const raw = valueType === "PERCENT" ? unit * (value / 100) : value;
-  return Math.min(Math.max(raw, 0), unit);
+  const clamped = Math.min(Math.max(raw, 0), unit);
+  return Math.round(clamped * 100) / 100;
 }
 
 export function priceAutomaticDiscounts(
@@ -208,5 +212,9 @@ export function priceAutomaticDiscounts(
     }
   }
 
-  return { itemsTotal: Math.max(0, itemsTotal), deliveryFee, applications };
+  // Redondeo final defensivo: aunque cada reducción ya se redondea, restar
+  // números de 2 decimales entre sí todavía puede arrastrar ruido de punto
+  // flotante (ej. 0.1 + 0.2).
+  const roundedItemsTotal = Math.round(Math.max(0, itemsTotal) * 100) / 100;
+  return { itemsTotal: roundedItemsTotal, deliveryFee, applications };
 }
