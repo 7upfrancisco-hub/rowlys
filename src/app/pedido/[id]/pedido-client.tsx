@@ -132,9 +132,9 @@ export default function PedidoClient({ id }: { id: string }) {
           {order.deliveryAddress && ` · ${order.deliveryAddress}`}
         </p>
 
-        {order.status !== "CANCELLED" && order.status !== "DELIVERED" && (
-          <PushSubscribe orderId={order.id} />
-        )}
+        {order.status !== "CANCELLED" &&
+          order.status !== "DELIVERED" &&
+          order.status !== "READY" && <PushSubscribe orderId={order.id} />}
 
         {showEta && (
           <p className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg">

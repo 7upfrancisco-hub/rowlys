@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyOrderConfirmed } from "@/lib/notifications/whatsapp";
-import { notifyOrderStatusPush } from "@/lib/push";
+import { notifyOrderReady } from "@/lib/push";
 import { orderInclude } from "@/lib/orders";
 import { requireTenantId } from "@/lib/tenant";
 import type { WhatsAppSendResult } from "@/types";
@@ -164,13 +164,14 @@ export async function PATCH(
       });
     }
 
-    // Push del navegador: cubre CUALQUIER cambio de estado (no solo
-    // Confirmado como WhatsApp, que está atado a una plantilla pre-aprobada
-    // de Meta) — se `await`ea (no fire-and-forget) porque una función
-    // serverless puede cortarse apenas responde, matando una promesa
-    // colgada; internamente nunca tira (mismo criterio que WhatsApp).
-    if (status && status !== existing.status) {
-      await notifyOrderStatusPush(order.id, status, order.orderType);
+    // Push del navegador: SOLO en la transición a "Listo" (a pedido
+    // explícito del usuario — es el momento en que el cliente realmente
+    // tiene que hacer algo, retirarlo o esperar el envío). Se `await`ea (no
+    // fire-and-forget) porque una función serverless puede cortarse apenas
+    // responde, matando una promesa colgada; internamente nunca tira (mismo
+    // criterio que WhatsApp).
+    if (status === "READY" && existing.status !== "READY") {
+      await notifyOrderReady(order.id, order.orderType);
     }
 
     return NextResponse.json({ ...order, whatsappNotification });

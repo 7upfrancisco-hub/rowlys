@@ -1,14 +1,14 @@
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { baseUrl } from "@/lib/base-url";
-import type { OrderStatus, OrderType } from "@/types";
+import type { OrderType } from "@/types";
 
 // Notificaciones push del navegador para el seguimiento de un pedido
-// (Fase 30) — complementa el aviso de WhatsApp (que solo cubre la
-// transición a Confirmado, por la plantilla pre-aprobada que exige Meta):
-// esto avisa CUALQUIER cambio de estado, no necesita cuenta de terceros ni
-// aprobación, y funciona ya mismo sin depender de que el trámite de Meta
-// Business esté listo. Server-only.
+// (Fase 30). A pedido explícito del usuario, avisa SOLO la transición a
+// "Listo" (el momento en que de verdad hace falta que el cliente actúe:
+// retirarlo o esperar el envío) — no cada cambio de estado, para no
+// generar ruido. Complementa el aviso de WhatsApp (que solo cubre la
+// confirmación, por la plantilla pre-aprobada que exige Meta). Server-only.
 
 export function isPushConfigured(): boolean {
   return !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY;
@@ -30,39 +30,21 @@ function ensureConfigured() {
   configured = true;
 }
 
-// Copy por estado — mismo tono que ORDER_STATUS_LABELS pero en primera
-// persona hacia el cliente. CANCELLED no tiene wording de "listo para
-// retirar/enviar" porque no aplica.
-function copyForStatus(status: OrderStatus, orderType: OrderType): { title: string; body: string } | null {
-  switch (status) {
-    case "CONFIRMED":
-      return { title: "¡Tu pedido fue confirmado!", body: "Ya lo estamos preparando." };
-    case "IN_PROGRESS":
-      return { title: "Tu pedido está en preparación", body: "Te avisamos cuando esté listo." };
-    case "READY":
-      return orderType === "DELIVERY"
-        ? { title: "¡Tu pedido está listo!", body: "En breve sale a repartir." }
-        : { title: "¡Tu pedido está listo!", body: "Ya lo podés retirar en el local." };
-    case "DELIVERED":
-      return { title: "Tu pedido fue entregado", body: "¡Gracias por tu compra!" };
-    case "CANCELLED":
-      return { title: "Tu pedido fue cancelado", body: "Cualquier duda, contactá al local." };
-    default:
-      return null;
-  }
+function readyCopy(orderType: OrderType): { title: string; body: string } {
+  return orderType === "DELIVERY"
+    ? { title: "¡Tu pedido está listo!", body: "En breve sale a repartir." }
+    : { title: "¡Tu pedido está listo!", body: "Ya lo podés retirar en el local." };
 }
 
 // Nunca hace fallar al que la llama (el cambio de estado ya se guardó,
 // mismo criterio que `notifyOrderConfirmed` de WhatsApp) — un push que
 // falla no debería tumbar el PATCH de /comanda.
-export async function notifyOrderStatusPush(
+export async function notifyOrderReady(
   orderId: string,
-  status: OrderStatus,
   orderType: OrderType
 ): Promise<void> {
   if (!isPushConfigured()) return;
-  const message = copyForStatus(status, orderType);
-  if (!message) return;
+  const message = readyCopy(orderType);
 
   const subs = await prisma.pushSubscription.findMany({ where: { orderId } });
   if (subs.length === 0) return;

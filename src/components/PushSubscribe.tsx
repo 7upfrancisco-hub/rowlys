@@ -104,7 +104,7 @@ export default function PushSubscribe({ orderId }: { orderId: string }) {
   if (status === "subscribed") {
     return (
       <p className="mb-4 flex items-center gap-2 text-sm text-muted">
-        <span aria-hidden>🔔</span> Te avisamos acá cuando cambie el estado.
+        <span aria-hidden>🔔</span> Te avisamos acá cuando esté listo.
         <button
           type="button"
           onClick={unsubscribe}
@@ -125,7 +125,7 @@ export default function PushSubscribe({ orderId }: { orderId: string }) {
         disabled={busy}
         className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-fg transition hover:bg-surface-2 disabled:opacity-60"
       >
-        {busy ? "Activando..." : "🔔 Avisame cuando cambie el estado"}
+        {busy ? "Activando..." : "🔔 Avisame cuando esté listo"}
       </button>
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
