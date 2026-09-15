@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
+import InstallPwa from "@/components/InstallPwa";
 import { useCartStore, cartLineKey, cartSubtotal } from "@/lib/cart-store";
 import {
   formatCurrency,
@@ -137,6 +138,7 @@ export default function MenuClient() {
     return (
       <div className="storefront min-h-screen">
         <ThemeToggle />
+        <InstallPwa />
         <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-6 py-12 text-center">
           <button
             type="button"
@@ -181,6 +183,7 @@ export default function MenuClient() {
   return (
     <div className={"storefront min-h-screen " + (readOnly ? "" : "pb-24")}>
       <ThemeToggle />
+      <InstallPwa />
 
       {readOnly && (
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-accent/10 px-6 py-2 text-sm">

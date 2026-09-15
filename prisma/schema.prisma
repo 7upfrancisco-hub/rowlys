@@ -452,6 +452,12 @@ model Settings {
   // subida que las imágenes de producto, ver src/lib/blob.ts). Null = header
   // plano de siempre, sin banner.
   coverImageUrl           String?
+  // Ícono cuadrado (mismo mecanismo de subida) para la PWA instalable del
+  // storefront (manifest.ts + apple-icon.tsx). Null = se genera uno
+  // automático (inicial de storeName sobre themeColor) hasta que el local
+  // suba el suyo — así es instalable desde el día 1 sin depender de que el
+  // admin cargue un logo primero.
+  iconUrl                 String?
   themeColor              String   @default("#c92a2a")
   themeFont               String   @default("inter")
   // "Color secundario" en la jerga del local: blanco o negro, el texto/

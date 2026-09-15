@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Rowlys | Pedidos online",
   description: "Menú digital y comanda para locales gastronómicos",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default" },
 };
 
 // Aplica el tema del storefront elegido por el cliente ANTES del primer paint,

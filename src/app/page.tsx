@@ -1,6 +1,7 @@
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import StorefrontTheme from "@/components/StorefrontTheme";
+import InstallPwa from "@/components/InstallPwa";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,7 @@ export default function HomePage() {
     <StorefrontTheme>
       <div className="storefront">
         <ThemeToggle />
+        <InstallPwa />
         <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-12">
           <div className="text-center">
             <h1 className="text-3xl font-bold text-accent">Rowlys</h1>

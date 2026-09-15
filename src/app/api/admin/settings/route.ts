@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     prepTimeDeliveryMinutes: 10,
     prepTimePickupMinutes: 10,
     coverImageUrl: null,
+    iconUrl: null,
     themeColor: "#c92a2a",
     themeFont: "inter",
     themeOnAccent: "white",
@@ -52,6 +53,7 @@ const settingsSchema = z.object({
   prepTimeDeliveryMinutes: z.number().int().min(0).max(240).optional(),
   prepTimePickupMinutes: z.number().int().min(0).max(240).optional(),
   coverImageUrl: z.string().trim().nullable().optional(),
+  iconUrl: z.string().trim().nullable().optional(),
   themeColor: z
     .string()
     .trim()

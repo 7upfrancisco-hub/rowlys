@@ -28,6 +28,7 @@ export async function GET() {
     prepTimeDeliveryMinutes: 10,
     prepTimePickupMinutes: 10,
     coverImageUrl: null,
+    iconUrl: null,
   };
 
   return NextResponse.json({
@@ -45,6 +46,7 @@ export async function GET() {
     prepTimeDeliveryMinutes: safe.prepTimeDeliveryMinutes,
     prepTimePickupMinutes: safe.prepTimePickupMinutes,
     coverImageUrl: safe.coverImageUrl,
+    iconUrl: safe.iconUrl,
     // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o
     // credenciales reales en este entorno.
     mpEnabled: isMpAvailable(),

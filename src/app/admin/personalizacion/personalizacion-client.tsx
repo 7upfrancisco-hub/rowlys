@@ -26,6 +26,7 @@ import {
 interface ThemeSettings {
   storeName: string;
   coverImageUrl: string | null;
+  iconUrl: string | null;
   themeColor: string;
   themeFont: string;
   themeOnAccent: string;
@@ -34,6 +35,7 @@ interface ThemeSettings {
 export default function PersonalizacionClient() {
   const [storeName, setStoreName] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [iconUrl, setIconUrl] = useState("");
   const [themeColor, setThemeColor] = useState(DEFAULT_THEME_COLOR);
   const [themeFont, setThemeFont] = useState(DEFAULT_STOREFRONT_FONT);
   const [themeOnAccent, setThemeOnAccent] = useState<OnAccentChoice>("white");
@@ -49,6 +51,7 @@ export default function PersonalizacionClient() {
       .then((settings) => {
         setStoreName(settings.storeName);
         setCoverImageUrl(settings.coverImageUrl ?? "");
+        setIconUrl(settings.iconUrl ?? "");
         setThemeColor(settings.themeColor || DEFAULT_THEME_COLOR);
         setThemeFont(settings.themeFont || DEFAULT_STOREFRONT_FONT);
         setThemeOnAccent(
@@ -71,6 +74,22 @@ export default function PersonalizacionClient() {
         file.name
       );
       setCoverImageUrl(url);
+    } catch (err) {
+      setUploadErr((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleIconFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadErr(null);
+    setUploading(true);
+    try {
+      const url = await uploadImage(await downscaleImage(file, 512), file.name);
+      setIconUrl(url);
     } catch (err) {
       setUploadErr((err as Error).message);
     } finally {
@@ -112,6 +131,7 @@ export default function PersonalizacionClient() {
         method: "PATCH",
         body: JSON.stringify({
           coverImageUrl: coverImageUrl.trim() || null,
+          iconUrl: iconUrl.trim() || null,
           themeColor: isValidHex(themeColor) ? themeColor : undefined,
           themeFont,
           themeOnAccent,
@@ -189,6 +209,63 @@ export default function PersonalizacionClient() {
                 </button>
               )}
               {uploadErr && <p className="text-xs text-red-600">{uploadErr}</p>}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 border-b border-neutral-100 pb-4">
+          <label className="text-sm font-medium text-neutral-700">
+            Ícono de la app
+          </label>
+          <p className="-mt-1 text-xs text-neutral-500">
+            Se usa cuando un cliente instala tu carta en la pantalla de
+            inicio del celular. Subí una imagen cuadrada — mientras no subas
+            una, se genera un ícono automático con la inicial del local
+            sobre tu color de marca.
+          </p>
+          <div className="flex items-start gap-4">
+            {iconUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={iconUrl}
+                alt=""
+                className="h-20 w-20 shrink-0 rounded-xl border border-neutral-200 object-cover"
+              />
+            ) : (
+              <div
+                className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-2xl font-bold"
+                style={{
+                  backgroundColor: isValidHex(themeColor) ? themeColor : DEFAULT_THEME_COLOR,
+                  color: themeOnAccent === "black" ? "#171717" : "#ffffff",
+                }}
+              >
+                {(storeName.trim()[0] ?? "B").toUpperCase()}
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <label
+                className={
+                  "inline-flex w-fit cursor-pointer items-center rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 " +
+                  (uploading ? "pointer-events-none opacity-60" : "")
+                }
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleIconFile}
+                  className="hidden"
+                />
+                {uploading ? "Subiendo..." : iconUrl ? "Cambiar ícono" : "Subir ícono"}
+              </label>
+              {iconUrl && (
+                <button
+                  type="button"
+                  onClick={() => setIconUrl("")}
+                  className="w-fit text-xs font-medium text-red-600 hover:underline"
+                >
+                  Quitar ícono (volver al automático)
+                </button>
+              )}
             </div>
           </div>
         </div>
