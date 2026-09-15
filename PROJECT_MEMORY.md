@@ -2439,3 +2439,39 @@ se va a seguir sumando de a poco. Sin cambios de schema.
     `orderBy`, dos reglas DIRECT activas sobre el mismo producto "empatan"
     de forma no determinística; el motor de descuentos automáticos no
     redondea a centavos como sí hace `priceCoupon`.
+  - **Fase 28f — corrección de los 4 bugs menores restantes de la 28d/28e
+    (2026-09-15)**: cierra la lista completa del review de la 28e.
+    1. **Cupón desactualizado**: en `checkout-client.tsx`, el monto de un
+       cupón aplicado se cotiza contra `automatic.itemsTotal` en ese
+       momento; si el cliente vuelve al carrito y lo cambia (o cambia de
+       canal/medio de pago de forma que mueva el subtotal), el monto
+       mostrado quedaba congelado con el valor viejo. Fix: `appliedCoupon`
+       ahora guarda `quotedAgainst` (el subtotal contra el que se cotizó) y
+       un `useEffect` lo invalida (sin borrar el código, para que sea un
+       click volver a aplicarlo) apenas `automatic.itemsTotal` deja de
+       coincidir. De paso, `selectPaymentMethod` (que hacía esto mismo
+       manualmente solo para el caso de cambiar de medio de pago) se
+       eliminó por redundante — el efecto genérico ya cubre ese caso.
+    2. **Keys de React duplicadas**: en `/comanda` y `/pedido/[id]`, la key
+       de cada `discountApplication` era `app.discountId ?? i`, pero una
+       regla DIRECT de categoría puede generar dos aplicaciones (una por
+       línea de esa categoría) con el mismo `discountId`. Fix: key
+       `` `${app.discountId ?? "auto"}-${i}` ``, siempre única.
+    3. **Empate no determinístico entre reglas duplicadas**: las 3 consultas
+       de reglas activas (`createOrder`, `GET /api/discounts`, `POST
+       /api/coupons/validate`) no tenían `orderBy`, así que si el admin
+       dejaba dos reglas DIRECT (o PAYMENT_METHOD) activas sobre el mismo
+       producto/medio, cuál "ganaba" dependía del orden de retorno de
+       Postgres. Fix: `orderBy: { createdAt: "asc" }` en las tres — gana
+       siempre la regla más vieja, mismo criterio en preview y en el cobro
+       real.
+    4. **Sin redondeo a centavos**: `reduceByRule` (el corazón del motor de
+       descuentos automáticos) no redondeaba, a diferencia de `priceCoupon`
+       que sí. Fix: redondea a centavos ahí mismo, y además el `itemsTotal`
+       final de `priceAutomaticDiscounts` se redondea una vez más como
+       defensa (restar números ya redondeados entre sí todavía puede
+       arrastrar ruido de punto flotante, ej. 0.1 + 0.2).
+    Verificado con el mismo script puntual de la 28e (4 casos, incluyendo
+    uno de redondeo con precios no enteros) — los cuatro dieron el
+    resultado exacto esperado. `tsc --noEmit` y `next build` limpios. Con
+    esto, Marketing (Cupones + Descuentos) queda sin bugs conocidos.
