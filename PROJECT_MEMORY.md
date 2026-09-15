@@ -2680,3 +2680,19 @@ de Service Worker que dejó la Fase 29 (PWA).
   `public/sw.js`**: avisar al usuario que cierre y reabra la PWA
   instalada después de deployar, no alcanza con que el sitio se
   actualice solo en el navegador de escritorio.
+- **Editor de recorte para el ícono de la PWA (2026-09-15)**: el usuario
+  pidió poder "ajustar la foto" al subir el ícono propio en
+  `/admin/personalizacion` — antes `downscaleImage` solo achicaba
+  manteniendo el aspect ratio original, así que una foto no cuadrada
+  quedaba deformada al mostrarse como ícono cuadrado (192x192/512x512).
+  Nuevo `src/components/IconCropper.tsx`: editor propio (sin librería
+  nueva) todo en `<canvas>` — arrastrar (Pointer Events, sirve para mouse
+  y touch) reposiciona, un slider hace zoom (1x = todo el lado corto de
+  la foto, hasta 3x), "Usar esta foto" exporta un recorte cuadrado de
+  512px a WebP. El flujo de subida cambió: `handleIconFile` ya no sube
+  directo, abre el cropper; `handleIconCropped` (nuevo) recibe el blob ya
+  recortado y sigue el mismo camino de siempre (`uploadImage` →
+  `/api/admin/upload` → `PATCH /api/admin/settings` con `iconUrl`). La
+  portada (`coverImageUrl`) no se tocó — sigue con aspect ratio libre,
+  tiene sentido ahí (es un banner rectangular, no un ícono). `tsc
+  --noEmit` y `next build` limpios.

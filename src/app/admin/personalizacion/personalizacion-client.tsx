@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { downscaleImage, uploadImage } from "@/lib/image";
+import IconCropper from "@/components/IconCropper";
 import {
   DEFAULT_THEME_COLOR,
   ON_ACCENT_CHOICES,
@@ -45,6 +46,7 @@ export default function PersonalizacionClient() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [iconToCrop, setIconToCrop] = useState<File | null>(null);
 
   useEffect(() => {
     apiFetch<ThemeSettings>("/api/admin/settings")
@@ -81,14 +83,20 @@ export default function PersonalizacionClient() {
     }
   }
 
-  async function handleIconFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleIconFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setUploadErr(null);
+    setIconToCrop(file); // abre el editor; la subida real pasa por handleIconCropped
+  }
+
+  async function handleIconCropped(blob: Blob) {
+    setIconToCrop(null);
+    setUploadErr(null);
     setUploading(true);
     try {
-      const url = await uploadImage(await downscaleImage(file, 512), file.name);
+      const url = await uploadImage(blob, "icono.webp");
       setIconUrl(url);
     } catch (err) {
       setUploadErr((err as Error).message);
@@ -382,6 +390,14 @@ export default function PersonalizacionClient() {
           {saving ? "Guardando..." : "Guardar cambios"}
         </button>
       </form>
+
+      {iconToCrop && (
+        <IconCropper
+          file={iconToCrop}
+          onCancel={() => setIconToCrop(null)}
+          onConfirm={handleIconCropped}
+        />
+      )}
     </div>
   );
 }
