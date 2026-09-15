@@ -2299,3 +2299,50 @@ se va a seguir sumando de a poco. Sin cambios de schema.
   2. **Recorte fijo de fotos de producto** (commit `46cbc37`): las fotos de producto pasan a mostrarse siempre en **4:3** (tarjeta y detalle en `/menu`, antes la tarjeta era una franja de alto fijo/ancho variable — por eso fotos como la de "Bee Melt XL" se veían mal recortadas). Nuevo `src/components/ImageCropModal.tsx`: al subir/cambiar una foto en `/admin/productos` se abre un editor para arrastrar y hacer zoom dentro del marco 4:3 antes de guardar (canvas + Pointer Events, **sin librería nueva**). Las URLs pegadas a mano (campo de texto aparte) NO pasan por el editor — se recortan al centro como antes, no se puede traer de forma confiable una imagen de otro dominio al canvas.
   3. **Menú interactivo de scroll continuo** (commit `4a4a1e7`): `/menu` deja de filtrar por categoría seleccionada — ahora renderiza todas las categorías con sus productos en una sola página. Cada sección hace fade+slide-up la primera vez que entra en pantalla (`IntersectionObserver`, una vez, no se re-oculta al subir). El nav de categorías queda **sticky** arriba al scrollear, con **scrollspy** (se resalta sola la categoría que está pasando por la franja de arriba, `rootMargin` tipo `-120px 0px -70%`) y click-to-scroll suave a la sección (con supresión de 700ms del scrollspy para no pisar el tab elegido durante la animación).
   - Pendiente: nada bloqueante. El usuario cortó la sesión ("apago y mañana seguimos") sin pedir siguiente feature todavía.
+- **2026-09-15** — Sesión de Marketing (Fase 28).
+  - **Fase 28a — Cupones (CRUD, completo)**: modelo `Coupon` (código único,
+    descuento % o monto fijo, presupuesto máximo opcional, vencimiento
+    opcional, activo/inactivo) + `CouponRedemption` (un uso por cliente por
+    teléfono, sin tope global — decisión del usuario). Pantalla
+    `/admin/cupones` con alta/edición y tabla de estado (calculado:
+    Activo/Inactivo/Expirado/Presupuesto agotado). `/admin/descuentos` como
+    placeholder (motor de descuento por medio de pago, todavía sin construir).
+    Grupo "Marketing" nuevo en el dashboard. Commit `fe30415`.
+  - **Fase 28b — aplicar el cupón en el checkout**: `src/lib/coupons.ts`
+    (`priceCoupon`, valida y cotiza contra el subtotal real, nunca confía en
+    el cliente) + `POST /api/coupons/validate` (público, preview antes de
+    pagar) + `createOrder` aplica el cupón dentro de una transacción y crea
+    el `CouponRedemption`. `updateOrderItems` resta el descuento ya congelado
+    al recalcular el total (si no, un edit de items desde `/comanda` borraba
+    el descuento). UI en `/checkout`, `/pedido/[id]` y la tarjeta de
+    `/comanda`. Verificado end-to-end contra Neon (cotización, bloqueo de
+    reuso por teléfono, presupuesto agotado). Commit `28dee7f`.
+  - **BUG CRÍTICO encontrado y arreglado en el mismo pase (commit `28dee7f`)**:
+    desde la Fase 26b (2026-09-11, hace 4 días), `GET /api/orders` y
+    `/admin/pedidos` filtran por `tenantId` de la sesión, pero
+    `POST /api/orders` (el checkout público, sin sesión) seguía creando
+    pedidos con `tenantId: null` — un pedido real de un cliente quedaba
+    invisible para `/comanda` y el historial. Confirmado contra la base real
+    (no solo en teoría): un pedido de prueba creado por el endpoint público
+    no aparecía en el listado de comanda hasta aplicar el fix. Se revisó la
+    base de producción y **todos los pedidos reales del 2026-09-08 al
+    2026-09-11 tenían `tenantId` correcto** (parecen cargados a mano desde
+    `/comanda`, no desde el checkout público) — no hay evidencia de que se
+    haya perdido un pedido real todavía, pero el riesgo era activo desde
+    hace 4 días. Fix: `createOrder` en `src/lib/orders.ts` ahora resuelve el
+    tenant del dueño de la fila "singleton" de `Settings` cuando no viene
+    uno explícito (stopgap correcto mientras no exista routing por slug,
+    Fase 26b-3). Verificado: pedido de prueba público ahora sí aparece en
+    `/comanda`. **Vale la pena que el usuario revise manualmente si hubo
+    algún pedido real de cliente entre el 2026-09-11 (deploy de la 26b) y
+    ahora que no haya visto en la comanda** — con los datos que hay en la
+    base no se puede distinguir con certeza un pedido real perdido de uno
+    que nunca existió.
+  - **Gap relacionado, NO arreglado (menor prioridad, no activo hoy)**:
+    `GET /api/menu` sigue sin filtrar por tenant (devuelve categorías de
+    TODOS los tenants mezcladas). Hoy no rompe nada porque el tenant de
+    prueba "Pizzería Demo" no tiene productos cargados — pero el día que
+    tenga catálogo real, el storefront público mezclaría los dos menús. Se
+    resuelve junto con el routing por slug (Fase 26b-3).
+  - `tsc --noEmit` y `next build` limpios en ambos commits. Todo pusheado y
+    deployado por Claude directamente (sin bloqueo del clasificador).
