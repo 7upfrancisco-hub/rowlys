@@ -45,7 +45,7 @@ export const createOrderSchema = z
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
-const orderInclude = {
+export const orderInclude = {
   items: { include: { options: true } },
   payment: true,
   driver: { select: { id: true, name: true, phone: true } },

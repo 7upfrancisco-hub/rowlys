@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyOrderConfirmed } from "@/lib/notifications/whatsapp";
 import { notifyOrderStatusPush } from "@/lib/push";
+import { orderInclude } from "@/lib/orders";
 import { requireTenantId } from "@/lib/tenant";
 import type { WhatsAppSendResult } from "@/types";
 
@@ -44,12 +45,6 @@ const patchOrderSchema = z
       path: ["cancelReason"],
     }
   );
-
-const ORDER_INCLUDE = {
-  items: { include: { options: true } },
-  payment: true,
-  driver: { select: { id: true, name: true, phone: true } },
-} as const;
 
 export async function PATCH(
   request: Request,
@@ -144,7 +139,7 @@ export async function PATCH(
       }
       return tx.order.findUniqueOrThrow({
         where: { id: params.id },
-        include: ORDER_INCLUDE,
+        include: orderInclude,
       });
     });
 
