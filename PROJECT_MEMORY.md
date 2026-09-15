@@ -2346,3 +2346,20 @@ se va a seguir sumando de a poco. Sin cambios de schema.
     resuelve junto con el routing por slug (Fase 26b-3).
   - `tsc --noEmit` y `next build` limpios en ambos commits. Todo pusheado y
     deployado por Claude directamente (sin bloqueo del clasificador).
+  - **Fase 28c — Descuentos (CRUD de los 4 tipos)**: modelo `Discount` nuevo
+    (`DIRECT` % o monto sobre un producto o categoría; `COMBO` "2x1" —
+    comprás `triggerProduct`, se descuenta `rewardProduct`, mismo producto en
+    los dos = 2x1 clásico; `PAYMENT_METHOD` % o monto según el medio de pago;
+    `FREE_SHIPPING` bonifica el envío entero, sin valor). Pantalla
+    `/admin/descuentos` reemplaza el placeholder: pills de tipo igual que la
+    referencia de RestoSimple que mandó el usuario, campos dinámicos según el
+    tipo. `src/lib/discounts.ts` concentra el schema (`discriminatedUnion`
+    por `kind`) y el chequeo de ownership de producto/categoría — tuvo que
+    salir de `route.ts` porque Next.js solo deja exportar métodos HTTP ahí
+    (el primer intento de build falló por esto, se corrigió antes de
+    pushear). Todavía NO se aplica en el checkout — mismo criterio que
+    Cupones, queda pendiente para la siguiente vuelta. Verificado end-to-end
+    contra Neon: los 4 tipos se crean/editan, validaciones cruzadas (falta
+    producto/categoría, % > 100) rechazan con 400, borrado OK. Datos de
+    prueba borrados después. Commit `6f9d039`, deployado y verificado
+    (`● Ready`).
