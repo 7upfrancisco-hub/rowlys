@@ -34,6 +34,7 @@ model Tenant {
   customers      Customer[]
   orders         Order[]
   drivers        Driver[]
+  coupons        Coupon[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -208,6 +209,8 @@ model Order {
   // el pedido queda sin asignar pero no se pierde.
   driver            Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
   driverId          String?
+  // Cupón usado en este pedido, si lo hubo (Fase 28b, todavía sin aplicar).
+  couponRedemption  CouponRedemption?
   tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId          String?
   createdAt         DateTime    @default(now())
@@ -233,6 +236,51 @@ model Driver {
   tenantId     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+enum CouponDiscountType {
+  PERCENT
+  FIXED
+}
+
+// Marketing / Cupones (Fase 28, en construcción). `code` único global por
+// ahora, mismo criterio de transición que `Customer.phone` (ver nota ahí) —
+// el día que haya más de un tenant activo pasa a `@@unique([tenantId, code])`.
+// Regla de uso decidida por el usuario: SIN tope global de usos, un cupón lo
+// puede usar cada cliente (por teléfono) una sola vez — se controla con
+// `CouponRedemption` + `@@unique([couponId, customerPhone])` de abajo.
+// `budgetCap` es un techo opcional de $ descontados en total (no de cantidad
+// de usos); se apaga solo cuando la suma de `CouponRedemption.discountAmount`
+// lo alcanza. Todavía no hay ninguna ruta que cree `CouponRedemption` — eso
+// es la Fase 28b (aplicar el cupón en el checkout), esta fase es solo el
+// CRUD del panel.
+model Coupon {
+  id            String              @id @default(cuid())
+  code          String              @unique
+  discountType  CouponDiscountType
+  // Porcentaje (1-100) si discountType=PERCENT, o monto fijo en $ si FIXED.
+  discountValue Float
+  budgetCap     Float?
+  active        Boolean             @default(true)
+  expiresAt     DateTime?
+  redemptions   CouponRedemption[]
+  tenant        Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId      String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model CouponRedemption {
+  id             String   @id @default(cuid())
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  couponId       String
+  customerPhone  String
+  order          Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId        String?  @unique
+  discountAmount Float
+  createdAt      DateTime @default(now())
+
+  @@unique([couponId, customerPhone])
 }
 
 model OrderItem {

@@ -66,6 +66,21 @@ const GROUPS = [
     ],
   },
   {
+    title: "Marketing",
+    links: [
+      {
+        href: "/admin/cupones",
+        label: "Cupones",
+        desc: "Códigos de descuento para el checkout",
+      },
+      {
+        href: "/admin/descuentos",
+        label: "Descuentos",
+        desc: "Descuento automático por medio de pago",
+      },
+    ],
+  },
+  {
     title: "Configuración",
     links: [
       {

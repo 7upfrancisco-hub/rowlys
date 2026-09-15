@@ -127,6 +127,40 @@ export interface PaymentDTO {
   providerRef: string | null;
 }
 
+export type CouponDiscountType = "PERCENT" | "FIXED";
+
+export const COUPON_DISCOUNT_TYPE_LABELS: Record<CouponDiscountType, string> = {
+  PERCENT: "Porcentaje",
+  FIXED: "Monto fijo",
+};
+
+// `redemptionsCount`/`totalDiscounted` se calculan en el server a partir de
+// `CouponRedemption` (todavía no hay nada que las genere — Fase 28b crea
+// redemptions al aplicar el cupón en el checkout). `status` también se
+// calcula en el server: no es un campo propio de Coupon.
+export type CouponStatus = "ACTIVE" | "INACTIVE" | "EXPIRED" | "EXHAUSTED";
+
+export const COUPON_STATUS_LABELS: Record<CouponStatus, string> = {
+  ACTIVE: "Activo",
+  INACTIVE: "Inactivo",
+  EXPIRED: "Expirado",
+  EXHAUSTED: "Presupuesto agotado",
+};
+
+export interface CouponDTO {
+  id: string;
+  code: string;
+  discountType: CouponDiscountType;
+  discountValue: number;
+  budgetCap: number | null;
+  active: boolean;
+  expiresAt: string | null;
+  redemptionsCount: number;
+  totalDiscounted: number;
+  status: CouponStatus;
+  createdAt: string;
+}
+
 export interface DriverDTO {
   id: string;
   name: string;
