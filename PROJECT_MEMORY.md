@@ -2696,3 +2696,23 @@ de Service Worker que dejó la Fase 29 (PWA).
   portada (`coverImageUrl`) no se tocó — sigue con aspect ratio libre,
   tiene sentido ahí (es un banner rectangular, no un ícono). `tsc
   --noEmit` y `next build` limpios.
+- **Fondo blanco de respaldo en el ícono (mismo día)**: si el logo subido
+  tiene transparencia, `IconCropper` ahora pinta el canvas de blanco
+  ANTES de dibujar la imagen (tanto en la vista previa como en la
+  exportación final a WebP) — así el ícono nunca queda con partes
+  transparentes que cada navegador/SO podría renderizar distinto (negro,
+  gris, etc.). El ícono automático generado (`src/lib/pwa-icon.tsx`, el
+  que se usa hasta que el local sube el suyo) ya era siempre opaco, no
+  hizo falta tocarlo.
+- **Limitación de plataforma registrada, NO implementada a pedido del
+  usuario**: cambiar el ícono desde /admin/personalizacion NO actualiza
+  los accesos directos que un cliente ya agregó a su pantalla de inicio.
+  En iOS es imposible por diseño (Apple congela una captura del ícono en
+  el momento de "Agregar a pantalla de inicio", sin API para refrescarla
+  después — el cliente tiene que borrar y volver a agregar el acceso
+  directo a mano). En Android, Chrome sí revisa el manifest de vez en
+  cuando y puede actualizarlo solo, pero no es instantáneo ni forzable
+  por código. El usuario decidió dejarlo así (no cambia el logo seguido);
+  si en el futuro se vuelve un problema, la opción que se descartó por
+  ahora fue un aviso in-app pidiéndole al cliente que reinstale el acceso
+  directo.

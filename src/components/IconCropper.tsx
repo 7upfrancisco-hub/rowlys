@@ -61,7 +61,11 @@ export default function IconCropper({ file, onCancel, onConfirm }: Props) {
     if (!canvas || !img) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, VIEWPORT_PX, VIEWPORT_PX);
+    // Fondo blanco antes de dibujar: si el logo tiene transparencia (fondo
+    // "sin color"), que se vea como quedaría de verdad el ícono final —no
+    // transparente/negro según el navegador.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, VIEWPORT_PX, VIEWPORT_PX);
     ctx.drawImage(
       img,
       cropOrigin.x,
@@ -101,6 +105,10 @@ export default function IconCropper({ file, onCancel, onConfirm }: Props) {
     out.height = OUTPUT_PX;
     const ctx = out.getContext("2d");
     if (!ctx) return;
+    // Mismo fondo blanco que la vista previa — el WebP final nunca queda
+    // con transparencia, sin importar si el logo original tenía o no.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, OUTPUT_PX, OUTPUT_PX);
     ctx.drawImage(
       img,
       cropOrigin.x,
