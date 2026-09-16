@@ -28,11 +28,6 @@ const GROUPS = [
         label: "Historial",
         desc: "Pedidos finalizados y cancelados",
       },
-      {
-        href: "/admin/clientes",
-        label: "Clientes",
-        desc: "Quién compró, cuánto y sus direcciones",
-      },
     ],
   },
   {
@@ -63,6 +58,11 @@ const GROUPS = [
         label: "Métricas e historial",
         desc: "Ventas por día, categoría y mes",
       },
+      {
+        href: "/admin/clientes",
+        label: "Clientes",
+        desc: "Quién compró, cuánto y sus direcciones",
+      },
     ],
   },
   {
@@ -77,26 +77,6 @@ const GROUPS = [
         href: "/admin/descuentos",
         label: "Descuentos",
         desc: "Directo, 2x1/Combo, medio de pago o envío gratis",
-      },
-    ],
-  },
-  {
-    title: "Configuración",
-    links: [
-      {
-        href: "/admin/repartidores",
-        label: "Repartidores",
-        desc: "Perfiles para asignar a los envíos",
-      },
-      {
-        href: "/admin/configuracion",
-        label: "Datos del local",
-        desc: "Envío, alias bancario, horarios",
-      },
-      {
-        href: "/admin/personalizacion",
-        label: "Personalización",
-        desc: "Color de marca y tipografía de la carta",
       },
     ],
   },
