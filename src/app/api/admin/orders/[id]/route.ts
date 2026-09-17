@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/prisma";
 import { notifyOrderConfirmed } from "@/lib/notifications/whatsapp";
 import { notifyOrderReady } from "@/lib/push";
 import { orderInclude } from "@/lib/orders";
 import { requireTenantId } from "@/lib/tenant";
-import type { WhatsAppSendResult } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -145,38 +145,46 @@ export async function PATCH(
 
     // Aviso automático por WhatsApp SOLO en la transición a Confirmado (no si
     // ya estaba confirmado, para no re-enviar). Nunca hace fallar el PATCH: si
-    // el envío falla, el cambio de estado ya quedó guardado igual.
-    let whatsappNotification: WhatsAppSendResult | undefined;
+    // el envío falla, el cambio de estado ya quedó guardado igual. `waitUntil`
+    // (no `await`) para no hacerle esperar a quien tocó "Aceptar" el viaje de
+    // ida y vuelta a la API de WhatsApp — Vercel mantiene la función viva
+    // hasta que esta promesa termina aunque la respuesta ya haya salido, así
+    // que el envío no se pierde (a diferencia de un fire-and-forget común).
     if (status === "CONFIRMED" && existing.status !== "CONFIRMED") {
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { slug: true, settings: { select: { storeName: true } } },
-      });
-      whatsappNotification = await notifyOrderConfirmed(
-        {
-          id: order.id,
-          customerFirstName: order.customerFirstName,
-          customerPhone: order.customerPhone,
-        },
-        tenant?.settings?.storeName ?? "el local",
-        tenant?.slug ?? "rowlys"
-      ).catch((err): WhatsAppSendResult => {
-        console.error("WhatsApp: aviso de confirmación falló:", err);
-        return { status: "failed", error: String(err?.message ?? err) };
-      });
+      waitUntil(
+        (async () => {
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { slug: true, settings: { select: { storeName: true } } },
+          });
+          await notifyOrderConfirmed(
+            {
+              id: order.id,
+              customerFirstName: order.customerFirstName,
+              customerPhone: order.customerPhone,
+            },
+            tenant?.settings?.storeName ?? "el local",
+            tenant?.slug ?? "rowlys"
+          );
+        })().catch((err) => {
+          console.error("WhatsApp: aviso de confirmación falló:", err);
+        })
+      );
     }
 
-    // Push del navegador: SOLO en la transición a "Listo" (a pedido
-    // explícito del usuario — es el momento en que el cliente realmente
-    // tiene que hacer algo, retirarlo o esperar el envío). Se `await`ea (no
-    // fire-and-forget) porque una función serverless puede cortarse apenas
-    // responde, matando una promesa colgada; internamente nunca tira (mismo
-    // criterio que WhatsApp).
+    // Push del navegador: SOLO en la transición a "Listo" (a pedido explícito
+    // del usuario). Mismo criterio que WhatsApp arriba: `waitUntil` en vez de
+    // `await` para no bloquear la respuesta con el envío a los servicios de
+    // push de Apple/Google.
     if (status === "READY" && existing.status !== "READY") {
-      await notifyOrderReady(order.id, order.orderType, tenantId);
+      waitUntil(
+        notifyOrderReady(order.id, order.orderType, tenantId).catch((err) => {
+          console.error("Push: aviso de 'listo' falló:", err);
+        })
+      );
     }
 
-    return NextResponse.json({ ...order, whatsappNotification });
+    return NextResponse.json(order);
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&

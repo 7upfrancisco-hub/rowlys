@@ -30,7 +30,6 @@ import {
   type DriverDTO,
   type OrderDTO,
   type OrderStatus,
-  type WhatsAppSendResult,
 } from "@/types";
 
 // Cambios que un PATCH a /api/admin/orders/[id] puede aplicar desde la comanda.
@@ -237,22 +236,6 @@ export default function ComandaClient() {
   function showNotice(n: { kind: "ok" | "warn"; text: string }) {
     setNotice(n);
     setTimeout(() => setNotice(null), 8000);
-  }
-
-  function whatsappNotice(r: WhatsAppSendResult) {
-    if (r.status === "sent") {
-      showNotice({ kind: "ok", text: "WhatsApp de confirmación enviado al cliente." });
-    } else if (r.status === "mock") {
-      showNotice({
-        kind: "ok",
-        text: `WhatsApp (simulado) a +${r.to}. Config real pendiente.`,
-      });
-    } else if (r.status === "failed") {
-      showNotice({ kind: "warn", text: `WhatsApp no se envió: ${r.error}` });
-    } else if (r.reason && !r.reason.includes("no configurado")) {
-      // "no configurado" es lo normal sin credenciales — no vale la pena avisar.
-      showNotice({ kind: "warn", text: `WhatsApp no se envió: ${r.reason}` });
-    }
   }
 
   const load = useCallback(async () => {
@@ -538,21 +521,49 @@ export default function ComandaClient() {
     }
   }
 
+  // Aplica un OrderPatch a un OrderDTO para la actualización optimista — solo
+  // los campos que tienen un equivalente directo en el DTO (driver/payment
+  // completos se reconcilian recién cuando llega la respuesta real).
+  function applyOptimisticPatch(order: OrderDTO, body: OrderPatch): OrderDTO {
+    return {
+      ...order,
+      ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(body.driverId !== undefined ? { driverId: body.driverId } : {}),
+      ...(body.extraDelayMinutes !== undefined
+        ? { extraDelayMinutes: body.extraDelayMinutes }
+        : {}),
+      ...(body.cancelReason !== undefined ? { cancelReason: body.cancelReason } : {}),
+      ...(body.markPaid && order.payment
+        ? { payment: { ...order.payment, status: "CONFIRMED" as const } }
+        : {}),
+    };
+  }
+
   async function mutate(id: string, body: OrderPatch) {
     setBusyId(id);
     setError(null);
-    const prevStatus = orders?.find((o) => o.id === id)?.status;
+    const prevOrder = orders?.find((o) => o.id === id);
+    const prevStatus = prevOrder?.status;
     suppressPollUntil.current = Date.now() + SUPPRESS_POLL_MS;
+
+    // Optimista: la tarjeta se mueve/actualiza ya mismo, antes de esperar la
+    // ida y vuelta al servidor — es la acción más frecuente de la comanda,
+    // así que es la que más se nota si tarda.
+    if (prevOrder) {
+      const optimistic = applyOptimisticPatch(prevOrder, body);
+      setOrders((prev) => {
+        if (!prev) return prev;
+        const stillOnBoard = (BOARD_COLUMNS as OrderStatus[]).includes(optimistic.status);
+        if (!stillOnBoard) return prev.filter((o) => o.id !== id);
+        return prev.map((o) => (o.id === id ? optimistic : o));
+      });
+    }
+
     try {
-      const updated = await apiFetch<
-        OrderDTO & { whatsappNotification?: WhatsAppSendResult }
-      >(`/api/admin/orders/${id}`, {
+      const updated = await apiFetch<OrderDTO>(`/api/admin/orders/${id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });
-      if (updated.whatsappNotification) {
-        whatsappNotice(updated.whatsappNotification);
-      }
       setOrders((prev) => {
         if (!prev) return prev;
         const stillOnBoard = (BOARD_COLUMNS as OrderStatus[]).includes(
@@ -579,7 +590,18 @@ export default function ComandaClient() {
       }
     } catch (err) {
       setError((err as ApiError).message);
-      // Si falló, dejamos que el poll vuelva a mandar cuanto antes.
+      // Se cayó de verdad: deshacemos el cambio optimista (si había sacado el
+      // pedido del tablero, lo volvemos a poner) y dejamos que el poll traiga
+      // el estado real cuanto antes.
+      if (prevOrder) {
+        setOrders((prev) => {
+          if (!prev) return prev;
+          const stillThere = prev.some((o) => o.id === id);
+          return stillThere
+            ? prev.map((o) => (o.id === id ? prevOrder : o))
+            : [...prev, prevOrder];
+        });
+      }
       suppressPollUntil.current = 0;
     } finally {
       setBusyId(null);
