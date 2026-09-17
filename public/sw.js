@@ -40,7 +40,9 @@ self.addEventListener("fetch", (event) => {
 });
 
 // Notificaciones push del seguimiento de pedido (Fase 30) — el payload lo
-// arma src/lib/push.ts como JSON: { title, body, url }.
+// arma src/lib/push.ts como JSON: { title, body, url, icon? }. `icon` es el
+// del LOCAL dueño del pedido (si subió uno) — sin esto, todos los locales
+// mostrarían siempre el mismo ícono genérico en sus notificaciones.
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let payload;
@@ -53,7 +55,7 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(payload.title || "Blend", {
       body: payload.body,
       data: { url: payload.url || "/" },
-      icon: "/api/pwa-icon?size=192",
+      icon: payload.icon || "/api/pwa-icon?size=192",
     })
   );
 });

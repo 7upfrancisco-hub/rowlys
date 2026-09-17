@@ -13,7 +13,13 @@ import {
   type OrderDTO,
 } from "@/types";
 
-export default function PedidoClient({ id }: { id: string }) {
+export default function PedidoClient({
+  id,
+  tenantSlug,
+}: {
+  id: string;
+  tenantSlug: string;
+}) {
   const [order, setOrder] = useState<OrderDTO | null>(null);
   const [prepTimes, setPrepTimes] = useState({ delivery: 10, pickup: 10 });
   const [notFound, setNotFound] = useState(false);
@@ -57,7 +63,7 @@ export default function PedidoClient({ id }: { id: string }) {
     apiFetch<{
       prepTimeDeliveryMinutes?: number;
       prepTimePickupMinutes?: number;
-    }>("/api/settings")
+    }>(`/api/${tenantSlug}/settings`)
       .then((s) => {
         if (cancelled) return;
         setPrepTimes({
@@ -71,7 +77,7 @@ export default function PedidoClient({ id }: { id: string }) {
       cancelled = true;
       clearInterval(intervalRef.current);
     };
-  }, [id]);
+  }, [id, tenantSlug]);
 
   if (notFound) {
     return (

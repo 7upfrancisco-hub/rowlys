@@ -10,13 +10,15 @@ import { storefrontFontClassName } from "@/lib/storefront-font-loaders";
 // siempre, definidos en globals.css; acá solo se decide a qué color apuntan
 // esas variables para ESTE request.
 export default async function StorefrontTheme({
+  tenantId,
   children,
 }: {
+  tenantId: string;
   children: React.ReactNode;
 }) {
   const settings = await prisma.settings
     .findUnique({
-      where: { id: "singleton" },
+      where: { tenantId },
       select: { themeColor: true, themeFont: true, themeOnAccent: true },
     })
     .catch(() => null);

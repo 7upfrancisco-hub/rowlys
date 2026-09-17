@@ -53,7 +53,7 @@ export async function PATCH(
 
   const { expiresAt, ...rest } = parsed.data;
   if (rest.code && rest.code !== existing.code) {
-    const clash = await prisma.coupon.findUnique({ where: { code: rest.code } });
+    const clash = await prisma.coupon.findFirst({ where: { code: rest.code, tenantId } });
     if (clash) {
       return NextResponse.json(
         { error: `Ya existe un cupón con el código "${rest.code}".` },

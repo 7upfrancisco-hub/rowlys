@@ -55,9 +55,7 @@ function channelEnabled(info: StoreInfo | null, type: OrderType): boolean {
   return type === "DELIVERY" ? info.deliveryEnabled : info.pickupEnabled;
 }
 
-const BYPASS_KEY = "rowlys-store-bypass";
-
-export default function MenuClient() {
+export default function MenuClient({ tenantSlug }: { tenantSlug: string }) {
   const router = useRouter();
   const [categories, setCategories] = useState<CategoryDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +71,10 @@ export default function MenuClient() {
   const setOrderType = useCartStore((s) => s.setOrderType);
   const lines = useCartStore((s) => s.lines);
 
+  // Por tenant: dos locales vistos en el mismo navegador no comparten el
+  // "ya vi que está cerrado, dejame ver igual" del uno con el del otro.
+  const bypassKey = `blend-store-bypass-${tenantSlug}`;
+
   // Secciones de categoría montadas, para el scrollspy del nav sticky y para
   // hacer scroll al tocar un tab.
   const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -86,20 +88,20 @@ export default function MenuClient() {
 
   useEffect(() => {
     try {
-      if (sessionStorage.getItem(BYPASS_KEY) === "1") setViewMenuAnyway(true);
+      if (sessionStorage.getItem(bypassKey) === "1") setViewMenuAnyway(true);
     } catch {
       /* storage bloqueado: se muestra el cartel siempre */
     }
-    apiFetch<CategoryDTO[]>("/api/menu")
+    apiFetch<CategoryDTO[]>(`/api/${tenantSlug}/menu`)
       .then((data) => {
         setCategories(data);
         if (data.length > 0) setActiveCategoryId(data[0].id);
       })
       .catch((err: ApiError) => setError(err.message));
-    apiFetch<StoreInfo>("/api/settings")
+    apiFetch<StoreInfo>(`/api/${tenantSlug}/settings`)
       .then((s) => setStoreInfo(s))
       .catch(() => {});
-  }, []);
+  }, [tenantSlug, bypassKey]);
 
   // Scrollspy: a medida que se scrollea, marca en el nav la categoría cuya
   // sección está pasando por la franja de arriba de la pantalla (debajo del
@@ -130,7 +132,7 @@ export default function MenuClient() {
 
   function viewMenu() {
     try {
-      sessionStorage.setItem(BYPASS_KEY, "1");
+      sessionStorage.setItem(bypassKey, "1");
     } catch {
       /* ignore */
     }
@@ -138,7 +140,7 @@ export default function MenuClient() {
   }
   function backToClosed() {
     try {
-      sessionStorage.removeItem(BYPASS_KEY);
+      sessionStorage.removeItem(bypassKey);
     } catch {
       /* ignore */
     }
@@ -326,7 +328,7 @@ export default function MenuClient() {
           orderBlocked={channelPaused}
           orderBlockedReason={orderBlockedReason}
           onClose={() => setCartOpen(false)}
-          onCheckout={() => router.push("/checkout")}
+          onCheckout={() => router.push(`/${tenantSlug}/checkout`)}
         />
       )}
     </div>

@@ -4,11 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { resolveItems, type ItemInput } from "@/lib/orders";
 import { priceCoupon } from "@/lib/coupons";
 import { priceAutomaticDiscounts } from "@/lib/discount-pricing";
+import { resolveTenantBySlug } from "@/lib/public-tenant";
 
 export const dynamic = "force-dynamic";
 
-// Público (sin auth, mismo criterio que `POST /api/orders`): preview del
-// descuento ANTES de pagar, para mostrarlo en el checkout. No cobra nada —
+// Público (sin auth, mismo criterio que `POST /api/<tenant>/orders`): preview
+// del descuento ANTES de pagar, para mostrarlo en el checkout. No cobra nada —
 // `createOrder` vuelve a validar y cotizar el cupón de cero al confirmar
 // (con los descuentos automáticos ya aplicados, mismo orden que acá), así
 // que esta ruta es solo para la experiencia, nunca la fuente de verdad.
@@ -28,7 +29,15 @@ const validateSchema = z.object({
     .min(1),
 });
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  { params }: { params: { tenant: string } }
+) {
+  const tenant = await resolveTenantBySlug(params.tenant);
+  if (!tenant) {
+    return NextResponse.json({ error: "Local no encontrado." }, { status: 404 });
+  }
+
   const parsed = validateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -38,15 +47,7 @@ export async function POST(request: Request) {
   }
   const { code, phone, orderType, paymentMethod, items } = parsed.data;
 
-  // Mismo criterio de resolución de tenant que `createOrder` (el checkout
-  // público todavía no manda tenantId — Fase 26b-3 pendiente): sin esto, las
-  // reglas de descuento activas de OTRO tenant (ya hay un segundo, "Pizzería
-  // Demo") se colaban en la cotización del cupón, dando un preview que no
-  // coincide con lo que `createOrder` termina cobrando.
-  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  const tenantId = settings?.tenantId ?? undefined;
-
-  const resolved = await resolveItems(items as ItemInput[], orderType, tenantId);
+  const resolved = await resolveItems(items as ItemInput[], orderType, tenant.id);
   if (!resolved.ok) {
     return NextResponse.json({ error: resolved.error }, { status: resolved.status });
   }
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
   // regla "gana" entre dos activas sobre el mismo producto podía variar
   // entre el preview y el cobro real.
   const discountRules = await prisma.discount.findMany({
-    where: { active: true, ...(tenantId ? { tenantId } : {}) },
+    where: { active: true, tenantId: tenant.id },
     orderBy: { createdAt: "asc" },
   });
   const automatic = priceAutomaticDiscounts(
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
     discountRules
   );
 
-  const priced = await priceCoupon(code, phone, automatic.itemsTotal);
+  const priced = await priceCoupon(code, phone, automatic.itemsTotal, tenant.id);
   if (!priced.ok) {
     return NextResponse.json({ error: priced.error }, { status: priced.status });
   }

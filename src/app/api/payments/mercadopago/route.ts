@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { createPreference } from "@/lib/payments/mercadopago";
+import { createPreference, resolvePaymentCredentials } from "@/lib/payments/mercadopago";
+import { resolveTenantBySlug } from "@/lib/public-tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
 
   const order = await prisma.order.findUnique({
     where: { id: parsed.data.orderId },
-    include: { payment: true },
+    include: { payment: true, tenant: { select: { id: true, slug: true } } },
   });
   if (!order || !order.payment) {
     return NextResponse.json({ error: "Pedido no encontrado." }, { status: 404 });
@@ -37,9 +38,29 @@ export async function POST(request: Request) {
     );
   }
 
+  // Pedidos viejos sin tenant asignado (previos a la Fase 26b) caen a
+  // "rowlys" — es el único local que existía en ese momento.
+  const tenant = order.tenant ?? (await resolveTenantBySlug("rowlys"));
+  if (!tenant) {
+    return NextResponse.json(
+      { error: "No se pudo resolver el local de este pedido." },
+      { status: 502 }
+    );
+  }
+  const credentials = await resolvePaymentCredentials(tenant.id, tenant.slug);
+  if (!credentials) {
+    return NextResponse.json(
+      { error: "Mercado Pago no esta configurado para este local." },
+      { status: 502 }
+    );
+  }
+
   try {
     const pref = await createPreference({
       orderId: order.id,
+      tenantSlug: tenant.slug,
+      accessToken: credentials.accessToken,
+      notificationUrl: credentials.notificationUrl,
       total: order.total,
       description: `Pedido ${order.id.slice(-6).toUpperCase()} · ${order.customerFirstName} ${order.customerLastName}`,
       payer: {

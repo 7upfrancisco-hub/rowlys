@@ -96,7 +96,7 @@ export default function DashboardClient() {
   useEffect(() => {
     function load() {
       apiFetch<Metrics>("/api/admin/metrics").then(setMetrics).catch(() => {});
-      apiFetch<Settings>("/api/settings").then(setSettings).catch(() => {});
+      apiFetch<Settings>("/api/admin/settings").then(setSettings).catch(() => {});
       apiFetch<{ summary: { revenue: number; avgTicket: number } }>(
         "/api/admin/metrics/history"
       )

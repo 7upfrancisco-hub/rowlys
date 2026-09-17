@@ -44,12 +44,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // El checkout público crea pedidos sin sesión, y el seguimiento público de
-  // un pedido puntual (GET /api/orders/<id>, id no adivinable) también queda
-  // abierto. El listado GET /api/orders (sin id) sigue protegido: expone PII
-  // de todos los clientes.
-  const isPublicOrderCreate =
-    request.method === "POST" && pathname === "/api/orders";
+  // El seguimiento público de un pedido puntual (GET /api/orders/<id>, id no
+  // adivinable) queda abierto. El listado GET /api/orders (sin id) sigue
+  // protegido: expone PII de todos los clientes. La creación pública de
+  // pedidos vive en /api/<tenant>/orders (Fase 26b-3), fuera del matcher de
+  // este middleware — no pasa por acá.
   const isPublicOrderLookup =
     request.method === "GET" && /^\/api\/orders\/[^/]+$/.test(pathname);
   // Activar/desactivar notificaciones push desde /pedido/[id] (Fase 30):
@@ -59,7 +58,7 @@ export async function middleware(request: NextRequest) {
     (request.method === "POST" || request.method === "DELETE") &&
     /^\/api\/orders\/[^/]+\/push-subscribe$/.test(pathname);
 
-  if (isPublicOrderCreate || isPublicOrderLookup || isPublicPushSubscribe) {
+  if (isPublicOrderLookup || isPublicPushSubscribe) {
     return NextResponse.next();
   }
 

@@ -52,7 +52,7 @@ const DIAL_CODES = [
   { code: "+1", label: "🇺🇸 +1" },
 ];
 
-export default function CheckoutClient() {
+export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
   const router = useRouter();
   const orderType = useCartStore((s) => s.orderType);
   const lines = useCartStore((s) => s.lines);
@@ -84,9 +84,9 @@ export default function CheckoutClient() {
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>([]);
 
   useEffect(() => {
-    apiFetch<PublicSettings>("/api/settings").then(setSettings).catch(() => {});
-    apiFetch<DiscountRule[]>("/api/discounts").then(setDiscountRules).catch(() => {});
-  }, []);
+    apiFetch<PublicSettings>(`/api/${tenantSlug}/settings`).then(setSettings).catch(() => {});
+    apiFetch<DiscountRule[]>(`/api/${tenantSlug}/discounts`).then(setDiscountRules).catch(() => {});
+  }, [tenantSlug]);
 
   const itemsSubtotal = cartSubtotal(lines);
   const baseDeliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
@@ -138,7 +138,7 @@ export default function CheckoutClient() {
     setCheckingCoupon(true);
     try {
       const result = await apiFetch<{ code: string; discountAmount: number }>(
-        "/api/coupons/validate",
+        `/api/${tenantSlug}/coupons/validate`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -219,7 +219,7 @@ export default function CheckoutClient() {
 
     setSubmitting(true);
     try {
-      const order = await apiFetch<OrderDTO>("/api/orders", {
+      const order = await apiFetch<OrderDTO>(`/api/${tenantSlug}/orders`, {
         method: "POST",
         body: JSON.stringify({
           orderType,
@@ -256,13 +256,13 @@ export default function CheckoutClient() {
           );
           window.location.href = initPoint;
         } catch {
-          router.push(`/pedido/${order.id}`);
+          router.push(`/${tenantSlug}/pedido/${order.id}`);
         }
         return;
       }
 
       clear();
-      router.push(`/pedido/${order.id}`);
+      router.push(`/${tenantSlug}/pedido/${order.id}`);
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -277,7 +277,7 @@ export default function CheckoutClient() {
         <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
           <p className="text-muted">Tu carrito está vacío.</p>
           <Link
-            href="/menu"
+            href={`/${tenantSlug}/menu`}
             className="rounded-lg bg-accent-solid px-4 py-3 font-semibold text-on-accent hover:bg-accent-solid-hover"
           >
             Ver el menú

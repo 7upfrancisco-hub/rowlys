@@ -79,3 +79,27 @@ export async function verifySuperAdminSessionToken(
     return null;
   }
 }
+
+// "state" del OAuth de Mercado Pago (Conectar con Mercado Pago desde
+// /blend-admin): viaja por una redirección de ida y vuelta a un sitio
+// externo, así que no puede confiar en ninguna cookie — se firma el
+// tenantId acá mismo, vida corta (alcanza y sobra para que alguien
+// complete el login de Mercado Pago), y el callback lo verifica antes de
+// guardar nada.
+export async function createMpOAuthStateToken(tenantId: string): Promise<string> {
+  return new SignJWT({ tenantId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("10m")
+    .sign(getSecretKey());
+}
+
+export async function verifyMpOAuthStateToken(token: string): Promise<{ tenantId: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecretKey());
+    if (typeof payload.tenantId !== "string") return null;
+    return { tenantId: payload.tenantId };
+  } catch {
+    return null;
+  }
+}

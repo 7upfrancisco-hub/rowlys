@@ -51,10 +51,10 @@ export default function NewOrderModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<CategoryDTO[]>("/api/menu")
+    apiFetch<CategoryDTO[]>("/api/admin/menu")
       .then(setMenu)
       .catch((err: ApiError) => setError(err.message));
-    apiFetch<{ deliveryFee?: number }>("/api/settings")
+    apiFetch<{ deliveryFee?: number }>("/api/admin/settings")
       .then((s) => setDeliveryFee(s.deliveryFee ?? 0))
       .catch(() => {});
   }, []);

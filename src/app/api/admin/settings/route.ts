@@ -9,11 +9,18 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const tenantId = requireTenantId(request);
-  const settings = await prisma.settings.findUnique({ where: { tenantId } });
-  if (settings) return NextResponse.json(settings);
+  const [settings, tenant] = await Promise.all([
+    prisma.settings.findUnique({ where: { tenantId } }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } }),
+  ]);
+  // tenantSlug: para armar links a la carta pública (/<slug>/menu,
+  // /<slug>/pedido/<id>) desde /comanda y /admin sin tener que resolverlo de
+  // nuevo en cada pantalla.
+  if (settings) return NextResponse.json({ ...settings, tenantSlug: tenant?.slug ?? null });
 
   return NextResponse.json({
     tenantId,
+    tenantSlug: tenant?.slug ?? null,
     deliveryFee: 0,
     storeName: "Rowlys",
     storePhone: null,

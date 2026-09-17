@@ -77,7 +77,7 @@ export async function POST(request: Request) {
   }
   const { expiresAt, ...rest } = parsed.data;
 
-  const existing = await prisma.coupon.findUnique({ where: { code: rest.code } });
+  const existing = await prisma.coupon.findFirst({ where: { code: rest.code, tenantId } });
   if (existing) {
     return NextResponse.json(
       { error: `Ya existe un cupón con el código "${rest.code}".` },

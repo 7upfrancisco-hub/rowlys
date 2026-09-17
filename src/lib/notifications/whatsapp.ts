@@ -40,7 +40,8 @@ interface OrderForNotify {
 
 export async function notifyOrderConfirmed(
   order: OrderForNotify,
-  storeName: string
+  storeName: string,
+  tenantSlug: string
 ): Promise<WhatsAppSendResult> {
   if (!isWhatsAppEnabled()) {
     return { status: "skipped", reason: "WhatsApp no configurado en este entorno." };
@@ -54,7 +55,7 @@ export async function notifyOrderConfirmed(
     };
   }
 
-  const trackUrl = `${baseUrl()}/pedido/${order.id}`;
+  const trackUrl = `${baseUrl()}/${tenantSlug}/pedido/${order.id}`;
   const templateName = process.env.WHATSAPP_TEMPLATE_NAME ?? "order_confirmed";
   const templateLang = process.env.WHATSAPP_TEMPLATE_LANG ?? "es_AR";
   // {{1}} nombre · {{2}} local · {{3}} link de seguimiento

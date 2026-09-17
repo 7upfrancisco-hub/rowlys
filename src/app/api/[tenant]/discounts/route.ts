@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveTenantBySlug } from "@/lib/public-tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -7,15 +8,17 @@ export const dynamic = "force-dynamic";
 // checkout pueda previsualizar el total antes de confirmar. No expone nada
 // sensible (mismos datos que ya se ven en /admin/descuentos). El pedido real
 // siempre se recalcula server-side en createOrder — esto es solo preview.
-export async function GET() {
-  // El checkout público todavía no manda tenantId (Fase 26b-3 pendiente), así
-  // que se resuelve igual que en `createOrder`: el tenant dueño de la fila
-  // "singleton" de Settings. Sin esto, reglas activas de OTRO tenant (ya hay
-  // un segundo, "Pizzería Demo") se colaban acá sin filtro alguno y el
-  // preview no coincidía con lo que createOrder termina cobrando.
-  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
+export async function GET(
+  request: Request,
+  { params }: { params: { tenant: string } }
+) {
+  const tenant = await resolveTenantBySlug(params.tenant);
+  if (!tenant) {
+    return NextResponse.json({ error: "Local no encontrado." }, { status: 404 });
+  }
+
   const discounts = await prisma.discount.findMany({
-    where: { active: true, ...(settings?.tenantId ? { tenantId: settings.tenantId } : {}) },
+    where: { active: true, tenantId: tenant.id },
     // Mismo orderBy que `createOrder` (src/lib/orders.ts): sin esto, cuál
     // regla "gana" entre dos activas sobre el mismo producto podía variar
     // entre el preview y el cobro real.

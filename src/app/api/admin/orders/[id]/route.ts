@@ -148,8 +148,9 @@ export async function PATCH(
     // el envío falla, el cambio de estado ya quedó guardado igual.
     let whatsappNotification: WhatsAppSendResult | undefined;
     if (status === "CONFIRMED" && existing.status !== "CONFIRMED") {
-      const settings = await prisma.settings.findUnique({
-        where: { tenantId },
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { slug: true, settings: { select: { storeName: true } } },
       });
       whatsappNotification = await notifyOrderConfirmed(
         {
@@ -157,7 +158,8 @@ export async function PATCH(
           customerFirstName: order.customerFirstName,
           customerPhone: order.customerPhone,
         },
-        settings?.storeName ?? "el local"
+        tenant?.settings?.storeName ?? "el local",
+        tenant?.slug ?? "rowlys"
       ).catch((err): WhatsAppSendResult => {
         console.error("WhatsApp: aviso de confirmación falló:", err);
         return { status: "failed", error: String(err?.message ?? err) };
@@ -171,7 +173,7 @@ export async function PATCH(
     // responde, matando una promesa colgada; internamente nunca tira (mismo
     // criterio que WhatsApp).
     if (status === "READY" && existing.status !== "READY") {
-      await notifyOrderReady(order.id, order.orderType);
+      await notifyOrderReady(order.id, order.orderType, tenantId);
     }
 
     return NextResponse.json({ ...order, whatsappNotification });

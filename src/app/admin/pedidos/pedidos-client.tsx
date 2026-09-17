@@ -232,7 +232,7 @@ export default function PedidosClient() {
       storeName?: string;
       storeAddress?: string | null;
       storePhone?: string | null;
-    }>("/api/settings")
+    }>("/api/admin/settings")
       .then((s) => {
         setStore({
           name: s?.storeName || "Blend",

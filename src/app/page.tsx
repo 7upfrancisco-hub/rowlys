@@ -2,12 +2,19 @@ import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import StorefrontTheme from "@/components/StorefrontTheme";
 import InstallPwa from "@/components/InstallPwa";
+import { resolveTenantBySlug } from "@/lib/public-tenant";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+// Home todavía single-tenant a propósito (marca "Rowlys" a mano, sin listar
+// locales): el directorio público de Blend con todos los tenants activos es
+// una fase aparte (Fase 26d en PROJECT_MEMORY.md), no bloqueante para que
+// cada local funcione bien en su propio /<slug>/menu.
+export default async function HomePage() {
+  const tenant = await resolveTenantBySlug("rowlys");
+
   return (
-    <StorefrontTheme>
+    <StorefrontTheme tenantId={tenant?.id ?? ""}>
       <div className="storefront">
         <ThemeToggle />
         <InstallPwa />

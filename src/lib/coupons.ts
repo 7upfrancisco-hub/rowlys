@@ -21,7 +21,8 @@ export type CouponPricingResult =
 export async function priceCoupon(
   rawCode: string,
   rawPhone: string,
-  itemsTotal: number
+  itemsTotal: number,
+  tenantId: string
 ): Promise<CouponPricingResult> {
   const code = rawCode.trim().toUpperCase();
   if (!code) {
@@ -37,7 +38,7 @@ export async function priceCoupon(
     };
   }
 
-  const coupon = await prisma.coupon.findUnique({ where: { code } });
+  const coupon = await prisma.coupon.findFirst({ where: { code, tenantId } });
   if (!coupon) {
     return { ok: false, status: 404, error: "Ese cupón no existe." };
   }

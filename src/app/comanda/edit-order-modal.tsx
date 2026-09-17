@@ -52,7 +52,7 @@ export default function EditOrderModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<CategoryDTO[]>("/api/menu")
+    apiFetch<CategoryDTO[]>("/api/admin/menu")
       .then(setMenu)
       .catch((err: ApiError) => setError(err.message));
   }, []);

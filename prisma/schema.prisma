@@ -166,10 +166,9 @@ enum PaymentStatus {
 model Customer {
   id        String   @id @default(cuid())
   // Teléfono normalizado, formato 549XXXXXXXXXX (sin "+"). Clave de dedup
-  // HOY todavía global (@unique); en la Fase 26b pasa a ser @@unique por
-  // tenant, para que dos locales distintos puedan tener cada uno "su"
-  // cliente con el mismo teléfono sin pisarse.
-  phone     String   @unique
+  // por tenant (Fase 26b-3): dos locales distintos pueden tener cada uno
+  // "su" cliente con el mismo teléfono sin pisarse.
+  phone     String
   firstName String
   lastName  String   @default("")
   email     String?
@@ -180,6 +179,7 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, phone])
   @@index([firstName])
 }
 
@@ -269,7 +269,9 @@ enum CouponDiscountType {
 // CRUD del panel.
 model Coupon {
   id            String              @id @default(cuid())
-  code          String              @unique
+  // Código del cupón, único por tenant (Fase 26b-3): dos locales distintos
+  // pueden tener cada uno un cupón "BIENVENIDA" sin pisarse.
+  code          String
   discountType  CouponDiscountType
   // Porcentaje (1-100) si discountType=PERCENT, o monto fijo en $ si FIXED.
   discountValue Float
@@ -281,6 +283,8 @@ model Coupon {
   tenantId      String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
+
+  @@unique([tenantId, code])
 }
 
 model CouponRedemption {
@@ -452,6 +456,17 @@ model Settings {
   instagramHandle         String?
   tiktokHandle            String?
   bankAlias               String?
+  // Mercado Pago propio del local (OAuth "Conectar con Mercado Pago" desde
+  // /blend-admin): access/refresh token de SU cuenta, encriptados en reposo
+  // (ver src/lib/crypto.ts) — nunca en texto plano, a diferencia de
+  // bankAlias, porque un access token puede mover dinero en su nombre. Null
+  // = el local todavía no conectó nada; el checkout cae al MP_ACCESS_TOKEN
+  // global como respaldo transicional (ver getValidAccessToken).
+  mpAccessToken           String?
+  mpRefreshToken          String?
+  mpUserId                String?
+  mpTokenExpiresAt        DateTime?
+  mpConnectedAt           DateTime?
   // Estado del local. storeOpen=false => el cliente puede VER el menu pero no
   // hacer pedidos (banner con closedTitle/closedMessage). deliveryEnabled /
   // pickupEnabled cierran un canal puntual sin cerrar todo el local. Todo se

@@ -1,20 +1,29 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isMpAvailable } from "@/lib/payments/mercadopago";
+import { isMpAvailableForTenant } from "@/lib/payments/mercadopago";
+import { resolveTenantBySlug } from "@/lib/public-tenant";
 
 export const dynamic = "force-dynamic";
 
-// Endpoint publico (sin auth): solo expone el subconjunto de Settings que el
+// Publico (sin auth): solo expone el subconjunto de Settings que el
 // cliente final necesita para el checkout (costo de envio, alias bancario,
 // datos de contacto del local). Whitelist explicita, nunca spread de la fila
 // completa, para que un campo nuevo agregado a futuro no se filtre solo.
-export async function GET() {
+export async function GET(
+  request: Request,
+  { params }: { params: { tenant: string } }
+) {
+  const tenant = await resolveTenantBySlug(params.tenant);
+  if (!tenant) {
+    return NextResponse.json({ error: "Local no encontrado." }, { status: 404 });
+  }
+
   const settings = await prisma.settings.findUnique({
-    where: { id: "singleton" },
+    where: { tenantId: tenant.id },
   });
 
   const safe = settings ?? {
-    storeName: "Rowlys",
+    storeName: tenant.name,
     storePhone: null,
     storeAddress: null,
     instagramHandle: null,
@@ -57,8 +66,8 @@ export async function GET() {
     footerImageLeftUrl: safe.footerImageLeftUrl,
     footerImageRightUrl: safe.footerImageRightUrl,
     footerColor: safe.footerColor,
-    // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o
-    // credenciales reales en este entorno.
-    mpEnabled: isMpAvailable(),
+    // El checkout solo ofrece MP si hay mock, el local conectó su propia
+    // cuenta, o hay token global de respaldo.
+    mpEnabled: await isMpAvailableForTenant(tenant.id),
   });
 }

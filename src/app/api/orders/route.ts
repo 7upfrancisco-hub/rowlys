@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { createOrder, createOrderSchema } from "@/lib/orders";
 import { sweepPhantomOrders } from "@/lib/phantom-orders";
 import { requireTenantId } from "@/lib/tenant";
 
@@ -78,20 +77,4 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json(orders);
-}
-
-export async function POST(request: Request) {
-  const parsed = createOrderSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Datos del pedido inválidos." },
-      { status: 400 }
-    );
-  }
-
-  const result = await createOrder(parsed.data, { enforceStoreStatus: true });
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
-  }
-  return NextResponse.json(result.order, { status: 201 });
 }

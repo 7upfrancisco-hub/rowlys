@@ -30,7 +30,10 @@ export async function GET() {
   const [tenants, orders] = await Promise.all([
     prisma.tenant.findMany({
       orderBy: { createdAt: "asc" },
-      include: { _count: { select: { users: true } } },
+      include: {
+        _count: { select: { users: true } },
+        settings: { select: { mpUserId: true } },
+      },
     }),
     prisma.order.findMany({
       where: { createdAt: { gte: monthStart }, tenantId: { not: null } },
@@ -56,6 +59,7 @@ export async function GET() {
     userCount: t._count.users,
     ordersThisMonth: byTenant.get(t.id)?.orders ?? 0,
     revenueThisMonth: byTenant.get(t.id)?.revenue ?? 0,
+    mpUserId: t.settings?.mpUserId ?? null,
   }));
 
   return NextResponse.json(rows);

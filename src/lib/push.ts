@@ -41,7 +41,8 @@ function readyCopy(orderType: OrderType): { title: string; body: string } {
 // falla no debería tumbar el PATCH de /comanda.
 export async function notifyOrderReady(
   orderId: string,
-  orderType: OrderType
+  orderType: OrderType,
+  tenantId: string
 ): Promise<void> {
   if (!isPushConfigured()) return;
   const message = readyCopy(orderType);
@@ -49,8 +50,21 @@ export async function notifyOrderReady(
   const subs = await prisma.pushSubscription.findMany({ where: { orderId } });
   if (subs.length === 0) return;
 
+  // Slug (para el link de "ver pedido") + ícono propio del local (si subió
+  // uno) — sin esto, las notificaciones de CUALQUIER local mostrarían
+  // siempre el mismo link/ícono genérico en vez del suyo.
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { slug: true, settings: { select: { iconUrl: true } } },
+  });
+  const tenantSlug = tenant?.slug ?? "rowlys";
+
   ensureConfigured();
-  const payload = JSON.stringify({ ...message, url: `/pedido/${orderId}` });
+  const payload = JSON.stringify({
+    ...message,
+    url: `/${tenantSlug}/pedido/${orderId}`,
+    icon: tenant?.settings?.iconUrl ?? undefined,
+  });
 
   await Promise.all(
     subs.map(async (sub) => {

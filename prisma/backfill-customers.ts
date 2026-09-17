@@ -64,24 +64,35 @@ async function main() {
 
     let customerId = seen.get(key);
     if (!customerId) {
-      const customer = await prisma.customer.upsert({
-        where: { phone: key },
-        create: {
-          phone: key,
-          firstName: o.customerFirstName,
-          lastName: o.customerLastName,
-          email: o.customerEmail ?? undefined,
-          // La fecha del primer pedido (recorremos asc, este es el más viejo).
-          createdAt: o.createdAt,
-        },
-        update: {
-          // Recorremos de viejo a nuevo, así que el último pedido gana.
-          firstName: o.customerFirstName,
-          lastName: o.customerLastName,
-          ...(o.customerEmail ? { email: o.customerEmail } : {}),
-        },
+      // `tenantId` nulo no se puede usar en el atajo de clave compuesta de
+      // upsert (Prisma lo exige no-nulo ahí) — se resuelve a mano con
+      // findFirst + create/update.
+      const existing = await prisma.customer.findFirst({
+        where: { tenantId: null, phone: key },
         select: { id: true },
       });
+      const customer = existing
+        ? await prisma.customer.update({
+            where: { id: existing.id },
+            data: {
+              // Recorremos de viejo a nuevo, así que el último pedido gana.
+              firstName: o.customerFirstName,
+              lastName: o.customerLastName,
+              ...(o.customerEmail ? { email: o.customerEmail } : {}),
+            },
+            select: { id: true },
+          })
+        : await prisma.customer.create({
+            data: {
+              phone: key,
+              firstName: o.customerFirstName,
+              lastName: o.customerLastName,
+              email: o.customerEmail ?? undefined,
+              // La fecha del primer pedido (recorremos asc, este es el más viejo).
+              createdAt: o.createdAt,
+            },
+            select: { id: true },
+          });
       customerId = customer.id;
       seen.set(key, customerId);
     }

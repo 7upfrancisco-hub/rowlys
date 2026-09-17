@@ -89,13 +89,11 @@ type ResolvedItems =
 export async function resolveItems(
   items: ItemInput[],
   orderType: "PICKUP" | "DELIVERY",
-  // undefined = el checkout público todavía sin resolver tenant (Fase 26b-3
-  // pendiente); siempre viene presente desde la carga/edición admin.
-  tenantId?: string
+  tenantId: string
 ): Promise<ResolvedItems> {
   const productIds = [...new Set(items.map((i) => i.productId))];
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, ...(tenantId ? { tenantId } : {}) },
+    where: { id: { in: productIds }, tenantId },
     include: {
       modifierGroups: {
         include: { group: { include: { options: true } } },
@@ -345,29 +343,18 @@ interface CreateOrderOptions {
   enforceStoreStatus: boolean;
   // Un pedido cargado por el staff ya está aceptado.
   initialStatus?: "PENDING" | "CONFIRMED";
-  // Tenant dueño del pedido (Fase 26b). Siempre viene desde la carga manual
-  // admin (sesión ya resuelta). El checkout público todavía no lo manda
-  // (Fase 26b-3 pendiente: routing por slug) — se resuelve unas líneas más
-  // abajo a partir del tenant dueño de la fila "singleton" de Settings, para
-  // que el pedido no quede huérfano (BUG real detectado 2026-09-15: sin
-  // esto, todo pedido creado desde /checkout quedaba con tenantId null y
-  // era invisible para /comanda y /admin/pedidos, que sí filtran por tenant
-  // desde la Fase 26b).
-  tenantId?: string;
+  // Tenant dueño del pedido. Lo resuelve siempre el caller: la carga manual
+  // admin desde la sesión, el checkout público desde el slug de la URL
+  // (Fase 26b-3) — nunca se adivina acá adentro.
+  tenantId: string;
 }
 
 export async function createOrder(
   body: CreateOrderInput,
   opts: CreateOrderOptions
 ): Promise<CreateOrderResult> {
-  const settings = opts.tenantId
-    ? await prisma.settings.findUnique({ where: { tenantId: opts.tenantId } })
-    : await prisma.settings.findUnique({ where: { id: "singleton" } });
-
-  // El checkout público no manda tenantId (todavía no hay routing por slug) —
-  // mientras eso no exista, el pedido pasa a pertenecer al mismo tenant que
-  // la fila "singleton" de Settings (hoy, Rowlys), en vez de quedar sin dueño.
-  const tenantId = opts.tenantId ?? settings?.tenantId ?? undefined;
+  const tenantId = opts.tenantId;
+  const settings = await prisma.settings.findUnique({ where: { tenantId } });
 
   if (opts.enforceStoreStatus && settings) {
     if (!settings.storeOpen) {
@@ -406,12 +393,10 @@ export async function createOrder(
   // PAYMENT_METHOD) activas sobre el mismo producto/medio de pago, gana
   // siempre la más vieja — antes no había orden y dependía de cómo Postgres
   // devolviera las filas, pudiendo variar entre pedidos idénticos.
-  const discountRules = tenantId
-    ? await prisma.discount.findMany({
-        where: { tenantId, active: true },
-        orderBy: { createdAt: "asc" },
-      })
-    : [];
+  const discountRules = await prisma.discount.findMany({
+    where: { tenantId, active: true },
+    orderBy: { createdAt: "asc" },
+  });
   const automatic = priceAutomaticDiscounts(
     resolved.pricingLines,
     body.orderType,
@@ -426,7 +411,12 @@ export async function createOrder(
   // subtotal YA con los descuentos automáticos aplicados.
   let couponPricing: Awaited<ReturnType<typeof priceCoupon>> | null = null;
   if (body.couponCode) {
-    couponPricing = await priceCoupon(body.couponCode, body.customerPhone, automatic.itemsTotal);
+    couponPricing = await priceCoupon(
+      body.couponCode,
+      body.customerPhone,
+      automatic.itemsTotal,
+      tenantId
+    );
     if (!couponPricing.ok) return couponPricing;
   }
   const couponDiscountAmount = couponPricing?.ok ? couponPricing.discountAmount : 0;
@@ -442,13 +432,13 @@ export async function createOrder(
   let customerId: string | undefined;
   if (phoneKey) {
     const customer = await prisma.customer.upsert({
-      where: { phone: phoneKey },
+      where: { tenantId_phone: { tenantId, phone: phoneKey } },
       create: {
         phone: phoneKey,
         firstName: body.customerFirstName,
         lastName: body.customerLastName,
         email: body.customerEmail,
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
       },
       update: {
         firstName: body.customerFirstName,
@@ -475,7 +465,7 @@ export async function createOrder(
         total,
         status: opts.initialStatus ?? "PENDING",
         notes: body.notes,
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         items: { create: resolved.create },
         payment: {
           create: {

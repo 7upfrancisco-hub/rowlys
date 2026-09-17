@@ -187,6 +187,7 @@ function Stat({
 export default function ComandaClient() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [storeName, setStoreName] = useState("Rowlys");
+  const [tenantSlug, setTenantSlug] = useState("rowlys");
   const [storeStatus, setStoreStatus] = useState<{
     storeOpen: boolean;
     deliveryEnabled: boolean;
@@ -326,11 +327,13 @@ export default function ComandaClient() {
     });
   }
 
-  // Nombre + estado del local (endpoint público). El nombre alimenta el
-  // mensaje de WhatsApp; el estado, los toggles de canal del header.
+  // Nombre + estado del local. El nombre alimenta el mensaje de WhatsApp
+  // (junto con tenantSlug, para armar el link de seguimiento); el estado,
+  // los toggles de canal del header.
   useEffect(() => {
     apiFetch<{
       storeName?: string;
+      tenantSlug?: string | null;
       storeAddress?: string | null;
       storePhone?: string | null;
       storeOpen: boolean;
@@ -338,9 +341,10 @@ export default function ComandaClient() {
       pickupEnabled: boolean;
       prepTimeDeliveryMinutes?: number;
       prepTimePickupMinutes?: number;
-    }>("/api/settings")
+    }>("/api/admin/settings")
       .then((s) => {
         if (s?.storeName) setStoreName(s.storeName);
+        if (s?.tenantSlug) setTenantSlug(s.tenantSlug);
         setStoreContact({
           address: s.storeAddress ?? null,
           phone: s.storePhone ?? null,
@@ -943,6 +947,7 @@ export default function ComandaClient() {
                           key={order.id}
                           order={order}
                           storeName={storeName}
+                          tenantSlug={tenantSlug}
                           drivers={drivers}
                           now={now}
                           busy={busyId === order.id}
@@ -1151,6 +1156,7 @@ export default function ComandaClient() {
 function OrderCard({
   order,
   storeName,
+  tenantSlug,
   drivers,
   now,
   busy,
@@ -1162,6 +1168,7 @@ function OrderCard({
 }: {
   order: OrderDTO;
   storeName: string;
+  tenantSlug: string;
   drivers: DriverDTO[];
   now: number;
   busy: boolean;
@@ -1175,7 +1182,7 @@ function OrderCard({
   const [menuOpen, setMenuOpen] = useState(false);
 
   function openWhatsApp() {
-    const trackUrl = `${window.location.origin}/pedido/${order.id}`;
+    const trackUrl = `${window.location.origin}/${tenantSlug}/pedido/${order.id}`;
     const link = whatsappLink(
       order.customerPhone,
       whatsappMessage(order, storeName, trackUrl)

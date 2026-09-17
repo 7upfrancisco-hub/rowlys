@@ -15,6 +15,7 @@ interface TenantRow {
   userCount: number;
   ordersThisMonth: number;
   revenueThisMonth: number;
+  mpUserId: string | null;
 }
 
 interface PlatformMetrics {
@@ -47,6 +48,8 @@ export default function BlendAdminClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enteringId, setEnteringId] = useState<string | null>(null);
+  const [mpMessage, setMpMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [disconnectingMpId, setDisconnectingMpId] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -77,6 +80,28 @@ export default function BlendAdminClient() {
   }
 
   useEffect(load, []);
+
+  // Mensaje de éxito/error al volver de /api/mercadopago/oauth/callback
+  // (redirige acá con ?mpConnected=<tenantId> o ?mpError=<motivo>).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("mpConnected");
+    const mpError = params.get("mpError");
+    if (connected) {
+      setMpMessage({ ok: true, text: "Mercado Pago conectado correctamente." });
+    } else if (mpError) {
+      const reasons: Record<string, string> = {
+        cancelado: "Se canceló la autorización en Mercado Pago.",
+        faltan_parametros: "Mercado Pago no mandó los parámetros esperados.",
+        state_invalido: "El enlace de autorización venció o no es válido — probá de nuevo.",
+        intercambio_fallo: "Mercado Pago rechazó la conexión.",
+      };
+      setMpMessage({ ok: false, text: reasons[mpError] ?? "No se pudo conectar Mercado Pago." });
+    }
+    if (connected || mpError) {
+      window.history.replaceState({}, "", "/blend-admin");
+    }
+  }, []);
 
   const kpis = useMemo(() => {
     const active = tenants.filter((t) => t.active).length;
@@ -128,6 +153,21 @@ export default function BlendAdminClient() {
         prev.map((x) => (x.id === t.id ? { ...x, active: t.active } : x))
       );
       setError((err as ApiError).message);
+    }
+  }
+
+  async function disconnectMp(t: TenantRow) {
+    if (!confirm(`¿Desconectar la cuenta de Mercado Pago de "${t.name}"?`)) return;
+    setDisconnectingMpId(t.id);
+    try {
+      await apiFetch(`/api/blend-admin/tenants/${t.id}/mercadopago`, { method: "DELETE" });
+      setTenants((prev) =>
+        prev.map((x) => (x.id === t.id ? { ...x, mpUserId: null } : x))
+      );
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setDisconnectingMpId(null);
     }
   }
 
@@ -263,6 +303,22 @@ export default function BlendAdminClient() {
           </form>
         )}
 
+        {mpMessage && (
+          <div
+            className={
+              "mb-4 flex items-center justify-between rounded-xl border p-3 text-sm " +
+              (mpMessage.ok
+                ? "border-green-200 bg-green-50 text-green-800"
+                : "border-red-200 bg-red-50 text-red-700")
+            }
+          >
+            <span>{mpMessage.text}</span>
+            <button onClick={() => setMpMessage(null)} className="font-medium underline">
+              Cerrar
+            </button>
+          </div>
+        )}
+
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
         {loading ? (
@@ -277,6 +333,7 @@ export default function BlendAdminClient() {
                   <th className="px-4 py-3 font-medium">Pedidos (mes)</th>
                   <th className="px-4 py-3 font-medium">Facturado (mes)</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
+                  <th className="px-4 py-3 font-medium">Mercado Pago</th>
                   <th className="px-4 py-3 font-medium"></th>
                 </tr>
               </thead>
@@ -309,6 +366,29 @@ export default function BlendAdminClient() {
                         {t.active ? "Activo" : "Inactivo"}
                       </button>
                     </td>
+                    <td className="px-4 py-3">
+                      {t.mpUserId ? (
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                            ✓ Conectado
+                          </span>
+                          <button
+                            onClick={() => disconnectMp(t)}
+                            disabled={disconnectingMpId === t.id}
+                            className="text-xs font-medium text-neutral-500 hover:underline disabled:opacity-50"
+                          >
+                            {disconnectingMpId === t.id ? "..." : "Desconectar"}
+                          </button>
+                        </div>
+                      ) : (
+                        <a
+                          href={`/api/blend-admin/tenants/${t.id}/mercadopago/connect`}
+                          className="text-xs font-semibold text-navy-700 hover:underline"
+                        >
+                          Conectar
+                        </a>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => enterTenant(t)}
@@ -322,7 +402,7 @@ export default function BlendAdminClient() {
                 ))}
                 {tenants.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
+                    <td colSpan={7} className="px-4 py-6 text-center text-neutral-400">
                       Todavía no hay locales cargados.
                     </td>
                   </tr>

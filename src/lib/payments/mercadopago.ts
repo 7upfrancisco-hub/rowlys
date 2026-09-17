@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { baseUrl } from "@/lib/base-url";
 import { PHANTOM_ORDER_HOURS } from "@/lib/phantom-orders";
+import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 import type { PaymentStatus } from "@/types";
 
 // Capa del proveedor Mercado Pago (Checkout Pro: billetera + tarjetas +
@@ -14,6 +16,11 @@ import type { PaymentStatus } from "@/types";
 // en produccion sin `MP_MOCK` seteado, aunque falte el token, NO se entra en
 // mock (si no, un cliente podria marcarse el pedido como pagado desde la pagina
 // simuladora). Sin token real, `createPreference` falla con 502 y listo.
+//
+// Cada local puede conectar SU PROPIA cuenta de Mercado Pago (OAuth,
+// "Conectar con Mercado Pago" desde /blend-admin) — ver getOwnAccessToken
+// más abajo. Mientras no la conecte, todo sigue cobrando con el
+// MP_ACCESS_TOKEN global de siempre (respaldo transicional).
 
 const MP_API = "https://api.mercadopago.com";
 
@@ -21,13 +28,168 @@ export function isMpMock(): boolean {
   return process.env.MP_MOCK === "true";
 }
 
-// Si el checkout debe ofrecer Mercado Pago: hay mock activo o hay token real.
-export function isMpAvailable(): boolean {
-  return isMpMock() || !!process.env.MP_ACCESS_TOKEN;
+// Si el checkout de ESTE tenant debe ofrecer Mercado Pago: hay mock activo,
+// o el local conectó su propia cuenta, o hay token global de respaldo.
+export async function isMpAvailableForTenant(tenantId: string): Promise<boolean> {
+  if (isMpMock()) return true;
+  const own = await getOwnAccessToken(tenantId);
+  return !!own || !!process.env.MP_ACCESS_TOKEN;
+}
+
+// --- OAuth: "Conectar con Mercado Pago" (Fase MP-marketplace) --------------
+
+export function isMpOAuthConfigured(): boolean {
+  return !!process.env.MP_CLIENT_ID && !!process.env.MP_CLIENT_SECRET;
+}
+
+function oauthRedirectUri(): string {
+  return `${baseUrl()}/api/mercadopago/oauth/callback`;
+}
+
+// Arma la URL a la que se redirige el navegador para que el dueño del local
+// autorice a Blend a operar en su cuenta. `state` es el JWT firmado de
+// createMpOAuthStateToken — viaja de ida y vuelta por Mercado Pago, así que
+// nunca se confía en él sin verificar la firma en el callback.
+export function buildAuthorizationUrl(state: string): string {
+  const params = new URLSearchParams({
+    client_id: process.env.MP_CLIENT_ID ?? "",
+    response_type: "code",
+    platform_id: "mp",
+    state,
+    redirect_uri: oauthRedirectUri(),
+  });
+  return `https://auth.mercadopago.com/authorization?${params.toString()}`;
+}
+
+interface OAuthTokenResult {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  expiresInSeconds: number;
+}
+
+function parseOAuthTokenResponse(data: {
+  access_token: string;
+  refresh_token: string;
+  user_id: number | string;
+  expires_in: number;
+}): OAuthTokenResult {
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    userId: String(data.user_id),
+    expiresInSeconds: data.expires_in,
+  };
+}
+
+// Intercambia el `code` que Mercado Pago mandó al callback por los tokens
+// de la cuenta que acaba de autorizar.
+export async function exchangeCodeForToken(code: string): Promise<OAuthTokenResult> {
+  const res = await fetch(`${MP_API}/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.MP_CLIENT_ID,
+      client_secret: process.env.MP_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: oauthRedirectUri(),
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Mercado Pago rechazó el intercambio del code (${res.status}). ${detail}`.trim());
+  }
+  return parseOAuthTokenResponse(await res.json());
+}
+
+// Pide un access token nuevo cuando el guardado está por vencer. Mercado
+// Pago rota el refresh token en cada uso — SIEMPRE hay que guardar el que
+// devuelve esta llamada, no reusar el viejo.
+async function refreshAccessToken(refreshToken: string): Promise<OAuthTokenResult> {
+  const res = await fetch(`${MP_API}/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.MP_CLIENT_ID,
+      client_secret: process.env.MP_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Mercado Pago rechazó el refresh del token (${res.status}). ${detail}`.trim());
+  }
+  return parseOAuthTokenResponse(await res.json());
+}
+
+// Refresca con margen de un día — evita quedarse sin token válido a mitad
+// de una compra por vencer justo en el momento menos oportuno.
+const REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000;
+
+// Access token de la cuenta de Mercado Pago que ESTE local conectó (o null
+// si todavía no conectó ninguna). Refresca solo, guarda el resultado
+// reencriptado si tuvo que hacerlo.
+export async function getOwnAccessToken(tenantId: string): Promise<string | null> {
+  const settings = await prisma.settings.findUnique({
+    where: { tenantId },
+    select: { mpAccessToken: true, mpRefreshToken: true, mpTokenExpiresAt: true },
+  });
+  if (!settings?.mpAccessToken || !settings.mpRefreshToken) return null;
+
+  const expiresAt = settings.mpTokenExpiresAt?.getTime() ?? 0;
+  if (expiresAt - Date.now() > REFRESH_MARGIN_MS) {
+    return decrypt(settings.mpAccessToken);
+  }
+
+  const refreshed = await refreshAccessToken(decrypt(settings.mpRefreshToken));
+  await prisma.settings.update({
+    where: { tenantId },
+    data: {
+      mpAccessToken: encrypt(refreshed.accessToken),
+      mpRefreshToken: encrypt(refreshed.refreshToken),
+      mpTokenExpiresAt: new Date(Date.now() + refreshed.expiresInSeconds * 1000),
+    },
+  });
+  return refreshed.accessToken;
+}
+
+// Resuelve con qué access token y qué notification_url cobrarle a un
+// pedido de este tenant: el propio si lo conectó, o el global de respaldo.
+// En mock, los valores no se usan de verdad (createPreference corta antes),
+// así que devuelve cualquier cosa no-vacía para no obligar al caller a
+// hacer su propio if de mock.
+export async function resolvePaymentCredentials(
+  tenantId: string,
+  tenantSlug: string
+): Promise<{ accessToken: string; notificationUrl: string } | null> {
+  if (isMpMock()) {
+    return { accessToken: "mock", notificationUrl: `${baseUrl()}/api/webhooks/mercadopago` };
+  }
+  const own = await getOwnAccessToken(tenantId);
+  if (own) {
+    return {
+      accessToken: own,
+      // Con slug adentro: así el webhook sabe con qué token propio pedirle
+      // el detalle del pago a Mercado Pago sin tener que adivinarlo antes.
+      notificationUrl: `${baseUrl()}/api/webhooks/mercadopago/${tenantSlug}`,
+    };
+  }
+  if (process.env.MP_ACCESS_TOKEN) {
+    return {
+      accessToken: process.env.MP_ACCESS_TOKEN,
+      notificationUrl: `${baseUrl()}/api/webhooks/mercadopago`,
+    };
+  }
+  return null;
 }
 
 export interface PreferenceInput {
   orderId: string;
+  tenantSlug: string;
+  accessToken: string;
+  notificationUrl: string;
   total: number;
   description: string;
   payer?: { name?: string; surname?: string; email?: string };
@@ -48,7 +210,7 @@ function expirationDateTo(): string {
 export async function createPreference(
   input: PreferenceInput
 ): Promise<PreferenceResult> {
-  const trackUrl = `${baseUrl()}/pedido/${input.orderId}`;
+  const trackUrl = `${baseUrl()}/${input.tenantSlug}/pedido/${input.orderId}`;
 
   if (isMpMock()) {
     return {
@@ -57,14 +219,10 @@ export async function createPreference(
     };
   }
 
-  if (!process.env.MP_ACCESS_TOKEN) {
-    throw new Error("Mercado Pago no esta configurado en este entorno.");
-  }
-
   const res = await fetch(`${MP_API}/checkout/preferences`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${input.accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -78,7 +236,7 @@ export async function createPreference(
         },
       ],
       external_reference: input.orderId,
-      notification_url: `${baseUrl()}/api/webhooks/mercadopago`,
+      notification_url: input.notificationUrl,
       back_urls: { success: trackUrl, failure: trackUrl, pending: trackUrl },
       auto_return: "approved",
       // Pasada esta ventana el cliente ya no puede pagar; el pedido sin pagar
@@ -139,8 +297,10 @@ export interface MpPaymentInfo {
 }
 
 // Resuelve la notificacion del webhook a datos de pago. En mock, deriva todo del
-// convenio de `dataId`. En real, consulta GET /v1/payments/{id}.
-export async function fetchPaymentInfo(dataId: string): Promise<MpPaymentInfo> {
+// convenio de `dataId`. En real, consulta GET /v1/payments/{id} con el access
+// token del tenant dueño del pedido (propio o el global de respaldo — lo
+// resuelve el caller, ver src/lib/payments/mercadopago-webhook.ts).
+export async function fetchPaymentInfo(dataId: string, accessToken: string): Promise<MpPaymentInfo> {
   if (isMpMock() && dataId.startsWith("MOCK-")) {
     // MOCK-<orderId>-<approved|rejected>
     const rest = dataId.slice("MOCK-".length);
@@ -156,7 +316,7 @@ export async function fetchPaymentInfo(dataId: string): Promise<MpPaymentInfo> {
   }
 
   const res = await fetch(`${MP_API}/v1/payments/${dataId}`, {
-    headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` },
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");

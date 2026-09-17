@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveTenantBySlug } from "@/lib/public-tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(
+  request: Request,
+  { params }: { params: { tenant: string } }
+) {
+  const tenant = await resolveTenantBySlug(params.tenant);
+  if (!tenant) {
+    return NextResponse.json({ error: "Local no encontrado." }, { status: 404 });
+  }
+
   const categories = await prisma.category.findMany({
+    where: { tenantId: tenant.id },
     orderBy: { order: "asc" },
     include: {
       products: {
