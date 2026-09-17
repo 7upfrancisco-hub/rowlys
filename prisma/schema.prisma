@@ -449,6 +449,8 @@ model Settings {
   storeName               String   @default("Rowlys")
   storePhone              String?
   storeAddress            String?
+  instagramHandle         String?
+  tiktokHandle            String?
   bankAlias               String?
   // Estado del local. storeOpen=false => el cliente puede VER el menu pero no
   // hacer pedidos (banner con closedTitle/closedMessage). deliveryEnabled /
@@ -482,6 +484,15 @@ model Settings {
   // suba el suyo — así es instalable desde el día 1 sin depender de que el
   // admin cargue un logo primero.
   iconUrl                 String?
+  // Personajes/ilustraciones de marca (PNG con transparencia) que se ven
+  // apoyados a los costados del pie de página de /menu, sobre el color de
+  // marca. Opcionales e independientes entre sí.
+  footerImageLeftUrl      String?
+  footerImageRightUrl     String?
+  // Color del pie de página de /menu. Null = usa themeColor (el mismo de
+  // botones y acentos); permite un segundo color de marca solo para esa
+  // franja, para locales con más de un color característico.
+  footerColor             String?
   themeColor              String   @default("#c92a2a")
   themeFont               String   @default("inter")
   // "Color secundario" en la jerga del local: blanco o negro, el texto/

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { downscaleImage, uploadImage } from "@/lib/image";
 import IconCropper from "@/components/IconCropper";
+import ImageCropModal from "@/components/ImageCropModal";
 import {
   DEFAULT_THEME_COLOR,
   ON_ACCENT_CHOICES,
@@ -28,6 +29,9 @@ interface ThemeSettings {
   storeName: string;
   coverImageUrl: string | null;
   iconUrl: string | null;
+  footerImageLeftUrl: string | null;
+  footerImageRightUrl: string | null;
+  footerColor: string | null;
   themeColor: string;
   themeFont: string;
   themeOnAccent: string;
@@ -37,6 +41,13 @@ export default function PersonalizacionClient() {
   const [storeName, setStoreName] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [iconUrl, setIconUrl] = useState("");
+  const [footerImageLeftUrl, setFooterImageLeftUrl] = useState("");
+  const [footerImageRightUrl, setFooterImageRightUrl] = useState("");
+  const [footerImageToCrop, setFooterImageToCrop] = useState<{
+    file: File;
+    side: "left" | "right";
+  } | null>(null);
+  const [footerColor, setFooterColor] = useState("");
   const [themeColor, setThemeColor] = useState(DEFAULT_THEME_COLOR);
   const [themeFont, setThemeFont] = useState(DEFAULT_STOREFRONT_FONT);
   const [themeOnAccent, setThemeOnAccent] = useState<OnAccentChoice>("white");
@@ -54,6 +65,9 @@ export default function PersonalizacionClient() {
         setStoreName(settings.storeName);
         setCoverImageUrl(settings.coverImageUrl ?? "");
         setIconUrl(settings.iconUrl ?? "");
+        setFooterImageLeftUrl(settings.footerImageLeftUrl ?? "");
+        setFooterImageRightUrl(settings.footerImageRightUrl ?? "");
+        setFooterColor(settings.footerColor ?? "");
         setThemeColor(settings.themeColor || DEFAULT_THEME_COLOR);
         setThemeFont(settings.themeFont || DEFAULT_STOREFRONT_FONT);
         setThemeOnAccent(
@@ -105,6 +119,34 @@ export default function PersonalizacionClient() {
     }
   }
 
+  function handleFooterImageFile(
+    side: "left" | "right",
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadErr(null);
+    setFooterImageToCrop({ file, side }); // abre el editor; la subida pasa por handleFooterImageCropped
+  }
+
+  async function handleFooterImageCropped(blob: Blob) {
+    const side = footerImageToCrop?.side;
+    setFooterImageToCrop(null);
+    if (!side) return;
+    setUploadErr(null);
+    setUploading(true);
+    try {
+      const url = await uploadImage(blob, `pie-${side}.webp`);
+      if (side === "left") setFooterImageLeftUrl(url);
+      else setFooterImageRightUrl(url);
+    } catch (err) {
+      setUploadErr((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   // Preview en vivo: misma fórmula que usa el storefront real
   // (src/lib/theme-color.ts), así lo que se ve acá es exactamente lo que va
   // a ver el cliente.
@@ -140,6 +182,9 @@ export default function PersonalizacionClient() {
         body: JSON.stringify({
           coverImageUrl: coverImageUrl.trim() || null,
           iconUrl: iconUrl.trim() || null,
+          footerImageLeftUrl: footerImageLeftUrl.trim() || null,
+          footerImageRightUrl: footerImageRightUrl.trim() || null,
+          footerColor: isValidHex(footerColor) ? footerColor : null,
           themeColor: isValidHex(themeColor) ? themeColor : undefined,
           themeFont,
           themeOnAccent,
@@ -278,6 +323,74 @@ export default function PersonalizacionClient() {
           </div>
         </div>
 
+        <div className="flex flex-col gap-3 border-b border-neutral-100 pb-4">
+          <label className="text-sm font-medium text-neutral-700">
+            Personajes del pie de página
+          </label>
+          <p className="-mt-1 text-xs text-neutral-500">
+            Se apoyan a cada lado del pie de página de /menu, sobre tu color
+            de marca. Subí fotos con fondo transparente (PNG) para que se
+            vean recortadas, como un personaje o un producto flotando.
+          </p>
+          <div className="flex flex-wrap gap-6">
+            <FooterImageSlot
+              label="Izquierda"
+              imageUrl={footerImageLeftUrl}
+              themeColor={isValidHex(footerColor) ? footerColor : themeColor}
+              uploading={uploading}
+              onUpload={(e) => handleFooterImageFile("left", e)}
+              onRemove={() => setFooterImageLeftUrl("")}
+            />
+            <FooterImageSlot
+              label="Derecha"
+              imageUrl={footerImageRightUrl}
+              themeColor={isValidHex(footerColor) ? footerColor : themeColor}
+              uploading={uploading}
+              onUpload={(e) => handleFooterImageFile("right", e)}
+              onRemove={() => setFooterImageRightUrl("")}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1 border-b border-neutral-100 pb-4">
+          <label className="text-sm font-medium text-neutral-700">
+            Color del pie de página
+          </label>
+          <p className="-mt-1 text-xs text-neutral-500">
+            Por default usa tu color de marca. Elegí otro acá si tu marca
+            tiene más de un color característico.
+          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="color"
+              value={isValidHex(footerColor) ? footerColor : themeColor}
+              onChange={(e) => setFooterColor(e.target.value)}
+              className="h-10 w-14 cursor-pointer rounded border border-neutral-300 p-1"
+            />
+            <input
+              value={footerColor}
+              onChange={(e) => setFooterColor(e.target.value.trim())}
+              placeholder={themeColor}
+              maxLength={7}
+              className="w-28 rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm focus:border-brand-500 focus:outline-none"
+            />
+            {footerColor && (
+              <button
+                type="button"
+                onClick={() => setFooterColor("")}
+                className="text-xs font-medium text-neutral-500 hover:underline"
+              >
+                Usar color de marca
+              </button>
+            )}
+          </div>
+          {footerColor && !isValidHex(footerColor) && (
+            <span className="text-xs text-red-600">
+              Formato inválido, usá #rrggbb.
+            </span>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-neutral-700">
@@ -397,6 +510,69 @@ export default function PersonalizacionClient() {
           onCancel={() => setIconToCrop(null)}
           onConfirm={handleIconCropped}
         />
+      )}
+
+      {footerImageToCrop && (
+        <ImageCropModal
+          file={footerImageToCrop.file}
+          onCancel={() => setFooterImageToCrop(null)}
+          onConfirm={handleFooterImageCropped}
+        />
+      )}
+    </div>
+  );
+}
+
+function FooterImageSlot({
+  label,
+  imageUrl,
+  themeColor,
+  uploading,
+  onUpload,
+  onRemove,
+}: {
+  label: string;
+  imageUrl: string;
+  themeColor: string;
+  uploading: boolean;
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium text-neutral-500">{label}</span>
+      <div
+        className="flex h-32 w-24 shrink-0 items-end justify-center overflow-hidden rounded-lg border border-neutral-200"
+        style={{
+          backgroundColor: isValidHex(themeColor) ? themeColor : DEFAULT_THEME_COLOR,
+        }}
+      >
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt="" className="h-full w-full object-contain" />
+        ) : (
+          <span className="mb-3 px-2 text-center text-[10px] text-white/70">
+            Sin imagen
+          </span>
+        )}
+      </div>
+      <label
+        className={
+          "inline-flex w-fit cursor-pointer items-center rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 " +
+          (uploading ? "pointer-events-none opacity-60" : "")
+        }
+      >
+        <input type="file" accept="image/*" onChange={onUpload} className="hidden" />
+        {uploading ? "Subiendo..." : imageUrl ? "Cambiar" : "Subir foto"}
+      </label>
+      {imageUrl && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="w-fit text-xs font-medium text-red-600 hover:underline"
+        >
+          Quitar
+        </button>
       )}
     </div>
   );

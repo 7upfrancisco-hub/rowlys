@@ -8,6 +8,8 @@ interface Settings {
   storeName: string;
   storePhone: string | null;
   storeAddress: string | null;
+  instagramHandle: string | null;
+  tiktokHandle: string | null;
   bankAlias: string | null;
   deliveryFee: number;
   prepTimeDeliveryMinutes: number;
@@ -22,6 +24,8 @@ export default function ConfiguracionClient() {
   const [storeName, setStoreName] = useState("");
   const [storePhone, setStorePhone] = useState("");
   const [storeAddress, setStoreAddress] = useState("");
+  const [instagramHandle, setInstagramHandle] = useState("");
+  const [tiktokHandle, setTiktokHandle] = useState("");
   const [bankAlias, setBankAlias] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [prepDelivery, setPrepDelivery] = useState(10);
@@ -42,6 +46,8 @@ export default function ConfiguracionClient() {
         setStoreName(settings.storeName);
         setStorePhone(settings.storePhone ?? "");
         setStoreAddress(settings.storeAddress ?? "");
+        setInstagramHandle(settings.instagramHandle ?? "");
+        setTiktokHandle(settings.tiktokHandle ?? "");
         setBankAlias(settings.bankAlias ?? "");
         setDeliveryFee(settings.deliveryFee);
         setPrepDelivery(settings.prepTimeDeliveryMinutes ?? 10);
@@ -83,6 +89,8 @@ export default function ConfiguracionClient() {
           storeName,
           storePhone: storePhone.trim() || undefined,
           storeAddress: storeAddress.trim() || undefined,
+          instagramHandle: instagramHandle.trim() || undefined,
+          tiktokHandle: tiktokHandle.trim() || undefined,
           bankAlias: bankAlias.trim() || undefined,
           deliveryFee,
           prepTimeDeliveryMinutes: prepDelivery,
@@ -255,6 +263,28 @@ export default function ConfiguracionClient() {
           <input
             value={storeAddress}
             onChange={(e) => setStoreAddress(e.target.value)}
+            className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-neutral-700">
+            Instagram
+          </label>
+          <input
+            value={instagramHandle}
+            onChange={(e) => setInstagramHandle(e.target.value)}
+            placeholder="@tulocal"
+            className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-neutral-700">
+            TikTok
+          </label>
+          <input
+            value={tiktokHandle}
+            onChange={(e) => setTiktokHandle(e.target.value)}
+            placeholder="@tulocal"
             className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
           />
         </div>

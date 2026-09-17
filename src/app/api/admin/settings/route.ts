@@ -18,6 +18,8 @@ export async function GET(request: Request) {
     storeName: "Rowlys",
     storePhone: null,
     storeAddress: null,
+    instagramHandle: null,
+    tiktokHandle: null,
     bankAlias: null,
     storeOpen: true,
     deliveryEnabled: true,
@@ -29,6 +31,9 @@ export async function GET(request: Request) {
     prepTimePickupMinutes: 10,
     coverImageUrl: null,
     iconUrl: null,
+    footerImageLeftUrl: null,
+    footerImageRightUrl: null,
+    footerColor: null,
     themeColor: "#c92a2a",
     themeFont: "inter",
     themeOnAccent: "white",
@@ -42,6 +47,8 @@ const settingsSchema = z.object({
   storeName: z.string().trim().min(1).optional(),
   storePhone: z.string().trim().optional(),
   storeAddress: z.string().trim().optional(),
+  instagramHandle: z.string().trim().optional(),
+  tiktokHandle: z.string().trim().optional(),
   bankAlias: z.string().trim().optional(),
   deliveryFee: z.number().min(0).optional(),
   storeOpen: z.boolean().optional(),
@@ -54,6 +61,14 @@ const settingsSchema = z.object({
   prepTimePickupMinutes: z.number().int().min(0).max(240).optional(),
   coverImageUrl: z.string().trim().nullable().optional(),
   iconUrl: z.string().trim().nullable().optional(),
+  footerImageLeftUrl: z.string().trim().nullable().optional(),
+  footerImageRightUrl: z.string().trim().nullable().optional(),
+  footerColor: z
+    .string()
+    .trim()
+    .nullable()
+    .refine((v) => v == null || isValidHex(v), "Color inválido (usá formato #rrggbb).")
+    .optional(),
   themeColor: z
     .string()
     .trim()

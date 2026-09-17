@@ -17,6 +17,8 @@ export async function GET() {
     storeName: "Rowlys",
     storePhone: null,
     storeAddress: null,
+    instagramHandle: null,
+    tiktokHandle: null,
     deliveryFee: 0,
     bankAlias: null,
     storeOpen: true,
@@ -29,12 +31,17 @@ export async function GET() {
     prepTimePickupMinutes: 10,
     coverImageUrl: null,
     iconUrl: null,
+    footerImageLeftUrl: null,
+    footerImageRightUrl: null,
+    footerColor: null,
   };
 
   return NextResponse.json({
     storeName: safe.storeName,
     storePhone: safe.storePhone,
     storeAddress: safe.storeAddress,
+    instagramHandle: safe.instagramHandle,
+    tiktokHandle: safe.tiktokHandle,
     deliveryFee: safe.deliveryFee,
     bankAlias: safe.bankAlias,
     storeOpen: safe.storeOpen,
@@ -47,6 +54,9 @@ export async function GET() {
     prepTimePickupMinutes: safe.prepTimePickupMinutes,
     coverImageUrl: safe.coverImageUrl,
     iconUrl: safe.iconUrl,
+    footerImageLeftUrl: safe.footerImageLeftUrl,
+    footerImageRightUrl: safe.footerImageRightUrl,
+    footerColor: safe.footerColor,
     // Deriva de env, no de la fila: el checkout solo ofrece MP si hay mock o
     // credenciales reales en este entorno.
     mpEnabled: isMpAvailable(),

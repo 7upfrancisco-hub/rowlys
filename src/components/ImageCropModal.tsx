@@ -7,8 +7,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // ancho/alto). Al confirmar, exporta exactamente ese recorte como WebP —
 // así lo que se ve acá es exactamente lo que va a mostrar la carta,
 // independientemente de las proporciones de la foto original.
+//
+// Si no se pasa `aspect`, el marco se ajusta a la proporción NATURAL de la
+// foto (acotada a un rango razonable de alto) para no forzar un recorte que
+// no pidieron — pensado para fotos sueltas (personajes, logos) donde
+// cualquier proporción fija cortaría partes de la imagen.
 
 const FRAME_W = 320;
+const MIN_FRAME_H = 160;
+const MAX_FRAME_H = 480;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const OUTPUT_W = 900;
@@ -19,17 +26,12 @@ function clamp(value: number, min: number, max: number): number {
 
 interface Props {
   file: File;
-  aspect?: number; // ancho / alto, ej. 4/3
+  aspect?: number; // ancho / alto, ej. 4/3. Si se omite, se ajusta a la foto.
   onCancel: () => void;
   onConfirm: (blob: Blob) => void;
 }
 
-export default function ImageCropModal({
-  file,
-  aspect = 4 / 3,
-  onCancel,
-  onConfirm,
-}: Props) {
+export default function ImageCropModal({ file, aspect, onCancel, onConfirm }: Props) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -44,7 +46,9 @@ export default function ImageCropModal({
     panY: number;
   } | null>(null);
 
-  const frameH = Math.round(FRAME_W / aspect);
+  const rawAspect = aspect ?? (natural ? natural.w / natural.h : 1);
+  const effectiveAspect = clamp(rawAspect, FRAME_W / MAX_FRAME_H, FRAME_W / MIN_FRAME_H);
+  const frameH = Math.round(FRAME_W / effectiveAspect);
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -52,13 +56,19 @@ export default function ImageCropModal({
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const scaleCover = useMemo(() => {
+  // Con `aspect` fijo (fotos de producto, etc.) el marco siempre se llena
+  // ("cover"): es un recorte a propósito. Sin `aspect` (fotos sueltas, ver
+  // arriba) se ve la foto ENTERA por default ("contain") — el zoom queda
+  // como ajuste opcional, nunca un recorte forzado de entrada.
+  const scaleFit = useMemo(() => {
     if (!natural) return 0;
-    return Math.max(FRAME_W / natural.w, frameH / natural.h);
-  }, [natural, frameH]);
+    const scaleW = FRAME_W / natural.w;
+    const scaleH = frameH / natural.h;
+    return aspect != null ? Math.max(scaleW, scaleH) : Math.min(scaleW, scaleH);
+  }, [natural, frameH, aspect]);
 
-  const displayedW = natural ? natural.w * scaleCover * zoom : 0;
-  const displayedH = natural ? natural.h * scaleCover * zoom : 0;
+  const displayedW = natural ? natural.w * scaleFit * zoom : 0;
+  const displayedH = natural ? natural.h * scaleFit * zoom : 0;
   const maxPanX = Math.max(0, (displayedW - FRAME_W) / 2);
   const maxPanY = Math.max(0, (displayedH - frameH) / 2);
 
@@ -101,18 +111,38 @@ export default function ImageCropModal({
     if (!natural || !imgRef.current) return;
     setExporting(true);
     try {
-      const sourceScale = 1 / (scaleCover * zoom);
-      const sw = FRAME_W * sourceScale;
-      const sh = frameH * sourceScale;
-      const sx = clamp(-left * sourceScale, 0, Math.max(0, natural.w - sw));
-      const sy = clamp(-top * sourceScale, 0, Math.max(0, natural.h - sh));
-
       const canvas = document.createElement("canvas");
       canvas.width = OUTPUT_W;
-      canvas.height = Math.round(OUTPUT_W / aspect);
+      canvas.height = Math.round(OUTPUT_W / effectiveAspect);
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("No se pudo generar el recorte.");
-      ctx.drawImage(imgRef.current, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+      if (aspect != null) {
+        // Modo "cover" (frame fijo): recorta para llenar el marco exacto.
+        const sourceScale = 1 / (scaleFit * zoom);
+        const sw = FRAME_W * sourceScale;
+        const sh = frameH * sourceScale;
+        const sx = clamp(-left * sourceScale, 0, Math.max(0, natural.w - sw));
+        const sy = clamp(-top * sourceScale, 0, Math.max(0, natural.h - sh));
+        ctx.drawImage(imgRef.current, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      } else {
+        // Modo "contain" (formato libre): nunca recorta la foto en sí — la
+        // dibuja entera donde el usuario la dejó posicionada (mover/zoom
+        // siguen funcionando, pero a zoom 1 se ve completa). El resto del
+        // canvas queda transparente.
+        const outputScale = OUTPUT_W / FRAME_W;
+        ctx.drawImage(
+          imgRef.current,
+          0,
+          0,
+          natural.w,
+          natural.h,
+          left * outputScale,
+          top * outputScale,
+          displayedW * outputScale,
+          displayedH * outputScale
+        );
+      }
 
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/webp", 0.85)

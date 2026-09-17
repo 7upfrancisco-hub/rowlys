@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { isValidHex, suggestOnAccent } from "@/lib/theme-color";
 import ThemeToggle from "@/components/ThemeToggle";
 import InstallPwa from "@/components/InstallPwa";
 import { useCartStore, cartLineKey, cartSubtotal } from "@/lib/cart-store";
@@ -23,6 +24,30 @@ interface StoreInfo {
   closedMessage: string | null;
   closedImageUrl: string | null;
   coverImageUrl: string | null;
+  storePhone: string | null;
+  storeAddress: string | null;
+  instagramHandle: string | null;
+  tiktokHandle: string | null;
+  footerImageLeftUrl: string | null;
+  footerImageRightUrl: string | null;
+  footerColor: string | null;
+}
+
+// Acepta que el local cargue el @handle, el nombre solo, o la URL completa.
+function socialUrl(base: string, handle: string): string {
+  const clean = handle.trim().replace(/^@/, "");
+  if (/^https?:\/\//i.test(clean)) return clean;
+  return base + clean;
+}
+
+// Para mostrar en pantalla: si cargaron una URL completa, se ve el @handle
+// igual (no la URL entera).
+function socialHandle(handle: string): string {
+  const clean = handle.trim().replace(/^@/, "");
+  if (/^https?:\/\//i.test(clean)) {
+    return "@" + clean.replace(/^https?:\/\/(www\.)?[^/]+\//, "").replace(/\/$/, "");
+  }
+  return "@" + clean;
 }
 
 function channelEnabled(info: StoreInfo | null, type: OrderType): boolean {
@@ -277,6 +302,8 @@ export default function MenuClient() {
         </>
       )}
 
+      <StoreFooter storeInfo={storeInfo} />
+
       {!readOnly && lines.length > 0 && (
         <button
           onClick={() => setCartOpen(true)}
@@ -303,6 +330,125 @@ export default function MenuClient() {
         />
       )}
     </div>
+  );
+}
+
+function StoreFooter({ storeInfo }: { storeInfo: StoreInfo | null }) {
+  const linkClass = "flex items-center gap-1.5 text-sm opacity-85 transition hover:opacity-100";
+
+  // Color propio del pie de página (opcional): si no se eligió ninguno, usa
+  // el mismo color de marca que el resto de la carta (bg-accent-solid /
+  // text-on-accent, ya calculados en CSS vars). Si se eligió uno, el
+  // contraste del texto se recalcula para ESE color puntual.
+  const customColor = isValidHex(storeInfo?.footerColor) ? storeInfo!.footerColor : null;
+  const customFg = customColor
+    ? suggestOnAccent(customColor) === "white"
+      ? "#ffffff"
+      : "#171717"
+    : undefined;
+
+  return (
+    <footer
+      className={
+        "relative px-6 pb-8 pt-10 " + (customColor ? "" : "bg-accent-solid text-on-accent")
+      }
+      style={customColor ? { backgroundColor: customColor, color: customFg } : undefined}
+    >
+      {storeInfo?.footerImageLeftUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={storeInfo.footerImageLeftUrl}
+          alt=""
+          className="pointer-events-none absolute left-2 top-1/2 h-32 w-auto -translate-y-1/2 object-contain sm:left-6 sm:h-44"
+        />
+      )}
+      {storeInfo?.footerImageRightUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={storeInfo.footerImageRightUrl}
+          alt=""
+          className="pointer-events-none absolute right-2 top-1/2 h-32 w-auto -translate-y-1/2 object-contain sm:right-6 sm:h-44"
+        />
+      )}
+      <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-3 text-center">
+        <p className="text-lg font-bold">{storeInfo?.storeName ?? "Rowlys"}</p>
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          {storeInfo?.storeAddress && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(storeInfo.storeAddress)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkClass}
+            >
+              <PinIcon className="h-3.5 w-3.5 shrink-0" />
+              {storeInfo.storeAddress}
+            </a>
+          )}
+          {storeInfo?.storePhone && (
+            <a href={`tel:${storeInfo.storePhone}`} className={linkClass}>
+              <PhoneIcon className="h-3.5 w-3.5 shrink-0" />
+              {storeInfo.storePhone}
+            </a>
+          )}
+          {storeInfo?.instagramHandle && (
+            <a
+              href={socialUrl("https://instagram.com/", storeInfo.instagramHandle)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkClass}
+            >
+              <InstagramIcon className="h-3.5 w-3.5 shrink-0" />
+              {socialHandle(storeInfo.instagramHandle)}
+            </a>
+          )}
+          {storeInfo?.tiktokHandle && (
+            <a
+              href={socialUrl("https://tiktok.com/@", storeInfo.tiktokHandle)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkClass}
+            >
+              <TiktokIcon className="h-3.5 w-3.5 shrink-0" />
+              {socialHandle(storeInfo.tiktokHandle)}
+            </a>
+          )}
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function PinIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C11 21 3 13 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z" />
+    </svg>
+  );
+}
+
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function TiktokIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M16.5 2h-3v13.5a3 3 0 1 1-2.5-2.96V9.4a6 6 0 1 0 5.5 5.98V9.1a7.5 7.5 0 0 0 4.5 1.5V7.6c-2.3 0-4.2-1.7-4.5-3.9V2Z" />
+    </svg>
   );
 }
 
