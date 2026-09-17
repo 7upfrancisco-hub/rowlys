@@ -175,7 +175,7 @@ export default function GroupForm({ initial, onSaved, onCancel }: Props) {
               />
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 value={option.price}
                 onChange={(e) =>
                   updateOption(index, { price: Number(e.target.value) })

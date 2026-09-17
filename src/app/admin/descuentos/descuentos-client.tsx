@@ -348,7 +348,7 @@ export default function DescuentosClient() {
                   type="number"
                   min={0}
                   max={form.valueType === "PERCENT" ? 100 : undefined}
-                  step="0.01"
+                  step="1"
                   value={form.value}
                   onChange={(e) => set("value", e.target.value)}
                   className={inputCls}

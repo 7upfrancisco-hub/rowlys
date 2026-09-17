@@ -304,7 +304,7 @@ export default function ConfiguracionClient() {
           </label>
           <input
             type="number"
-            step="0.01"
+            step="1"
             value={deliveryFee}
             onChange={(e) => setDeliveryFee(Number(e.target.value))}
             className="w-40 rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"

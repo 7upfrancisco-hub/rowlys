@@ -168,7 +168,7 @@ export default function CuponesClient() {
               type="number"
               min={0}
               max={form.discountType === "PERCENT" ? 100 : undefined}
-              step="0.01"
+              step="1"
               value={form.discountValue}
               onChange={(e) => set("discountValue", e.target.value)}
               className={inputCls}
@@ -178,7 +178,7 @@ export default function CuponesClient() {
             <input
               type="number"
               min={0}
-              step="0.01"
+              step="1"
               value={form.budgetCap}
               onChange={(e) => set("budgetCap", e.target.value)}
               placeholder="Sin límite"
