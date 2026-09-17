@@ -352,16 +352,20 @@ function StoreFooter({ storeInfo }: { storeInfo: StoreInfo | null }) {
   return (
     <footer
       className={
-        "relative px-6 pb-8 pt-10 " + (customColor ? "" : "bg-accent-solid text-on-accent")
+        "relative flex flex-col items-center gap-4 px-6 pb-8 pt-10 sm:block " +
+        (customColor ? "" : "bg-accent-solid text-on-accent")
       }
       style={customColor ? { backgroundColor: customColor, color: customFg } : undefined}
     >
+      {/* En celular las imágenes van apiladas arriba/abajo del texto (orden
+          normal del flex). Desde `sm:` se anclan a los costados, superpuestas
+          sobre todo el alto del pie de página. */}
       {storeInfo?.footerImageLeftUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={storeInfo.footerImageLeftUrl}
           alt=""
-          className="pointer-events-none absolute left-2 top-1/2 h-32 w-auto -translate-y-1/2 object-contain sm:left-6 sm:h-44"
+          className="pointer-events-none order-1 h-20 w-auto object-contain sm:absolute sm:left-6 sm:top-1/2 sm:order-none sm:h-44 sm:-translate-y-1/2"
         />
       )}
       {storeInfo?.footerImageRightUrl && (
@@ -369,10 +373,10 @@ function StoreFooter({ storeInfo }: { storeInfo: StoreInfo | null }) {
         <img
           src={storeInfo.footerImageRightUrl}
           alt=""
-          className="pointer-events-none absolute right-2 top-1/2 h-32 w-auto -translate-y-1/2 object-contain sm:right-6 sm:h-44"
+          className="pointer-events-none order-3 h-20 w-auto object-contain sm:absolute sm:right-6 sm:top-1/2 sm:order-none sm:h-44 sm:-translate-y-1/2"
         />
       )}
-      <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-3 text-center">
+      <div className="relative order-2 mx-auto flex max-w-3xl flex-col items-center gap-3 text-center sm:order-none">
         <p className="text-lg font-bold">{storeInfo?.storeName ?? "Rowlys"}</p>
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           {storeInfo?.storeAddress && (

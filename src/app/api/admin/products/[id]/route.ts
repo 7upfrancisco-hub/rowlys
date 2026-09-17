@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { isForeignKeyViolation, prisma } from "@/lib/prisma";
 import { requireTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -132,6 +132,19 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "El producto no existe." }, { status: 404 });
   }
-  await prisma.product.delete({ where: { id: params.id } });
+  try {
+    await prisma.product.delete({ where: { id: params.id } });
+  } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return NextResponse.json(
+        {
+          error:
+            "No se pudo borrar: el producto tiene pedidos asociados y la base de datos todavía no permite conservarlos como historial. Contactá soporte para actualizar la restricción de la base de datos.",
+        },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
   return new NextResponse(null, { status: 204 });
 }
