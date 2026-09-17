@@ -50,6 +50,31 @@ export default function ProductosClient() {
     load();
   }
 
+  // Sube o baja un producto un lugar dentro de su categoría intercambiando
+  // su `order` con el del vecino (mismo patrón de huecos que Category.order).
+  async function moveProduct(product: AdminProduct, direction: -1 | 1) {
+    const siblings = (grouped.get(product.categoryId) ?? []);
+    const idx = siblings.findIndex((p) => p.id === product.id);
+    const swapWith = siblings[idx + direction];
+    if (!swapWith) return;
+    setError(null);
+    try {
+      await Promise.all([
+        apiFetch(`/api/admin/products/${product.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ order: swapWith.order }),
+        }),
+        apiFetch(`/api/admin/products/${swapWith.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ order: product.order }),
+        }),
+      ]);
+      load();
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
   async function handleDelete(product: AdminProduct) {
     if (!confirm(`¿Eliminar "${product.name}"?`)) return;
     setError(null);
@@ -132,7 +157,7 @@ export default function ProductosClient() {
                 {category.name}
               </h3>
               <ul className="divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white shadow-sm">
-                {items.map((product) => (
+                {items.map((product, idx) => (
                   <li
                     key={product.id}
                     className={
@@ -140,7 +165,28 @@ export default function ProductosClient() {
                       (product.available ? "" : "bg-neutral-50")
                     }
                   >
-                    <div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => moveProduct(product, -1)}
+                          disabled={idx === 0}
+                          aria-label="Subir"
+                          className="rounded border border-neutral-300 px-1.5 text-neutral-500 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveProduct(product, 1)}
+                          disabled={idx === items.length - 1}
+                          aria-label="Bajar"
+                          className="rounded border border-neutral-300 px-1.5 text-neutral-500 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <div>
                       <p className="flex items-center gap-2 font-medium text-neutral-900">
                         <span className={product.available ? "" : "text-neutral-400"}>
                           {product.name}
@@ -167,6 +213,7 @@ export default function ProductosClient() {
                         {!product.availableDelivery && " · Sin delivery"}
                         {!product.availablePickup && " · Sin retiro"}
                       </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <button

@@ -20,7 +20,7 @@ export async function GET(
       products: {
         // Un producto sin stock / desactivado no se muestra en la carta.
         where: { available: true },
-        orderBy: { name: "asc" },
+        orderBy: { order: "asc" },
         include: {
           modifierGroups: {
             orderBy: { order: "asc" },

@@ -75,6 +75,9 @@ model Product {
   price             Float
   discountPrice     Float?
   imageUrl          String?
+  // Orden manual dentro de su categoría, editable con las flechas del panel
+  // (ver Category.order, mismo patrón: múltiplos de 10 para dejar huecos).
+  order             Int                    @default(0)
   available         Boolean                @default(true)
   availableDelivery Boolean                @default(true)
   availablePickup   Boolean                @default(true)

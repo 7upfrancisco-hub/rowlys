@@ -23,6 +23,7 @@ export interface AdminProduct {
   price: number;
   discountPrice: number | null;
   imageUrl: string | null;
+  order: number;
   available: boolean;
   availableDelivery: boolean;
   availablePickup: boolean;
@@ -47,7 +48,9 @@ export default function ProductForm({
 }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [price, setPrice] = useState(initial?.price ?? 0);
+  const [price, setPrice] = useState<string>(
+    initial?.price != null ? String(initial.price) : ""
+  );
   const [discountPrice, setDiscountPrice] = useState<string>(
     initial?.discountPrice != null ? String(initial.discountPrice) : ""
   );
@@ -103,13 +106,18 @@ export default function ProductForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const numericPrice = Number(price);
+    if (!price.trim() || !Number.isFinite(numericPrice) || numericPrice <= 0) {
+      setError("Ingresá un precio válido.");
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
       const base = {
         name,
         description: description.trim() || undefined,
-        price,
+        price: numericPrice,
         categoryId,
         available,
         availableDelivery,
@@ -199,9 +207,11 @@ export default function ProductForm({
           </label>
           <input
             type="number"
-            step="0.01"
+            step="1"
             value={price}
-            onChange={(e) => setPrice(Number(e.target.value))}
+            onChange={(e) => setPrice(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            placeholder="0"
             className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
           />
         </div>
@@ -211,9 +221,10 @@ export default function ProductForm({
           </label>
           <input
             type="number"
-            step="0.01"
+            step="1"
             value={discountPrice}
             onChange={(e) => setDiscountPrice(e.target.value)}
+            onFocus={(e) => e.target.select()}
             placeholder="Opcional"
             className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
           />

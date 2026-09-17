@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const tenantId = requireTenantId(request);
   const products = await prisma.product.findMany({
     where: { tenantId },
-    orderBy: { name: "asc" },
+    orderBy: { order: "asc" },
     include: {
       category: true,
       modifierGroups: {
@@ -83,6 +83,13 @@ export async function POST(request: Request) {
     );
   }
 
+  const lastInCategory = await prisma.product.findFirst({
+    where: { categoryId: body.categoryId, tenantId },
+    orderBy: { order: "desc" },
+    select: { order: true },
+  });
+  const order = (lastInCategory?.order ?? -10) + 10;
+
   const groupIds = [...new Set(body.modifierGroupIds)];
   if (groupIds.length > 0) {
     const groups = await prisma.modifierGroup.findMany({
@@ -104,6 +111,7 @@ export async function POST(request: Request) {
       discountPrice: body.discountPrice,
       imageUrl: body.imageUrl,
       categoryId: body.categoryId,
+      order,
       available: body.available,
       availableDelivery: body.availableDelivery,
       availablePickup: body.availablePickup,

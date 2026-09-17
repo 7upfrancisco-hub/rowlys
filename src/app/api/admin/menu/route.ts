@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     include: {
       products: {
         where: { available: true },
-        orderBy: { name: "asc" },
+        orderBy: { order: "asc" },
         include: {
           modifierGroups: {
             orderBy: { order: "asc" },

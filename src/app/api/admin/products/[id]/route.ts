@@ -20,6 +20,7 @@ const updateProductSchema = z.object({
   discountPrice: z.number().positive().nullable().optional(),
   imageUrl: imageUrlSchema.nullable().optional(),
   categoryId: z.string().optional(),
+  order: z.number().optional(),
   available: z.boolean().optional(),
   availableDelivery: z.boolean().optional(),
   availablePickup: z.boolean().optional(),
