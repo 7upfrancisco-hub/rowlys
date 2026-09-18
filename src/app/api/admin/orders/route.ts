@@ -59,6 +59,7 @@ export async function POST(request: Request) {
 
   const result = await createOrder(input, {
     enforceStoreStatus: false,
+    enforceDeliveryZone: false,
     initialStatus: "CONFIRMED",
     tenantId,
   });

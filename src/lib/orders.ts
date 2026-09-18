@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeArPhone } from "@/lib/phone";
 import { priceCoupon } from "@/lib/coupons";
 import { priceAutomaticDiscounts, type PricingLine } from "@/lib/discount-pricing";
+import { pointInPolygon, type LatLng } from "@/lib/geo";
 
 // Lógica compartida de creación de pedidos. La usan dos rutas:
 //  - POST /api/orders        (checkout público, respeta el estado del local)
@@ -19,6 +20,15 @@ export const createOrderSchema = z
     customerPhone: z.string().trim().min(1),
     customerEmail: z.string().trim().email().optional(),
     deliveryAddress: z.string().trim().min(1).optional(),
+    // Coordenadas del punto elegido en el autocompletar de Google del
+    // checkout — se usan para ubicar la dirección real dentro de las zonas
+    // de envío del local (ver resolveDeliveryZone). Los pedidos cargados a
+    // mano desde /comanda no siempre las tienen (el staff puede tipear
+    // cualquier dirección), así que quedan opcionales ahí; sin ellas, un
+    // pedido de retiro no las necesita y uno de envío simplemente no se
+    // valida contra ninguna zona con polígono.
+    deliveryLat: z.number().optional(),
+    deliveryLng: z.number().optional(),
     notes: z.string().optional(),
     paymentMethod: z.enum(["CASH", "MP", "MODO", "BANK_TRANSFER"]),
     changeFor: z.number().positive().optional(),
@@ -341,12 +351,60 @@ interface CreateOrderOptions {
   // El checkout público no puede tomar pedidos con el local cerrado o el canal
   // pausado; la carga manual del staff sí (está tomando el pedido de frente).
   enforceStoreStatus: boolean;
+  // Igual criterio que enforceStoreStatus, pero para las zonas de envío: el
+  // checkout público rechaza una dirección que cae fuera de todas las zonas
+  // con polígono; la carga manual del staff nunca se bloquea por esto (si no
+  // matchea ninguna zona, usa la tarifa plana del local sin protestar).
+  enforceDeliveryZone: boolean;
   // Un pedido cargado por el staff ya está aceptado.
   initialStatus?: "PENDING" | "CONFIRMED";
   // Tenant dueño del pedido. Lo resuelve siempre el caller: la carga manual
   // admin desde la sesión, el checkout público desde el slug de la URL
   // (Fase 26b-3) — nunca se adivina acá adentro.
   tenantId: string;
+}
+
+export type DeliveryFeeResult =
+  | { ok: true; fee: number; zoneName: string | null }
+  | { ok: false; status: number; error: string };
+
+// Resuelve qué tarifa de envío aplica según la dirección real del cliente:
+//  - Sin zonas cargadas para el tenant: tarifa plana de siempre (Settings.deliveryFee).
+//  - Con zonas: evalúa las activas en orden; una zona sin polígono matchea
+//    cualquier punto (o la ausencia de coordenadas), una zona con polígono
+//    solo matchea si el punto cae adentro. Gana la primera que matchea.
+//  - Si ninguna matchea y `enforce` es true (checkout público), rechaza el
+//    pedido. Si es false (carga manual del staff), cae a la tarifa plana.
+export async function resolveDeliveryFee(
+  tenantId: string,
+  point: LatLng | null,
+  flatFee: number,
+  enforce: boolean
+): Promise<DeliveryFeeResult> {
+  const zones = await prisma.deliveryZone.findMany({
+    where: { tenantId, enabled: true },
+    orderBy: { order: "asc" },
+  });
+  if (zones.length === 0) {
+    return { ok: true, fee: flatFee, zoneName: null };
+  }
+
+  for (const zone of zones) {
+    const polygon = zone.polygon as unknown as LatLng[] | null;
+    if (!polygon || (point && pointInPolygon(point, polygon))) {
+      return { ok: true, fee: zone.fee, zoneName: zone.name };
+    }
+  }
+
+  if (!enforce) {
+    return { ok: true, fee: flatFee, zoneName: null };
+  }
+  return {
+    ok: false,
+    status: 409,
+    error:
+      "Tu dirección está fuera de nuestra zona de envío. Probá con retiro en el local.",
+  };
 }
 
 export async function createOrder(
@@ -387,8 +445,23 @@ export async function createOrder(
   // reglas activas del local, se aplican solas, sin que el cliente cargue
   // nada (a diferencia del cupón). Se calculan ANTES del cupón — el cupón
   // se aplica sobre lo que ya quedó del subtotal.
-  const baseDeliveryFee =
-    body.orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
+  let baseDeliveryFee = 0;
+  let deliveryZoneName: string | null = null;
+  if (body.orderType === "DELIVERY") {
+    const point =
+      body.deliveryLat != null && body.deliveryLng != null
+        ? { lat: body.deliveryLat, lng: body.deliveryLng }
+        : null;
+    const zoneResult = await resolveDeliveryFee(
+      tenantId,
+      point,
+      settings?.deliveryFee ?? 0,
+      opts.enforceDeliveryZone
+    );
+    if (!zoneResult.ok) return zoneResult;
+    baseDeliveryFee = zoneResult.fee;
+    deliveryZoneName = zoneResult.zoneName;
+  }
   // orderBy determinístico: si el admin deja dos reglas DIRECT (o
   // PAYMENT_METHOD) activas sobre el mismo producto/medio de pago, gana
   // siempre la más vieja — antes no había orden y dependía de cómo Postgres
@@ -461,6 +534,8 @@ export async function createOrder(
         customerEmail: body.customerEmail,
         deliveryAddress:
           body.orderType === "DELIVERY" ? body.deliveryAddress : null,
+        deliveryZoneName:
+          body.orderType === "DELIVERY" ? deliveryZoneName : null,
         deliveryFee,
         total,
         status: opts.initialStatus ?? "PENDING",

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import ThemeToggle from "@/components/ThemeToggle";
+import AddressAutocomplete, {
+  type AddressSelection,
+} from "@/components/AddressAutocomplete";
 import { useCartStore, cartSubtotal } from "@/lib/cart-store";
 import { formatCurrency, ORDER_TYPE_LABELS, type OrderDTO } from "@/types";
 import {
@@ -65,6 +68,19 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
+  // Coordenadas de la dirección elegida en el autocompletar de Google — se
+  // pierden si el cliente sigue tipeando después de elegir una sugerencia
+  // (ver handleAddressChange), porque ya no representan lo que hay escrito.
+  const [addressCoords, setAddressCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [zonePreview, setZonePreview] = useState<{
+    fee: number;
+    zoneName: string | null;
+  } | null>(null);
+  const [zoneError, setZoneError] = useState<string | null>(null);
+  const [checkingZone, setCheckingZone] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [changeFor, setChangeFor] = useState("");
   const [notes, setNotes] = useState("");
@@ -89,7 +105,34 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
   }, [tenantSlug]);
 
   const itemsSubtotal = cartSubtotal(lines);
-  const baseDeliveryFee = orderType === "DELIVERY" ? settings?.deliveryFee ?? 0 : 0;
+  // Mientras no se resolvió la zona (o no hay zonas cargadas) se muestra la
+  // tarifa plana de siempre; apenas el cliente elige una dirección real del
+  // autocompletar, `zonePreview` la reemplaza por la tarifa de su zona.
+  const baseDeliveryFee =
+    orderType === "DELIVERY" ? zonePreview?.fee ?? settings?.deliveryFee ?? 0 : 0;
+
+  function handleAddressChange(value: string) {
+    setAddress(value);
+    // Se perdió la selección puntual del autocompletar: hasta que no elija
+    // de nuevo una sugerencia, no hay coordenadas confiables.
+    setAddressCoords(null);
+    setZonePreview(null);
+    setZoneError(null);
+  }
+
+  function handleAddressSelect(selection: AddressSelection) {
+    setAddress(selection.address);
+    setAddressCoords({ lat: selection.lat, lng: selection.lng });
+    setZonePreview(null);
+    setZoneError(null);
+    setCheckingZone(true);
+    apiFetch<{ fee: number; zoneName: string | null }>(
+      `/api/${tenantSlug}/delivery-zones/resolve?lat=${selection.lat}&lng=${selection.lng}`
+    )
+      .then((result) => setZonePreview(result))
+      .catch((err: ApiError) => setZoneError(err.message))
+      .finally(() => setCheckingZone(false));
+  }
 
   // "Transferencia" va por Mercado Pago solo si el local lo tiene activo.
   const mpTransfer = paymentMethod === "TRANSFER" && !!settings?.mpEnabled;
@@ -216,6 +259,10 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
       setError("Falta la dirección de envío.");
       return;
     }
+    if (orderType === "DELIVERY" && zoneError) {
+      setError(zoneError);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -228,6 +275,10 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
           customerPhone: `${dialCode} ${phone.trim()}`,
           customerEmail: email.trim() || undefined,
           deliveryAddress: orderType === "DELIVERY" ? address.trim() : undefined,
+          deliveryLat:
+            orderType === "DELIVERY" ? addressCoords?.lat : undefined,
+          deliveryLng:
+            orderType === "DELIVERY" ? addressCoords?.lng : undefined,
           notes: notes.trim() || undefined,
           paymentMethod: provider,
           couponCode: appliedCoupon?.code,
@@ -371,12 +422,27 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
               className={inputClass}
             />
             {orderType === "DELIVERY" && (
-              <input
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Dirección de envío*"
-                className={inputClass}
-              />
+              <div className="flex flex-col gap-1">
+                <AddressAutocomplete
+                  value={address}
+                  onChange={handleAddressChange}
+                  onSelect={handleAddressSelect}
+                  placeholder="Dirección de envío*"
+                  className={inputClass}
+                />
+                {checkingZone && (
+                  <p className="text-xs text-muted">Calculando el envío...</p>
+                )}
+                {zoneError && (
+                  <p className="text-xs text-accent">{zoneError}</p>
+                )}
+                {zonePreview?.zoneName && (
+                  <p className="text-xs text-muted">
+                    Zona: {zonePreview.zoneName} —{" "}
+                    {formatCurrency(zonePreview.fee)} de envío
+                  </p>
+                )}
+              </div>
             )}
           </section>
 

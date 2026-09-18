@@ -36,6 +36,7 @@ model Tenant {
   drivers        Driver[]
   coupons        Coupon[]
   discounts      Discount[]
+  deliveryZones  DeliveryZone[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -92,6 +93,28 @@ model Product {
   discountsAsReward  Discount[] @relation("DiscountReward")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
+}
+
+// Zona de envío de un local: tarifa propia y, opcionalmente, un área que
+// restringe qué direcciones puede cubrir. `polygon` es un array de puntos
+// [{lat,lng}, ...] dibujado en el mapa del admin (mínimo 3 puntos); `null`
+// significa "sin restricción geográfica" — la zona matchea cualquier
+// dirección (caso Rowlys: una sola zona "Toda la ciudad" sin polígono). El
+// checkout evalúa las zonas activas del tenant en orden y usa la primera que
+// matchea; si un tenant no tiene ninguna zona cargada, se sigue usando la
+// tarifa plana de Settings.deliveryFee (comportamiento previo, sin romper
+// nada mientras se migra local por local).
+model DeliveryZone {
+  id        String   @id @default(cuid())
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String?
+  name      String
+  fee       Float
+  enabled   Boolean  @default(true)
+  order     Int      @default(0)
+  polygon   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ModifierType {
@@ -202,6 +225,11 @@ model Order {
   customerEmail     String?
   deliveryAddress   String?
   deliveryFee       Float       @default(0)
+  // Nombre de la zona de envío usada para calcular deliveryFee (snapshot, no
+  // referencia — si la zona se borra/renombra después, el pedido conserva el
+  // nombre con el que se cobró). Null en pedidos de retiro o si el local
+  // todavía usa la tarifa plana sin zonas.
+  deliveryZoneName  String?
   total             Float
   status            OrderStatus @default(PENDING)
   // Demora extra en minutos que carga el local para este pedido puntual; se

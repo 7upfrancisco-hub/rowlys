@@ -24,6 +24,7 @@ export async function POST(
 
   const result = await createOrder(parsed.data, {
     enforceStoreStatus: true,
+    enforceDeliveryZone: true,
     tenantId: tenant.id,
   });
   if (!result.ok) {

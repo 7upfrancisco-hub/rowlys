@@ -17,6 +17,11 @@ const CONFIG_LINKS = [
     desc: "Envío, alias bancario, horarios",
   },
   {
+    href: "/admin/zonas-envio",
+    label: "Zonas de envío",
+    desc: "Tarifas y áreas de cobertura por zona",
+  },
+  {
     href: "/admin/personalizacion",
     label: "Personalización",
     desc: "Color de marca y tipografía de la carta",
