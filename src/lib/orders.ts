@@ -5,6 +5,7 @@ import { normalizeArPhone } from "@/lib/phone";
 import { priceCoupon } from "@/lib/coupons";
 import { priceAutomaticDiscounts, type PricingLine } from "@/lib/discount-pricing";
 import { pointInPolygon, type LatLng } from "@/lib/geo";
+import { isMpAvailableForTenant } from "@/lib/payments/mercadopago";
 
 // Lógica compartida de creación de pedidos. La usan dos rutas:
 //  - POST /api/orders        (checkout público, respeta el estado del local)
@@ -436,6 +437,18 @@ export async function createOrder(
         error: "El retiro en el local está pausado en este momento.",
       };
     }
+  }
+
+  // Rechazo siempre (no solo cuando enforceStoreStatus), incluso en la carga
+  // manual desde /comanda: si Mercado Pago no está disponible no hay forma
+  // de cobrar ese pedido, no es una situación que el staff pueda pasar por
+  // alto como el local cerrado.
+  if (body.paymentMethod === "MP" && !(await isMpAvailableForTenant(tenantId))) {
+    return {
+      ok: false,
+      status: 409,
+      error: "Mercado Pago no está disponible en este momento. Elegí otro medio de pago.",
+    };
   }
 
   const resolved = await resolveItems(body.items, body.orderType, tenantId);

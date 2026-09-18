@@ -28,9 +28,17 @@ export function isMpMock(): boolean {
   return process.env.MP_MOCK === "true";
 }
 
-// Si el checkout de ESTE tenant debe ofrecer Mercado Pago: hay mock activo,
-// o el local conectó su propia cuenta, o hay token global de respaldo.
+// Si el checkout de ESTE tenant debe ofrecer Mercado Pago: el local no lo
+// apagó a mano (Settings.mpEnabled, togglable desde /admin/configuracion) Y
+// hay mock activo, o el local conectó su propia cuenta, o hay token global
+// de respaldo.
 export async function isMpAvailableForTenant(tenantId: string): Promise<boolean> {
+  const settings = await prisma.settings.findUnique({
+    where: { tenantId },
+    select: { mpEnabled: true },
+  });
+  if (settings?.mpEnabled === false) return false;
+
   if (isMpMock()) return true;
   const own = await getOwnAccessToken(tenantId);
   return !!own || !!process.env.MP_ACCESS_TOKEN;

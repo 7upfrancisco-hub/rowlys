@@ -11,6 +11,7 @@ interface Settings {
   instagramHandle: string | null;
   tiktokHandle: string | null;
   bankAlias: string | null;
+  mpEnabled: boolean;
   deliveryFee: number;
   prepTimeDeliveryMinutes: number;
   prepTimePickupMinutes: number;
@@ -27,6 +28,7 @@ export default function ConfiguracionClient() {
   const [instagramHandle, setInstagramHandle] = useState("");
   const [tiktokHandle, setTiktokHandle] = useState("");
   const [bankAlias, setBankAlias] = useState("");
+  const [mpEnabled, setMpEnabled] = useState(true);
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [prepDelivery, setPrepDelivery] = useState(10);
   const [prepPickup, setPrepPickup] = useState(10);
@@ -49,6 +51,7 @@ export default function ConfiguracionClient() {
         setInstagramHandle(settings.instagramHandle ?? "");
         setTiktokHandle(settings.tiktokHandle ?? "");
         setBankAlias(settings.bankAlias ?? "");
+        setMpEnabled(settings.mpEnabled);
         setDeliveryFee(settings.deliveryFee);
         setPrepDelivery(settings.prepTimeDeliveryMinutes ?? 10);
         setPrepPickup(settings.prepTimePickupMinutes ?? 10);
@@ -92,6 +95,7 @@ export default function ConfiguracionClient() {
           instagramHandle: instagramHandle.trim() || undefined,
           tiktokHandle: tiktokHandle.trim() || undefined,
           bankAlias: bankAlias.trim() || undefined,
+          mpEnabled,
           deliveryFee,
           prepTimeDeliveryMinutes: prepDelivery,
           prepTimePickupMinutes: prepPickup,
@@ -297,6 +301,34 @@ export default function ConfiguracionClient() {
             onChange={(e) => setBankAlias(e.target.value)}
             className="rounded-lg border border-neutral-300 px-4 py-2 focus:border-brand-500 focus:outline-none"
           />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4">
+          <div>
+            <p className="font-medium text-neutral-900">Mercado Pago</p>
+            <p className="text-sm text-neutral-500">
+              {mpEnabled
+                ? "El checkout lo ofrece como medio de pago (si está conectado)."
+                : "Apagado: no se muestra como opción en el checkout, aunque esté conectado."}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={mpEnabled}
+            onClick={() => setMpEnabled((v) => !v)}
+            className={
+              "relative h-7 w-12 shrink-0 rounded-full transition " +
+              (mpEnabled ? "bg-green-500" : "bg-neutral-300")
+            }
+          >
+            <span
+              className={
+                "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition " +
+                (mpEnabled ? "left-[22px]" : "left-0.5")
+              }
+            />
+          </button>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-neutral-700">

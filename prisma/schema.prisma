@@ -504,6 +504,11 @@ model Settings {
   storeOpen               Boolean  @default(true)
   deliveryEnabled         Boolean  @default(true)
   pickupEnabled           Boolean  @default(true)
+  // Apagado manual de Mercado Pago como medio de pago, independiente de si
+  // el local tiene la cuenta conectada o token global de respaldo — ver
+  // isMpAvailableForTenant en src/lib/payments/mercadopago.ts, que combina
+  // esto con la disponibilidad técnica real.
+  mpEnabled               Boolean  @default(true)
   closedTitle             String?
   closedMessage           String?
   closedImageUrl          String?
