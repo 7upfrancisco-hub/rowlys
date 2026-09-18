@@ -30,7 +30,7 @@ export const createOrderSchema = z
     deliveryLat: z.number().optional(),
     deliveryLng: z.number().optional(),
     notes: z.string().optional(),
-    paymentMethod: z.enum(["CASH", "MP", "MODO", "BANK_TRANSFER"]),
+    paymentMethod: z.enum(["CASH", "MP", "BANK_TRANSFER"]),
     changeFor: z.number().positive().optional(),
     couponCode: z.string().trim().optional(),
     items: z

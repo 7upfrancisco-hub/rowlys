@@ -176,7 +176,6 @@ enum OrderType {
 enum PaymentProvider {
   CASH
   MP
-  MODO
   BANK_TRANSFER
 }
 

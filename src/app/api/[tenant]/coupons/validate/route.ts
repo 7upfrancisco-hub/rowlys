@@ -17,7 +17,7 @@ const validateSchema = z.object({
   code: z.string().trim().min(1),
   phone: z.string().trim().min(1),
   orderType: z.enum(["PICKUP", "DELIVERY"]),
-  paymentMethod: z.enum(["CASH", "MP", "MODO", "BANK_TRANSFER"]),
+  paymentMethod: z.enum(["CASH", "MP", "BANK_TRANSFER"]),
   items: z
     .array(
       z.object({

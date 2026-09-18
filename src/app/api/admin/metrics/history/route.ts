@@ -145,7 +145,6 @@ export async function GET(request: NextRequest) {
   const byPayment: Record<PaymentProvider, Pair> = {
     CASH: emptyPair(),
     MP: emptyPair(),
-    MODO: emptyPair(),
     BANK_TRANSFER: emptyPair(),
   };
 

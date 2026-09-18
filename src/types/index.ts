@@ -30,12 +30,11 @@ export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   DELIVERY: "Envío a domicilio",
 };
 
-export type PaymentProvider = "CASH" | "MP" | "MODO" | "BANK_TRANSFER";
+export type PaymentProvider = "CASH" | "MP" | "BANK_TRANSFER";
 
 export const PAYMENT_PROVIDER_LABELS: Record<PaymentProvider, string> = {
   CASH: "Efectivo",
   MP: "Mercado Pago",
-  MODO: "Modo",
   BANK_TRANSFER: "Transferencia bancaria",
 };
 

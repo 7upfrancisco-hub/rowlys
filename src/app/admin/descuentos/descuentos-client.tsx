@@ -19,7 +19,7 @@ interface Option {
 }
 
 const DISCOUNT_KINDS: DiscountKind[] = ["DIRECT", "COMBO", "PAYMENT_METHOD", "FREE_SHIPPING"];
-const PAYMENT_PROVIDERS: PaymentProvider[] = ["CASH", "MP", "MODO", "BANK_TRANSFER"];
+const PAYMENT_PROVIDERS: PaymentProvider[] = ["CASH", "MP", "BANK_TRANSFER"];
 
 const EMPTY = {
   kind: "DIRECT" as DiscountKind,

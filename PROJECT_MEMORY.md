@@ -2781,3 +2781,33 @@ elija bien de una lista.
   para Primo (Primo ni siquiera existe como tenant todavía, es un local a
   crear a futuro) — el trabajo de esta fase es la infraestructura, falta la
   carga de datos real cuando corresponda.
+
+## Fase 32 — Modo dado de baja: medios de pago quedan en 3 (2026-09-18)
+
+Desde la Fase 4 (2026-08-26) Modo quedó como TODO nunca retomado: solo el
+valor `MODO` en el enum `PaymentProvider` y variables de entorno vacías en
+`.env.example` (`MODO_MERCHANT_ID`/`MODO_API_KEY`/`MODO_API_SECRET`/
+`MODO_WEBHOOK_SECRET`/`MODO_MOCK`) — nunca hubo `src/lib/payments/modo.ts`,
+ruta ni webhook real, y jamás apareció como opción en el checkout. El usuario
+decidió explícitamente **no usar Modo** (no van a dar de alta esa cuenta) y
+pidió sacar el resto suelto para dejar los medios de pago definidos: Efectivo,
+Mercado Pago y Transferencia bancaria, nada más.
+
+- Se sacó `MODO` del enum `PaymentProvider` en `prisma/schema.prisma` — se
+  verificó antes en la base real (0 filas en `Payment.provider = 'MODO'` y en
+  `Discount.paymentProvider = 'MODO'`) para que el `db push` no chocara con
+  datos existentes.
+- Se sacó también de todos los `z.enum([...])` que listaban los 4 métodos a
+  mano (`src/lib/orders.ts`, `src/lib/discounts.ts`,
+  `src/lib/discount-pricing.ts`, `src/app/api/admin/orders/route.ts`,
+  `src/app/api/[tenant]/coupons/validate/route.ts`), del
+  `PAYMENT_PROVIDER_LABELS`/`PaymentProvider` en `src/types/index.ts`, del
+  `PAYMENT_PROVIDERS` de `/admin/descuentos` (selector de reglas
+  "medio de pago") y del breakdown por medio de pago en
+  `/api/admin/metrics/history`. Las variables `MODO_*` se sacaron de
+  `.env.example` (no estaban cargadas ni en `.env` local ni en Vercel, así que
+  no hubo nada que borrar ahí).
+- **Si en algún futuro lejano el usuario cambia de opinión sobre Modo**: no
+  queda ningún vestigio para reactivar, habría que rehacer la integración
+  desde cero (mismo patrón que Mercado Pago: archivo en `src/lib/payments/`,
+  ruta de webhook, alta del enum vía `db push`, opción en el checkout).

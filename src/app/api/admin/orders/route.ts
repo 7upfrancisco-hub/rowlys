@@ -17,7 +17,7 @@ const staffOrderSchema = z
     customerPhone: z.string().trim().optional(),
     deliveryAddress: z.string().trim().min(1).optional(),
     notes: z.string().trim().optional(),
-    paymentMethod: z.enum(["CASH", "MP", "MODO", "BANK_TRANSFER"]),
+    paymentMethod: z.enum(["CASH", "MP", "BANK_TRANSFER"]),
     changeFor: z.number().positive().optional(),
     items: z
       .array(

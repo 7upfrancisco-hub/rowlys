@@ -43,7 +43,7 @@ export const createDiscountSchema = z.discriminatedUnion("kind", [
     kind: z.literal("PAYMENT_METHOD"),
     ...baseFields,
     ...valueFields,
-    paymentProvider: z.enum(["CASH", "MP", "MODO", "BANK_TRANSFER"]),
+    paymentProvider: z.enum(["CASH", "MP", "BANK_TRANSFER"]),
   }),
   z.object({
     kind: z.literal("FREE_SHIPPING"),

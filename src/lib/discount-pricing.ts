@@ -20,7 +20,7 @@
 export type DiscountKind = "DIRECT" | "COMBO" | "PAYMENT_METHOD" | "FREE_SHIPPING";
 export type DiscountValueType = "PERCENT" | "FIXED";
 export type DiscountTarget = "PRODUCT" | "CATEGORY";
-export type PaymentProviderLike = "CASH" | "MP" | "MODO" | "BANK_TRANSFER";
+export type PaymentProviderLike = "CASH" | "MP" | "BANK_TRANSFER";
 
 export interface DiscountRule {
   id: string;
