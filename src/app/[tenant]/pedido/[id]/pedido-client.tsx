@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { whatsappLink } from "@/lib/phone";
 import ThemeToggle from "@/components/ThemeToggle";
 import PushSubscribe from "@/components/PushSubscribe";
 import {
@@ -22,6 +23,8 @@ export default function PedidoClient({
 }) {
   const [order, setOrder] = useState<OrderDTO | null>(null);
   const [prepTimes, setPrepTimes] = useState({ delivery: 10, pickup: 10 });
+  const [bankAlias, setBankAlias] = useState<string | null>(null);
+  const [storePhone, setStorePhone] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -63,6 +66,8 @@ export default function PedidoClient({
     apiFetch<{
       prepTimeDeliveryMinutes?: number;
       prepTimePickupMinutes?: number;
+      bankAlias?: string | null;
+      storePhone?: string | null;
     }>(`/api/${tenantSlug}/settings`)
       .then((s) => {
         if (cancelled) return;
@@ -70,6 +75,8 @@ export default function PedidoClient({
           delivery: s.prepTimeDeliveryMinutes ?? 10,
           pickup: s.prepTimePickupMinutes ?? 10,
         });
+        setBankAlias(s.bankAlias ?? null);
+        setStorePhone(s.storePhone ?? null);
       })
       .catch(() => {});
 
@@ -107,6 +114,20 @@ export default function PedidoClient({
     order.payment?.provider === "MP" &&
     order.payment.status !== "CONFIRMED" &&
     order.status !== "CANCELLED";
+  // Transferencia manual sin acreditar todavía: mostramos el alias de nuevo
+  // (por si el cliente ya cerró el checkout) y un acceso directo a WhatsApp
+  // con el pedido y el total precargados, para que solo tenga que adjuntar
+  // la foto del comprobante y mandar.
+  const awaitingBankTransfer =
+    order.payment?.provider === "BANK_TRANSFER" &&
+    order.payment.status !== "CONFIRMED" &&
+    order.status !== "CANCELLED";
+  const receiptWaLink = storePhone
+    ? whatsappLink(
+        storePhone,
+        `Hola! Te paso el comprobante de la transferencia del pedido #${order.number} (${formatCurrency(order.total)}).`
+      )
+    : null;
   const showEta =
     !awaitingPayment &&
     (order.status === "PENDING" ||
@@ -273,6 +294,32 @@ export default function PedidoClient({
                   <p className="mt-2 text-sm text-red-500">{payError}</p>
                 )}
               </>
+            )}
+            {awaitingBankTransfer && (
+              <div className="mt-3 flex flex-col gap-2">
+                {bankAlias && (
+                  <p className="text-sm text-fg">
+                    Transferí a{" "}
+                    <span className="font-semibold">{bankAlias}</span> y
+                    mandanos el comprobante para que confirmemos tu pedido.
+                  </p>
+                )}
+                {receiptWaLink ? (
+                  <a
+                    href={receiptWaLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-fit rounded-lg bg-accent-solid px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-solid-hover"
+                  >
+                    Enviar comprobante por WhatsApp
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted">
+                    Mandanos el comprobante de la transferencia para que
+                    confirmemos tu pedido.
+                  </p>
+                )}
+              </div>
             )}
           </section>
         )}
