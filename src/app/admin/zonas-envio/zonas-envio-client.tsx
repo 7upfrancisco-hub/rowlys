@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/types";
-import { loadGoogleMaps } from "@/lib/google-maps";
 import type { LatLng } from "@/lib/geo";
 import DeliveryZoneMap from "@/components/DeliveryZoneMap";
 
@@ -246,18 +245,16 @@ function ZoneForm({
   const [saving, setSaving] = useState(false);
 
   // Geocodifica la dirección del local una sola vez, recién cuando el admin
-  // activa el mapa — así no gasta una consulta de Geocoding si nunca lo usa.
+  // activa el mapa — así no gasta una consulta de más si nunca lo usa.
   useEffect(() => {
     if (!restricted || mapCenter || !storeAddress) return;
     let cancelled = false;
-    loadGoogleMaps()
-      .then((g) => {
-        const geocoder = new g.maps.Geocoder();
-        geocoder.geocode({ address: storeAddress }, (results, status) => {
-          if (cancelled || status !== "OK" || !results?.[0]) return;
-          const loc = results[0].geometry.location;
-          setMapCenter({ lat: loc.lat(), lng: loc.lng() });
-        });
+    apiFetch<{ lat: number; lng: number }[]>(
+      `/api/geocode?q=${encodeURIComponent(storeAddress)}`
+    )
+      .then((results) => {
+        if (cancelled || !results[0]) return;
+        setMapCenter({ lat: results[0].lat, lng: results[0].lng });
       })
       .catch(() => {});
     return () => {

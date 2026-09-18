@@ -2716,3 +2716,68 @@ de Service Worker que dejó la Fase 29 (PWA).
   si en el futuro se vuelve un problema, la opción que se descartó por
   ahora fue un aviso in-app pidiéndole al cliente que reinstale el acceso
   directo.
+
+## Fase 31 — Zonas de envío por local, con validación geográfica real (2026-09-17/18)
+
+El usuario tiene locales con áreas de envío muy distintas entre sí: Rowlys cubre
+casi toda la ciudad, un local nuevo ("Primo") solo entrega en una franja acotada
+entre 4 calles — y para Primo, un pedido cuya dirección real cae afuera de esa
+franja **no debe poder confirmarse**, no alcanza con confiar en que el cliente
+elija bien de una lista.
+
+- **Schema**: `DeliveryZone` (id, tenantId, name, fee, enabled, order,
+  `polygon Json?`). `polygon = null` = zona sin restricción geográfica, matchea
+  cualquier dirección (Rowlys: una sola zona "Toda la ciudad"). Con polígono,
+  solo matchea si el punto cae adentro (ray casting, `src/lib/geo.ts
+  pointInPolygon`). `Order.deliveryZoneName` (snapshot, no FK) para que el
+  pedido conserve el nombre de la zona aunque después se borre/renombre.
+  Si un tenant no cargó ninguna zona, todo sigue igual que antes (tarifa plana
+  de `Settings.deliveryFee`) — migración local por local, sin romper nada.
+- **`resolveDeliveryFee`** (`src/lib/orders.ts`, exportada): única función que
+  decide la tarifa — sin zonas → tarifa plana; con zonas → primera zona activa
+  (por `order`) que matchea (sin polígono siempre matchea, con polígono solo si
+  el punto cae adentro). `CreateOrderOptions.enforceDeliveryZone`: `true` en el
+  checkout público (rechaza con 409 si ninguna zona matchea), `false` en la
+  carga manual desde `/comanda` (el staff nunca queda bloqueado por esto, cae a
+  la tarifa plana si no hay match). Mismo criterio que `enforceStoreStatus`.
+- **Admin** `/admin/zonas-envio` (`AdminNav` → Configuración): CRUD de zonas +
+  flechas ▲▼ para reordenar (mismo patrón que Categorías/Productos). Al marcar
+  "restringida a un área", aparece `DeliveryZoneMap` para dibujar el polígono.
+- **Checkout**: el campo de dirección (`AddressAutocomplete`) pasa a tener
+  sugerencias en vivo; al elegir una, `checkout-client.tsx` pega a
+  `GET /api/[tenant]/delivery-zones/resolve?lat&lng` para previsualizar tarifa/
+  zona ANTES de confirmar, y guarda lat/lng para mandarlos en el pedido. La
+  validación real (la que importa) es la del server en `createOrder`.
+- **Mapas: arrancó con Google Maps, se cambió a OpenStreetMap/Leaflet** — el
+  usuario no puede cargar tarjeta de crédito (Google Maps Platform exige
+  facturación aunque el uso quede gratis). Se sacó toda dependencia de Google
+  (`@types/google.maps`, `src/lib/google-maps.ts` borrado,
+  `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` sacada de `.env.example`) y se reemplazó
+  por:
+  - `DeliveryZoneMap`: Leaflet puro (paquete `leaflet`, **sin** `leaflet-draw`
+    — se probó pero patchea `L.Polygon`/espera un `window.L` global al estilo
+    UMD, terreno resbaladizo con el bundler de Next; en vez de eso, cada
+    vértice del polígono es un `L.marker` con `draggable:true` (nativo de
+    Leaflet core) e ícono `divIcon` custom — clic en el mapa agrega un punto,
+    arrastrar un punto lo mueve, clic en un punto lo borra).
+  - `AddressAutocomplete`: ya no usa un widget de Google, es un input con
+    dropdown propio armado a mano, debounce de 450ms contra
+    `GET /api/geocode?q=`.
+  - `/api/geocode`: proxy server-side a Nominatim (`nominatim.openstreetmap.org`,
+    gratis, sin key). Server-side a propósito: Nominatim pide un `User-Agent`
+    identificando la app (un `fetch` del navegador no puede setear ese header)
+    y así se puede controlar el volumen de pedidos en un solo lugar en vez de
+    confiar en cada cliente.
+  - **Import dinámico de `leaflet` adentro de `useEffect`** (no import estático
+    arriba del archivo) — mismo motivo que `qz-print.ts` con `qz-tray`:
+    `/admin/zonas-envio` se prerenderea estático en el build (`next build`
+    confirmado limpio), y Leaflet toca `window` — un import estático rompería
+    ese prerender. El CSS (`leaflet/dist/leaflet.css`) sí se importa estático
+    arriba, porque CSS no ejecuta JS y no tiene ese problema.
+- **`prisma db push` corrido en producción** para `DeliveryZone` +
+  `Order.deliveryZoneName` (confirmado por el usuario antes de correrlo, mismo
+  criterio que cualquier cambio de schema contra la base real).
+- **Pendiente**: el usuario todavía no cargó ninguna zona real para Rowlys ni
+  para Primo (Primo ni siquiera existe como tenant todavía, es un local a
+  crear a futuro) — el trabajo de esta fase es la infraestructura, falta la
+  carga de datos real cuando corresponda.
