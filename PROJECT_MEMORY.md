@@ -2816,6 +2816,6 @@ Mercado Pago y Transferencia bancaria, nada más.
 - Concepto: **Blend** = la plataforma, **Rowlys** = un local cliente. URL del menú: `https://blendpanel.vercel.app/rowlys/menu`.
 - `blend.vercel.app` y `blend-app.vercel.app` estaban ocupados por otras cuentas. Se agregó `blendpanel.vercel.app` al proyecto Vercel `rowlys`.
 - `NEXT_PUBLIC_BASE_URL` (Production) = `https://blendpanel.vercel.app`, redeploy hecho. `rowlys.vercel.app` sigue activo.
-- Quedaron agregados por error `blend-ar`, `getblend` y `blend-pedidos` (.vercel.app): sacarlos a mano desde Vercel > Settings > Domains.
+- Proyecto Vercel renombrado a `blendpanel` (2026-09-21): `rowlys.vercel.app` ya no existe. Se borraron también `blend-ar`, `getblend` y `blend-pedidos`. Único dominio: `blendpanel.vercel.app`.
 - **Pendiente del usuario:** cambiar la URL del webhook en el panel de Mercado Pago a `https://blendpanel.vercel.app/api/webhooks/mercadopago`.
 - Idea a futuro: dominio propio (`blend.com.ar` o similar) antes de imprimir QR definitivos.

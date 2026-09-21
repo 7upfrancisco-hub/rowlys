@@ -1,11 +1,3 @@
 {
-  "regions": ["gru1"],
-  "redirects": [
-    {
-      "source": "/((?!api/).*)",
-      "has": [{ "type": "host", "value": "rowlys.vercel.app" }],
-      "destination": "https://blendpanel.vercel.app/$1",
-      "permanent": false
-    }
-  ]
+  "regions": ["gru1"]
 }
