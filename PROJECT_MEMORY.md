@@ -2819,3 +2819,10 @@ Mercado Pago y Transferencia bancaria, nada más.
 - Proyecto Vercel renombrado a `blendpanel` (2026-09-21): `rowlys.vercel.app` ya no existe. Se borraron también `blend-ar`, `getblend` y `blend-pedidos`. Único dominio: `blendpanel.vercel.app`.
 - **Pendiente del usuario:** cambiar la URL del webhook en el panel de Mercado Pago a `https://blendpanel.vercel.app/api/webhooks/mercadopago`.
 - Idea a futuro: dominio propio (`blend.com.ar` o similar) antes de imprimir QR definitivos.
+
+### PENDIENTE URGENTE: webhook de Mercado Pago (2026-09-21)
+- El dominio viejo `rowlys.vercel.app` ya no existe (404). El webhook de MP todavía apunta ahí, así que **los pagos con MP no se confirman** hasta cambiarlo.
+- Lo tiene que hacer **Valen** (la app "Rowlys", id `1743825793784377`, está en su cuenta de MP): https://www.mercadopago.com.ar/developers/panel/app → app Rowlys → Webhooks → Configurar notificaciones → **Modo productivo** → URL `https://blendpanel.vercel.app/api/webhooks/mercadopago`, evento "Pagos (legacy)" → Guardar → Simular notificación (debe dar 200).
+- Si MP regenera la "Clave secreta", actualizar `MP_WEBHOOK_SECRET` en Vercel (Production) y redeployar.
+- Después: hacer un pedido chico con MP en `blendpanel.vercel.app/rowlys/menu` y confirmar que pasa a pagado.
+- El usuario le avisa a Valen cuando estén juntos.
