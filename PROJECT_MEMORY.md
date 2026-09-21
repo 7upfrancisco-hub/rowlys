@@ -2826,3 +2826,6 @@ Mercado Pago y Transferencia bancaria, nada más.
 - Si MP regenera la "Clave secreta", actualizar `MP_WEBHOOK_SECRET` en Vercel (Production) y redeployar.
 - Después: hacer un pedido chico con MP en `blendpanel.vercel.app/rowlys/menu` y confirmar que pasa a pagado.
 - El usuario le avisa a Valen cuando estén juntos.
+
+### QZ Tray: cartel Allow/Block resuelto (2026-09-21)
+- Causa: el override.crt se llamaba `override.crt.txt` (extensión oculta en Windows). Se renombró a `override.crt`, se copió a `C:\Program Files\QZ Tray\override.crt` y se reinició QZ Tray → la comandera imprime sin cartel. El servidor de firma (`/api/admin/print/sign`) siempre estuvo bien.
