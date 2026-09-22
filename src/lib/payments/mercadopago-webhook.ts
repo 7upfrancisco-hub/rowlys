@@ -27,10 +27,15 @@ export async function handleMercadoPagoWebhook(
   };
 
   const type = body.type ?? body.topic ?? url.searchParams.get("type") ?? "";
+  // El manifest que MP firma (ver verifyWebhookSignature) se arma con el
+  // data.id documentado como el de la query string de la URL de
+  // notificación, no el del body — se prioriza así para que la firma
+  // siempre valide contra el mismo valor que MP firmó. El del body queda
+  // como respaldo por si alguna variante de notificación no trae query.
   const dataId = String(
-    body.data?.id ??
-      url.searchParams.get("data.id") ??
+    url.searchParams.get("data.id") ??
       url.searchParams.get("id") ??
+      body.data?.id ??
       ""
   );
 

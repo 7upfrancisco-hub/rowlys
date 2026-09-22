@@ -137,8 +137,22 @@ async function refreshAccessToken(refreshToken: string): Promise<OAuthTokenResul
 const REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000;
 
 // Access token de la cuenta de Mercado Pago que ESTE local conectó (o null
-// si todavía no conectó ninguna). Refresca solo, guarda el resultado
-// reencriptado si tuvo que hacerlo.
+// si todavía no conectó ninguna, O si tenía una conectada pero el refresh
+// falló). Refresca solo, guarda el resultado reencriptado si tuvo que
+// hacerlo.
+//
+// El refresh puede fallar de verdad (el dueño desconectó la app desde su
+// cuenta de MP, el refresh token quedó invalidado por una carrera con otro
+// refresh concurrente — MP lo rota en cada uso —, o un corte transitorio de
+// MP). Antes esa falla no se atajaba acá, así que se propagaba como
+// excepción sin capturar hasta CUALQUIER caller: el checkout público
+// (GET /api/[tenant]/settings), la creación de pedidos (createOrder) y la
+// creación de preferencias de pago (resolvePaymentCredentials) — todos
+// terminaban en un 500 genérico en vez de degradar con gracia. Como esta
+// función YA modela "no hay token propio" como `null` (el caso normal de un
+// tenant que nunca conectó nada), tratar un refresh fallido igual —
+// devolver null en vez de relanzar — reusa ese mismo camino: los callers ya
+// saben caer al token global o mostrar "Mercado Pago no disponible".
 export async function getOwnAccessToken(tenantId: string): Promise<string | null> {
   const settings = await prisma.settings.findUnique({
     where: { tenantId },
@@ -151,16 +165,27 @@ export async function getOwnAccessToken(tenantId: string): Promise<string | null
     return decrypt(settings.mpAccessToken);
   }
 
-  const refreshed = await refreshAccessToken(decrypt(settings.mpRefreshToken));
-  await prisma.settings.update({
-    where: { tenantId },
-    data: {
-      mpAccessToken: encrypt(refreshed.accessToken),
-      mpRefreshToken: encrypt(refreshed.refreshToken),
-      mpTokenExpiresAt: new Date(Date.now() + refreshed.expiresInSeconds * 1000),
-    },
-  });
-  return refreshed.accessToken;
+  try {
+    const refreshed = await refreshAccessToken(decrypt(settings.mpRefreshToken));
+    await prisma.settings.update({
+      where: { tenantId },
+      data: {
+        mpAccessToken: encrypt(refreshed.accessToken),
+        mpRefreshToken: encrypt(refreshed.refreshToken),
+        mpTokenExpiresAt: new Date(Date.now() + refreshed.expiresInSeconds * 1000),
+      },
+    });
+    return refreshed.accessToken;
+  } catch (err) {
+    console.error(`Mercado Pago: falló el refresh del token propio (tenant ${tenantId}):`, err);
+    // El refresh es proactivo (arranca 24hs antes de vencer de verdad) — si
+    // falló pero el token guardado todavía no venció, sigue sirviendo. Solo
+    // se devuelve null si ya no queda nada usable.
+    if (expiresAt > Date.now()) {
+      return decrypt(settings.mpAccessToken);
+    }
+    return null;
+  }
 }
 
 // Resuelve con qué access token y qué notification_url cobrarle a un
