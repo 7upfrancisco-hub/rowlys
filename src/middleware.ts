@@ -29,12 +29,28 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/blend-admin") || pathname.startsWith("/api/blend-admin")) {
     const isLoginRoute =
       pathname === "/blend-admin/login" || pathname === "/api/blend-admin/login";
-    if (isLoginRoute) return NextResponse.next();
+    // El logout tiene que poder correr SIN sesión válida: si la cookie ya
+    // está vencida o corrompida, el usuario sigue queriendo poder limpiarla
+    // (y el logout no expone nada, solo la borra) — antes quedaba atrás del
+    // 401 de acá y nunca llegaba a la route handler que la borra de verdad.
+    const isLogoutRoute = pathname === "/api/blend-admin/logout";
+    if (isLoginRoute || isLogoutRoute) return NextResponse.next();
+
+    // GET .../mercadopago/connect no es un fetch: el botón "Conectar con
+    // Mercado Pago" de /blend-admin hace una navegación real de la ventana
+    // (tiene que terminar en la pantalla de autorización de MP), igual que
+    // cualquier página normal. Si la sesión venció justo ahí, tiene que
+    // redirigir a /blend-admin/login como cualquier página — un 401 JSON
+    // deja al usuario mirando una pantalla en blanco sin forma de volver.
+    const isMpConnectNavigation =
+      request.method === "GET" &&
+      /^\/api\/blend-admin\/tenants\/[^/]+\/mercadopago\/connect$/.test(pathname);
+    const isApiJsonRoute = pathname.startsWith("/api/") && !isMpConnectNavigation;
 
     const token = request.cookies.get(SUPERADMIN_SESSION_COOKIE)?.value;
     const session = token ? await verifySuperAdminSessionToken(token) : null;
     if (!session) {
-      if (pathname.startsWith("/api/")) {
+      if (isApiJsonRoute) {
         return NextResponse.json({ error: "No autorizado." }, { status: 401 });
       }
       const loginUrl = new URL("/blend-admin/login", request.url);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { OrderStatus } from "@/types";
 
@@ -107,15 +108,33 @@ export async function POST(request: Request) {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  const tenant = await prisma.$transaction(async (tx) => {
-    const t = await tx.tenant.create({ data: { slug, name } });
-    await tx.user.create({ data: { tenantId: t.id, username, passwordHash } });
-    await tx.settings.create({ data: { tenantId: t.id, storeName: name } });
-    return t;
-  });
+  try {
+    const tenant = await prisma.$transaction(async (tx) => {
+      const t = await tx.tenant.create({ data: { slug, name } });
+      await tx.user.create({ data: { tenantId: t.id, username, passwordHash } });
+      await tx.settings.create({ data: { tenantId: t.id, storeName: name } });
+      return t;
+    });
 
-  return NextResponse.json(
-    { id: tenant.id, slug: tenant.slug, name: tenant.name },
-    { status: 201 }
-  );
+    return NextResponse.json(
+      { id: tenant.id, slug: tenant.slug, name: tenant.name },
+      { status: 201 }
+    );
+  } catch (err) {
+    // El chequeo de arriba (`slugTaken`/`usernameTaken`) tiene una ventana de
+    // carrera: dos altas casi simultáneas con el mismo slug/usuario pueden
+    // pasarlo las dos y chocar recién acá, contra la restricción única real
+    // de la base. Sin este catch, esa carrera (poco común, pero posible con
+    // un doble click) volvía un 500 genérico en vez del 409 prolijo de
+    // siempre.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const target = (err.meta?.target as string[] | undefined) ?? [];
+      const field = target.some((t) => t.includes("username")) ? "usuario" : "slug";
+      return NextResponse.json(
+        { error: `Ese ${field} ya está en uso.` },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 }

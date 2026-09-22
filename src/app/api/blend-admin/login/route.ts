@@ -25,19 +25,27 @@ export async function POST(request: Request) {
     );
   }
 
-  if (
-    !body.username ||
-    !body.password ||
-    body.username !== expectedUsername ||
-    !(await bcrypt.compare(body.password, expectedHash))
-  ) {
+  // bcrypt.compare SIEMPRE corre, haya acertado el usuario o no — con `||`
+  // de corto circuito (como estaba antes), un usuario incorrecto devolvía el
+  // 401 sin llamar a bcrypt, mucho más rápido que una contraseña incorrecta
+  // con el usuario bien. Esa diferencia de tiempo es un canal lateral real
+  // para adivinar el usuario del super-admin a fuerza bruta. Si el usuario
+  // no coincide, se compara igual contra un hash cualquiera (el mismo
+  // `expectedHash`) solo para gastar el mismo tiempo, y después se descarta
+  // el resultado.
+  const usernameOk = !!body.username && body.username === expectedUsername;
+  const passwordOk = !!body.password && (await bcrypt.compare(body.password, expectedHash));
+  if (!usernameOk || !passwordOk) {
     return NextResponse.json(
       { error: "Usuario o contraseña incorrectos." },
       { status: 401 }
     );
   }
 
-  const token = await createSuperAdminSessionToken({ sub: body.username });
+  // `usernameOk` ya garantizó que body.username === expectedUsername; se usa
+  // expectedUsername acá porque TS no re-angosta el tipo de body.username a
+  // través de ese booleano.
+  const token = await createSuperAdminSessionToken({ sub: expectedUsername });
   const response = NextResponse.json({ ok: true });
   response.cookies.set(SUPERADMIN_SESSION_COOKIE, token, {
     httpOnly: true,

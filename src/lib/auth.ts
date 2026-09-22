@@ -86,8 +86,19 @@ export async function verifySuperAdminSessionToken(
 // tenantId acá mismo, vida corta (alcanza y sobra para que alguien
 // complete el login de Mercado Pago), y el callback lo verifica antes de
 // guardar nada.
+//
+// El claim `typ` es a propósito: sin él, este token es indistinguible de un
+// SessionPayload normal (ambos firmados con el mismo secreto y con un
+// `tenantId` string) — un tenant común podía tomar su propia cookie
+// `rowlys_session`, usarla como `state` en la URL de autorización de MP, y
+// el callback la aceptaba como si fuera un state legítimo, conectando MP a
+// su tenant sin pasar por el gate de super-admin de
+// /api/blend-admin/tenants/[id]/mercadopago/connect. Con `typ` fijo, un
+// SessionPayload (que nunca lo tiene) deja de servir como state.
+const MP_OAUTH_STATE_TYP = "mp_oauth_state";
+
 export async function createMpOAuthStateToken(tenantId: string): Promise<string> {
-  return new SignJWT({ tenantId })
+  return new SignJWT({ tenantId, typ: MP_OAUTH_STATE_TYP })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("10m")
@@ -97,7 +108,9 @@ export async function createMpOAuthStateToken(tenantId: string): Promise<string>
 export async function verifyMpOAuthStateToken(token: string): Promise<{ tenantId: string } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
-    if (typeof payload.tenantId !== "string") return null;
+    if (typeof payload.tenantId !== "string" || payload.typ !== MP_OAUTH_STATE_TYP) {
+      return null;
+    }
     return { tenantId: payload.tenantId };
   } catch {
     return null;
