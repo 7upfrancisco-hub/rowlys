@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenantId } from "@/lib/tenant";
-import { DISCOUNT_KIND_LABELS, formatCurrency, type DiscountKind } from "@/types";
+import { DISCOUNT_KIND_LABELS, formatCurrency, type DiscountKind, type OrderStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,23 @@ export const dynamic = "force-dynamic";
 // (no agregado) de cupones canjeados y de descuentos automáticos aplicados
 // en el rango elegido. "Manuales" no existe en Blend (no hay descuento
 // libre a mano en el checkout), por eso solo estos dos tipos.
+//
+// Mismo criterio de "facturable" que el resto de Reportes: un cupón o
+// descuento aplicado a un pedido que después se canceló (o que nunca se
+// aceptó) no cuenta — si no, el total de acá no cierra contra "Descuentos"
+// del reporte de Ventas para el mismo rango.
+const BILLABLE: OrderStatus[] = [
+  "CONFIRMED",
+  "IN_PROGRESS",
+  "READY",
+  "DELIVERED",
+];
+
+// Techo de filas para no devolver listados enormes en un rango muy amplio
+// (ej. "Este año" en un local con mucho uso de cupones). Si se llega al
+// techo, se avisa en el summary para que achiquen el rango.
+const MAX_ROWS = 1000;
+
 const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 function arParts(d: Date): { year: number; month: number; day: number } {
@@ -67,8 +84,13 @@ export async function GET(request: NextRequest) {
 
   if (typeKey === "cupones") {
     const redemptions = await prisma.couponRedemption.findMany({
-      where: { coupon: { tenantId }, createdAt: { gte: from, lt: to } },
+      where: {
+        coupon: { tenantId },
+        order: { status: { in: BILLABLE } },
+        createdAt: { gte: from, lt: to },
+      },
       orderBy: { createdAt: "asc" },
+      take: MAX_ROWS,
       select: {
         createdAt: true,
         discountAmount: true,
@@ -97,14 +119,21 @@ export async function GET(request: NextRequest) {
         `Total descontado: ${formatCurrency(
           Math.round(redemptions.reduce((s, r) => s + r.discountAmount, 0))
         )}`,
+        ...(redemptions.length === MAX_ROWS
+          ? [`Mostrando los primeros ${MAX_ROWS} — achicá el rango para ver todos.`]
+          : []),
       ],
     });
   }
 
   // automaticos
   const applications = await prisma.discountApplication.findMany({
-    where: { order: { tenantId }, createdAt: { gte: from, lt: to } },
+    where: {
+      order: { tenantId, status: { in: BILLABLE } },
+      createdAt: { gte: from, lt: to },
+    },
     orderBy: { createdAt: "asc" },
+    take: MAX_ROWS,
     select: {
       createdAt: true,
       amount: true,
@@ -132,6 +161,9 @@ export async function GET(request: NextRequest) {
       `Total descontado: ${formatCurrency(
         Math.round(applications.reduce((s, a) => s + a.amount, 0))
       )}`,
+      ...(applications.length === MAX_ROWS
+        ? [`Mostrando los primeros ${MAX_ROWS} — achicá el rango para ver todos.`]
+        : []),
     ],
   });
 }

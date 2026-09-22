@@ -120,8 +120,14 @@ export async function GET(request: NextRequest) {
     numericCols: [2, 3, 4],
     summary: [
       `Clientes distintos: ${all.length}`,
-      `Pedidos: ${orders.length}`,
-      `Facturado: ${formatCurrency(Math.round(orders.reduce((s, o) => s + o.total, 0)))}`,
+      // "de clientes identificados": estos pedidos son un subconjunto de los
+      // de Ventas para el mismo rango — quedan afuera los que no tienen
+      // Customer asociado (teléfono no normalizable, carga manual vieja).
+      // Aclarado en el rótulo para que no parezca que no cierra contra Ventas.
+      `Pedidos de clientes identificados: ${orders.length}`,
+      `Facturado por clientes identificados: ${formatCurrency(
+        Math.round(orders.reduce((s, o) => s + o.total, 0))
+      )}`,
     ],
   });
 }
