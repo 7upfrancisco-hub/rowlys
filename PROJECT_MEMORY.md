@@ -2829,3 +2829,21 @@ Mercado Pago y Transferencia bancaria, nada más.
 
 ### QZ Tray: cartel Allow/Block resuelto (2026-09-21)
 - Causa: el override.crt se llamaba `override.crt.txt` (extensión oculta en Windows). Se renombró a `override.crt`, se copió a `C:\Program Files\QZ Tray\override.crt` y se reinició QZ Tray → la comandera imprime sin cartel. El servidor de firma (`/api/admin/print/sign`) siempre estuvo bien.
+
+### Reportes en Métricas (hecho, 2026-09-22)
+Se agregó una pestaña "Reportes" en `/admin/metricas` (al lado de "Resumen"), inspirada en el panel de otro sistema (Rowly'S/RestoSimple) que el usuario mostró como referencia. Desplegable "Tipo de reporte" + "Dimensión temporal" (Hoy/Ayer/Últimos 7 días/Este mes/Mes anterior/Este año/Personalizado) + tabla en pantalla + Exportar PDF (reusa `src/lib/pdf-report.ts`).
+
+5 grupos implementados, cada uno con su propio endpoint (`src/app/api/admin/reports/<grupo>/route.ts`):
+- **Ventas** (`/ventas`): por día/mes, cruzado con canal, método de pago, repartidor, y "por categoría".
+- **Clientes** (`/clientes`): top 50 por ventas y por pedidos.
+- **Productos** (`/productos`): por producto y por categoría+producto.
+- **Cancelaciones** (`/cancelaciones`): por día/mes, cantidad y total perdido.
+- **Descuentos** (`/descuentos`): listado de cupones usados y de descuentos automáticos aplicados.
+
+**Pendiente para el futuro (decisión explícita del usuario, 2026-09-22): NO construir ahora.** Quedaron afuera porque Blend no tiene esos datos en el modelo:
+- **Caja / Gastos**: no existe ningún concepto de apertura/cierre de caja ni carga de gastos. Si se pide en el futuro, es un módulo nuevo (schema + CRUD + reportes), no un reporte sobre datos existentes.
+- **Facturación / Comprobantes**: Blend no emite comprobantes fiscales.
+- **Descuentos "Manuales"**: no hay carga de descuento libre a mano en el checkout (solo cupones y las 4 reglas automáticas).
+- **Ventas por plataforma**: no aplica, Rowlys no vende por PedidosYa/Rappi ni similares.
+
+De paso se corrigió un bug real: "Ventas por categoría" no sumaba el precio de los adicionales pagos al calcular la venta (solo el precio base del producto) — ya corregido, mismo criterio que `/api/admin/metrics/products`.
