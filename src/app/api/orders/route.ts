@@ -9,13 +9,20 @@ export const dynamic = "force-dynamic";
 // Barrido oportunista de pedidos MP abandonados. La comanda consulta este
 // endpoint cada 5s, así que con este throttle el barrido corre ~cada 10 min sin
 // necesidad de un cron. No bloquea la respuesta.
+//
+// El throttle es POR TENANT (Map), no una única variable global: en el
+// deploy multi-tenant, si fuera un solo timestamp compartido, el barrido de
+// un tenant podía "robarle" el turno al de otro (el primero que pasa los 10
+// min resetea el reloj para todos), dejando los pedidos fantasma de los
+// demás locales sin barrer mucho más tiempo del previsto.
 const SWEEP_EVERY_MS = 10 * 60 * 1000;
-let lastSweepAt = 0;
+const lastSweepAtByTenant = new Map<string, number>();
 
 function maybeSweepPhantomOrders(tenantId: string) {
   const now = Date.now();
+  const lastSweepAt = lastSweepAtByTenant.get(tenantId) ?? 0;
   if (now - lastSweepAt < SWEEP_EVERY_MS) return;
-  lastSweepAt = now;
+  lastSweepAtByTenant.set(tenantId, now);
   sweepPhantomOrders(tenantId)
     .then((n) => {
       if (n > 0) console.log(`Pedidos fantasma cancelados: ${n}`);

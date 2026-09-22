@@ -140,11 +140,15 @@ export async function resolveItems(
     }
 
     const selectedIds = new Set(item.optionIds ?? []);
-    const validOptionIds = new Set(
-      product.modifierGroups.flatMap((pmg) => pmg.group.options.map((o) => o.id))
-    );
+    const allOptions = product.modifierGroups.flatMap((pmg) => pmg.group.options);
+    const validOptionIds = new Set(allOptions.map((o) => o.id));
+    // Un adicional que el local desactivó (ej. se quedaron sin stock) no se
+    // puede seleccionar aunque el id exista — si no, un cliente con el menú
+    // en caché o un request armado a mano lo cuela en el pedido igual, con
+    // precio y todo, contradiciendo que el local lo apagó.
+    const activeOptionIds = new Set(allOptions.filter((o) => o.active).map((o) => o.id));
     for (const id of selectedIds) {
-      if (!validOptionIds.has(id)) {
+      if (!validOptionIds.has(id) || !activeOptionIds.has(id)) {
         return {
           ok: false,
           status: 400,
