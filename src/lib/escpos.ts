@@ -205,7 +205,7 @@ export function buildComandaTicket(order: OrderDTO, store: StoreInfo): string {
   // Canal + cliente, a x2. Sin dirección/teléfono/entrega estimada — esos
   // datos van en el ticket del cliente (Fase 21f), no hace falta duplicarlos
   // acá.
-  t += line(isDelivery ? "ENVIO" : "RETIRO", { size: "big", bold: true });
+  t += line(isDelivery ? "ENVIO" : "TAKEAWAY", { size: "big", bold: true });
   t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
     size: "big",
   });
@@ -241,7 +241,12 @@ export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
   if (store.phone) t += line(store.phone, { center: true });
   t += rule();
 
-  t += line(`Pedido #${order.number}`, { size: "big", bold: true });
+  // Pedido # con el canal al lado (T = takeaway, D = delivery), igual que en
+  // el ticket de cocina.
+  t += line(
+    (isDelivery ? "D " : "T ") + `Pedido #${order.number}`,
+    { size: "big", bold: true }
+  );
   t += line(fmtDateTime(order.createdAt), { size: "tall" });
 
   // Datos del cliente: este ticket es el que viaja con el pedido. Si es
@@ -250,7 +255,7 @@ export function buildClienteTicket(order: OrderDTO, store: StoreInfo): string {
   // nombre/teléfono — para que el local pueda ubicar/llamar al cliente sin
   // tener que volver al panel.
   t += rule();
-  t += line(isDelivery ? "ENVIO A:" : "RETIRA:", { size: "big", bold: true });
+  t += line(isDelivery ? "ENVIO A:" : "TAKEAWAY:", { size: "big", bold: true });
   t += line(`${order.customerFirstName} ${order.customerLastName}`.trim(), {
     size: "tall",
     bold: true,

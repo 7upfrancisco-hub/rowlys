@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import DailyRevenueChart from "@/components/DailyRevenueChart";
+import ReportesTab from "./reportes-tab";
 import {
   formatCurrency,
   ORDER_TYPE_LABELS,
@@ -72,6 +73,7 @@ function shiftMonth(month: string, delta: number): string {
 }
 
 export default function MetricasClient() {
+  const [tab, setTab] = useState<"resumen" | "reportes">("resumen");
   const [data, setData] = useState<MetricsHistory | null>(null);
   const [products, setProducts] = useState<ProductMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +132,7 @@ export default function MetricasClient() {
         <h2 className="text-2xl font-bold text-navy-900">
           Métricas e historial
         </h2>
-        {data && (
+        {tab === "resumen" && data && (
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -158,17 +160,26 @@ export default function MetricasClient() {
         )}
       </div>
 
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      <div className="mb-6 flex gap-2 border-b border-neutral-200">
+        <TabBtn label="Resumen" active={tab === "resumen"} onClick={() => setTab("resumen")} />
+        <TabBtn label="Reportes" active={tab === "reportes"} onClick={() => setTab("reportes")} />
+      </div>
 
-      {!data && loading && (
-        <p className="text-sm text-neutral-400">Cargando métricas…</p>
-      )}
+      {tab === "reportes" && <ReportesTab />}
 
-      {data && (
+      {tab === "resumen" && (
+        <>
+          {error && (
+            <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+
+          {!data && loading && (
+            <p className="text-sm text-neutral-400">Cargando métricas…</p>
+          )}
+
+          {data && (
         <div className={"space-y-4 " + (loading ? "opacity-60" : "")}>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Card
@@ -238,8 +249,35 @@ export default function MetricasClient() {
             pendientes sin aceptar ni los cancelados. Horario de Argentina.
           </p>
         </div>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function TabBtn({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "border-b-2 px-1 pb-2 text-sm font-semibold transition " +
+        (active
+          ? "border-brand-600 text-brand-700"
+          : "border-transparent text-neutral-500 hover:text-neutral-700")
+      }
+    >
+      {label}
+    </button>
   );
 }
 
