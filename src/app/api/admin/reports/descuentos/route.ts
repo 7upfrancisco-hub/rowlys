@@ -83,14 +83,16 @@ export async function GET(request: NextRequest) {
   }
 
   if (typeKey === "cupones") {
-    const redemptions = await prisma.couponRedemption.findMany({
+    const found = await prisma.couponRedemption.findMany({
       where: {
         coupon: { tenantId },
         order: { status: { in: BILLABLE } },
         createdAt: { gte: from, lt: to },
       },
       orderBy: { createdAt: "asc" },
-      take: MAX_ROWS,
+      // +1 para distinguir "hay exactamente MAX_ROWS" de "hay más que eso" y
+      // no mostrar el aviso de recorte cuando en realidad está todo.
+      take: MAX_ROWS + 1,
       select: {
         createdAt: true,
         discountAmount: true,
@@ -100,6 +102,8 @@ export async function GET(request: NextRequest) {
         },
       },
     });
+    const truncated = found.length > MAX_ROWS;
+    const redemptions = truncated ? found.slice(0, MAX_ROWS) : found;
 
     const rows = redemptions.map((r) => [
       arDate(r.createdAt),
@@ -119,7 +123,7 @@ export async function GET(request: NextRequest) {
         `Total descontado: ${formatCurrency(
           Math.round(redemptions.reduce((s, r) => s + r.discountAmount, 0))
         )}`,
-        ...(redemptions.length === MAX_ROWS
+        ...(truncated
           ? [`Mostrando los primeros ${MAX_ROWS} — achicá el rango para ver todos.`]
           : []),
       ],
@@ -127,13 +131,13 @@ export async function GET(request: NextRequest) {
   }
 
   // automaticos
-  const applications = await prisma.discountApplication.findMany({
+  const foundApps = await prisma.discountApplication.findMany({
     where: {
       order: { tenantId, status: { in: BILLABLE } },
       createdAt: { gte: from, lt: to },
     },
     orderBy: { createdAt: "asc" },
-    take: MAX_ROWS,
+    take: MAX_ROWS + 1,
     select: {
       createdAt: true,
       amount: true,
@@ -142,6 +146,8 @@ export async function GET(request: NextRequest) {
       order: { select: { number: true } },
     },
   });
+  const appsTruncated = foundApps.length > MAX_ROWS;
+  const applications = appsTruncated ? foundApps.slice(0, MAX_ROWS) : foundApps;
 
   const rows = applications.map((a) => [
     arDate(a.createdAt),
@@ -161,7 +167,7 @@ export async function GET(request: NextRequest) {
       `Total descontado: ${formatCurrency(
         Math.round(applications.reduce((s, a) => s + a.amount, 0))
       )}`,
-      ...(applications.length === MAX_ROWS
+      ...(appsTruncated
         ? [`Mostrando los primeros ${MAX_ROWS} — achicá el rango para ver todos.`]
         : []),
     ],

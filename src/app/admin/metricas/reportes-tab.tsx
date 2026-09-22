@@ -192,10 +192,12 @@ export default function ReportesTab() {
       .finally(() => setLoading(false));
   }
 
-  // Al cambiar de tipo de reporte, se limpia el resultado anterior para no
-  // mostrar una tabla vieja con el título de un reporte distinto.
+  // Al cambiar de tipo de reporte, se limpia el resultado y el error
+  // anteriores para no mostrar una tabla o un error viejo que ya no
+  // corresponde al reporte recién elegido.
   useEffect(() => {
     setResult(null);
+    setError(null);
   }, [type]);
 
   async function exportPdf() {
