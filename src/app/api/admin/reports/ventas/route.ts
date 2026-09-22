@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
         select: {
           quantity: true,
           price: true,
+          options: { select: { price: true } },
           product: { select: { category: { select: { name: true } } } },
         },
       },
@@ -151,8 +152,11 @@ export async function GET(request: NextRequest) {
       for (const it of o.items) {
         const name = it.product?.category.name ?? "Sin categoría";
         const cur = byCategory.get(name) ?? { units: 0, revenue: 0 };
+        // Precio de línea = (precio unitario + adicionales pagos) × cantidad,
+        // mismo criterio que /api/admin/metrics/products.
+        const optSum = it.options.reduce((s, x) => s + x.price, 0);
         cur.units += it.quantity;
-        cur.revenue += it.price * it.quantity;
+        cur.revenue += (it.price + optSum) * it.quantity;
         byCategory.set(name, cur);
       }
     }

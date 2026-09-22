@@ -18,10 +18,18 @@ type ReportResult = {
 // y Descuentos — se suman en fases siguientes.
 const REPORTS_ENDPOINT = "/api/admin/reports/ventas";
 const CLIENTS_ENDPOINT = "/api/admin/reports/clientes";
+const PRODUCTS_ENDPOINT = "/api/admin/reports/productos";
+const CANCEL_ENDPOINT = "/api/admin/reports/cancelaciones";
+const DISCOUNTS_ENDPOINT = "/api/admin/reports/descuentos";
 
+// `value` identifica la opción en el <select> (tiene que ser único en TODO
+// el desplegable, cruzando grupos). `apiType`, si es distinto, es lo que
+// realmente se manda como ?type= al backend — hace falta cuando dos grupos
+// usan la misma clave de tipo puertas adentro (ej. "day"/"month" en Ventas y
+// en Cancelaciones).
 const GROUPS: {
   label: string;
-  types: { value: string; label: string; endpoint: string }[];
+  types: { value: string; label: string; endpoint: string; apiType?: string }[];
 }[] = [
   {
     label: "Ventas",
@@ -52,6 +60,41 @@ const GROUPS: {
     types: [
       { value: "top_revenue", label: "Clientes por ventas (top 50)", endpoint: CLIENTS_ENDPOINT },
       { value: "top_orders", label: "Clientes por pedidos (top 50)", endpoint: CLIENTS_ENDPOINT },
+    ],
+  },
+  {
+    label: "Productos",
+    types: [
+      { value: "by_product", label: "Ventas por producto", endpoint: PRODUCTS_ENDPOINT },
+      {
+        value: "by_category_product",
+        label: "Ventas por categoría, producto",
+        endpoint: PRODUCTS_ENDPOINT,
+      },
+    ],
+  },
+  {
+    label: "Cancelaciones",
+    types: [
+      {
+        value: "cancel_day",
+        label: "Cancelaciones por día",
+        endpoint: CANCEL_ENDPOINT,
+        apiType: "day",
+      },
+      {
+        value: "cancel_month",
+        label: "Cancelaciones por mes",
+        endpoint: CANCEL_ENDPOINT,
+        apiType: "month",
+      },
+    ],
+  },
+  {
+    label: "Descuentos",
+    types: [
+      { value: "cupones", label: "Cupones usados", endpoint: DISCOUNTS_ENDPOINT },
+      { value: "automaticos", label: "Descuentos automáticos", endpoint: DISCOUNTS_ENDPOINT },
     ],
   },
 ];
@@ -135,9 +178,11 @@ export default function ReportesTab() {
     }
     setError(null);
     setLoading(true);
-    const endpoint = TYPE_BY_VALUE.get(type)?.endpoint ?? REPORTS_ENDPOINT;
+    const picked = TYPE_BY_VALUE.get(type);
+    const endpoint = picked?.endpoint ?? REPORTS_ENDPOINT;
+    const apiType = picked?.apiType ?? type;
     apiFetch<ReportResult>(
-      `${endpoint}?type=${type}&from=${range.from}&to=${range.to}`
+      `${endpoint}?type=${apiType}&from=${range.from}&to=${range.to}`
     )
       .then(setResult)
       .catch((err: ApiError) => {
