@@ -11,27 +11,54 @@ type ReportResult = {
   summary: string[];
 };
 
-// Grupos y tipos disponibles (coinciden con REPORT_TYPES del backend). Por
-// ahora solo "Ventas" — las otras categorías (Clientes, Productos,
-// Cancelaciones, Descuentos) se suman en fases siguientes.
-const GROUPS: { label: string; types: { value: string; label: string }[] }[] = [
+// Grupos y tipos disponibles (coinciden con REPORT_TYPES de cada endpoint
+// backend). Cada tipo sabe a qué ruta pegarle — así el selector puede mezclar
+// reportes de distintas familias (Ventas, Clientes, ...) sin que el
+// componente tenga que saber nada de ellas. Faltan Productos, Cancelaciones
+// y Descuentos — se suman en fases siguientes.
+const REPORTS_ENDPOINT = "/api/admin/reports/ventas";
+const CLIENTS_ENDPOINT = "/api/admin/reports/clientes";
+
+const GROUPS: {
+  label: string;
+  types: { value: string; label: string; endpoint: string }[];
+}[] = [
   {
     label: "Ventas",
     types: [
-      { value: "day", label: "Ventas por día" },
-      { value: "day_channel", label: "Ventas por día, canal" },
-      { value: "day_payment", label: "Ventas por día, método de pago" },
-      { value: "day_channel_payment", label: "Ventas por día, canal y método de pago" },
-      { value: "day_driver", label: "Ventas por día, repartidor" },
-      { value: "month", label: "Ventas por mes" },
-      { value: "month_channel", label: "Ventas por mes, canal" },
-      { value: "month_payment", label: "Ventas por mes, método de pago" },
-      { value: "month_channel_payment", label: "Ventas por mes, canal y método de pago" },
-      { value: "month_driver", label: "Ventas por mes, repartidor" },
-      { value: "category", label: "Ventas por categoría" },
+      { value: "day", label: "Ventas por día", endpoint: REPORTS_ENDPOINT },
+      { value: "day_channel", label: "Ventas por día, canal", endpoint: REPORTS_ENDPOINT },
+      { value: "day_payment", label: "Ventas por día, método de pago", endpoint: REPORTS_ENDPOINT },
+      {
+        value: "day_channel_payment",
+        label: "Ventas por día, canal y método de pago",
+        endpoint: REPORTS_ENDPOINT,
+      },
+      { value: "day_driver", label: "Ventas por día, repartidor", endpoint: REPORTS_ENDPOINT },
+      { value: "month", label: "Ventas por mes", endpoint: REPORTS_ENDPOINT },
+      { value: "month_channel", label: "Ventas por mes, canal", endpoint: REPORTS_ENDPOINT },
+      { value: "month_payment", label: "Ventas por mes, método de pago", endpoint: REPORTS_ENDPOINT },
+      {
+        value: "month_channel_payment",
+        label: "Ventas por mes, canal y método de pago",
+        endpoint: REPORTS_ENDPOINT,
+      },
+      { value: "month_driver", label: "Ventas por mes, repartidor", endpoint: REPORTS_ENDPOINT },
+      { value: "category", label: "Ventas por categoría", endpoint: REPORTS_ENDPOINT },
+    ],
+  },
+  {
+    label: "Clientes",
+    types: [
+      { value: "top_revenue", label: "Clientes por ventas (top 50)", endpoint: CLIENTS_ENDPOINT },
+      { value: "top_orders", label: "Clientes por pedidos (top 50)", endpoint: CLIENTS_ENDPOINT },
     ],
   },
 ];
+
+const TYPE_BY_VALUE = new Map(
+  GROUPS.flatMap((g) => g.types).map((t) => [t.value, t])
+);
 
 type RangePreset = "today" | "yesterday" | "week" | "month" | "last_month" | "year" | "custom";
 
@@ -108,8 +135,9 @@ export default function ReportesTab() {
     }
     setError(null);
     setLoading(true);
+    const endpoint = TYPE_BY_VALUE.get(type)?.endpoint ?? REPORTS_ENDPOINT;
     apiFetch<ReportResult>(
-      `/api/admin/reports/ventas?type=${type}&from=${range.from}&to=${range.to}`
+      `${endpoint}?type=${type}&from=${range.from}&to=${range.to}`
     )
       .then(setResult)
       .catch((err: ApiError) => {
@@ -168,26 +196,24 @@ export default function ReportesTab() {
           </select>
         </label>
 
-        {type !== "category" && (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold text-neutral-700">
-              Dimensión temporal <span className="text-red-600">*</span>
-            </span>
-            <select
-              value={preset}
-              onChange={(e) => setPreset(e.target.value as RangePreset)}
-              className="rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-            >
-              {PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-semibold text-neutral-700">
+            Dimensión temporal <span className="text-red-600">*</span>
+          </span>
+          <select
+            value={preset}
+            onChange={(e) => setPreset(e.target.value as RangePreset)}
+            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            {PRESETS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
-        {type !== "category" && preset === "custom" && (
+        {preset === "custom" && (
           <>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-semibold text-neutral-700">Desde</span>
