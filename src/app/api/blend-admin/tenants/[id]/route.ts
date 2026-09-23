@@ -4,6 +4,56 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+// Detalle de un local para /blend-admin/tenants/[id]: datos de contacto,
+// usuarios (sin passwordHash — la contraseña nunca sale del server, ni
+// siquiera hasheada, no hay motivo para exponerla) y un resumen del menú.
+// Nunca incluye mpAccessToken/mpRefreshToken (mismo criterio que
+// /api/admin/settings desde la corrección de la revisión general).
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: params.id },
+    include: {
+      users: {
+        select: { id: true, username: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      },
+      settings: {
+        select: {
+          storePhone: true,
+          storeAddress: true,
+          instagramHandle: true,
+          tiktokHandle: true,
+          bankAlias: true,
+        },
+      },
+    },
+  });
+  if (!tenant) {
+    return NextResponse.json({ error: "El local no existe." }, { status: 404 });
+  }
+
+  const [categoryCount, productCount, customerCount] = await Promise.all([
+    prisma.category.count({ where: { tenantId: tenant.id } }),
+    prisma.product.count({ where: { tenantId: tenant.id } }),
+    prisma.customer.count({ where: { tenantId: tenant.id } }),
+  ]);
+
+  return NextResponse.json({
+    id: tenant.id,
+    slug: tenant.slug,
+    name: tenant.name,
+    active: tenant.active,
+    createdAt: tenant.createdAt,
+    users: tenant.users,
+    settings: tenant.settings,
+    menu: { categoryCount, productCount },
+    customerCount,
+  });
+}
+
 const patchSchema = z.object({ active: z.boolean() });
 
 // Por ahora solo activar/desactivar un local. Un tenant inactivo sigue

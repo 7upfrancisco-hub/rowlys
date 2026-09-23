@@ -15,17 +15,23 @@ const BILLABLE: OrderStatus[] = ["CONFIRMED", "IN_PROGRESS", "READY", "DELIVERED
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = (searchParams.get("search") ?? "").trim();
+  // Filtro opcional por local, para la pestaña "Clientes" de
+  // /blend-admin/tenants/[id] — sin esto, es la vista de toda la plataforma.
+  const tenantId = searchParams.get("tenantId")?.trim() || undefined;
   const digits = search.replace(/\D/g, "");
 
-  const where = search
-    ? {
-        OR: [
-          { firstName: { contains: search, mode: "insensitive" as const } },
-          { lastName: { contains: search, mode: "insensitive" as const } },
-          ...(digits ? [{ phone: { contains: digits } }] : []),
-        ],
-      }
-    : {};
+  const where = {
+    ...(tenantId ? { tenantId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { firstName: { contains: search, mode: "insensitive" as const } },
+            { lastName: { contains: search, mode: "insensitive" as const } },
+            ...(digits ? [{ phone: { contains: digits } }] : []),
+          ],
+        }
+      : {}),
+  };
 
   const customers = await prisma.customer.findMany({
     where,

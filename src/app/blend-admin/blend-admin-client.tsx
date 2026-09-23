@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/types";
 import BlendAdminHeader from "@/components/BlendAdminHeader";
@@ -341,7 +342,12 @@ export default function BlendAdminClient() {
                 {tenants.map((t) => (
                   <tr key={t.id}>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-neutral-900">{t.name}</p>
+                      <Link
+                        href={`/blend-admin/tenants/${t.id}`}
+                        className="font-medium text-neutral-900 hover:text-navy-700 hover:underline"
+                      >
+                        {t.name}
+                      </Link>
                       <p className="font-mono text-xs text-neutral-400">
                         /{t.slug}
                       </p>
