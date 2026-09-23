@@ -54,12 +54,28 @@ export async function GET(
   });
 }
 
-const patchSchema = z.object({ active: z.boolean() });
+// `slug` es opcional a propósito: el toggle Activo/Inactivo de la tabla del
+// dashboard solo manda `active`, sin tocar el resto.
+const patchSchema = z.object({
+  active: z.boolean().optional(),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(
+      /^[a-z0-9]+(-[a-z0-9]+)*$/,
+      "El slug solo puede tener minúsculas, números y guiones (ej. \"mi-local\")."
+    )
+    .optional(),
+});
 
-// Por ahora solo activar/desactivar un local. Un tenant inactivo sigue
-// existiendo con todos sus datos — no borra nada, es un toggle nomás (queda
-// para más adelante decidir qué implica exactamente "inactivo" para el
-// checkout/menú de ese local, la Fase 26c todavía no toca el storefront).
+// Activar/desactivar un local (no borra nada) y, desde la Fase de detalle
+// por tenant, también renombrar su slug — cambia la URL pública
+// (blend.app/<slug>/menu) y NO deja redirección desde el slug viejo: si ya
+// se repartieron QR o links con el slug anterior, dejan de servir. Pensado
+// para corregir un slug mal elegido al crear el local (ej. quedó con un
+// nombre provisorio), no para renombrar un local en producción con tráfico
+// real sin avisar.
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
@@ -77,9 +93,17 @@ export async function PATCH(
     return NextResponse.json({ error: "El local no existe." }, { status: 404 });
   }
 
+  const { active, slug } = parsed.data;
+  if (slug && slug !== existing.slug) {
+    const slugTaken = await prisma.tenant.findUnique({ where: { slug } });
+    if (slugTaken) {
+      return NextResponse.json({ error: "Ese slug ya está en uso." }, { status: 409 });
+    }
+  }
+
   const tenant = await prisma.tenant.update({
     where: { id: params.id },
-    data: { active: parsed.data.active },
+    data: { ...(active !== undefined ? { active } : {}), ...(slug ? { slug } : {}) },
   });
   return NextResponse.json(tenant);
 }

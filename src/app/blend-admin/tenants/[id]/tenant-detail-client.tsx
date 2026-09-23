@@ -143,6 +143,10 @@ export default function TenantDetailClient({
   const [customerSearch, setCustomerSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [entering, setEntering] = useState(false);
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [slugValue, setSlugValue] = useState("");
+  const [slugSaving, setSlugSaving] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<TenantDetail>(`/api/blend-admin/tenants/${tenantId}`)
@@ -160,6 +164,25 @@ export default function TenantDetailClient({
     }, 250);
     return () => clearTimeout(t);
   }, [tenantId, customerSearch]);
+
+  async function saveSlug(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tenant) return;
+    setSlugError(null);
+    setSlugSaving(true);
+    try {
+      const updated = await apiFetch<{ slug: string }>(
+        `/api/blend-admin/tenants/${tenant.id}`,
+        { method: "PATCH", body: JSON.stringify({ slug: slugValue }) }
+      );
+      setTenant({ ...tenant, slug: updated.slug });
+      setEditingSlug(false);
+    } catch (err) {
+      setSlugError((err as ApiError).message);
+    } finally {
+      setSlugSaving(false);
+    }
+  }
 
   async function enterTenant() {
     if (!tenant) return;
@@ -202,9 +225,58 @@ export default function TenantDetailClient({
                 <h2 className="text-2xl font-bold text-navy-900">
                   {tenant.name}
                 </h2>
-                <p className="font-mono text-sm text-neutral-400">
-                  /{tenant.slug}
-                </p>
+                {editingSlug ? (
+                  <form onSubmit={saveSlug} className="mt-1 flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm text-neutral-400">/</span>
+                    <input
+                      value={slugValue}
+                      onChange={(e) => setSlugValue(e.target.value)}
+                      autoFocus
+                      className="w-40 rounded-lg border border-neutral-300 px-2 py-1 font-mono text-sm focus:border-navy-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={slugSaving || !slugValue.trim()}
+                      className="text-xs font-semibold text-navy-700 hover:underline disabled:opacity-50"
+                    >
+                      {slugSaving ? "Guardando..." : "Guardar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSlug(false);
+                        setSlugError(null);
+                      }}
+                      className="text-xs font-medium text-neutral-500 hover:underline"
+                    >
+                      Cancelar
+                    </button>
+                  </form>
+                ) : (
+                  <p className="font-mono text-sm text-neutral-400">
+                    /{tenant.slug}{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSlugValue(tenant.slug);
+                        setEditingSlug(true);
+                        setSlugError(null);
+                      }}
+                      className="font-sans text-xs font-medium text-navy-700 hover:underline"
+                    >
+                      Editar
+                    </button>
+                  </p>
+                )}
+                {slugError && (
+                  <p className="mt-1 text-xs text-red-600">{slugError}</p>
+                )}
+                {editingSlug && !slugError && (
+                  <p className="mt-1 max-w-sm text-xs text-neutral-400">
+                    Cambia la URL pública (…/{slugValue || tenant.slug}/menu). Los
+                    links o QR con /{tenant.slug} viejo dejan de funcionar.
+                  </p>
+                )}
                 <span
                   className={
                     "mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold " +
