@@ -14,7 +14,12 @@ const CONFIG_LINKS = [
   {
     href: "/admin/configuracion",
     label: "Datos del local",
-    desc: "Envío, alias bancario, horarios",
+    desc: "Envío, redes, horarios",
+  },
+  {
+    href: "/admin/configuracion/metodos-pago",
+    label: "Métodos de pago",
+    desc: "Efectivo, Mercado Pago y transferencia",
   },
   {
     href: "/admin/zonas-envio",

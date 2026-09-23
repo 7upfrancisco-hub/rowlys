@@ -509,6 +509,11 @@ model Settings {
   // isMpAvailableForTenant en src/lib/payments/mercadopago.ts, que combina
   // esto con la disponibilidad técnica real.
   mpEnabled               Boolean  @default(true)
+  // Apagado manual de Efectivo y de la transferencia bancaria MANUAL (no
+  // Mercado Pago), sección "Métodos de pago" de /admin/configuracion.
+  // Mismo patrón que mpEnabled — el checkout deja de ofrecerlos como opción.
+  cashEnabled             Boolean  @default(true)
+  bankTransferEnabled     Boolean  @default(true)
   closedTitle             String?
   closedMessage           String?
   closedImageUrl          String?

@@ -23,6 +23,8 @@ interface PublicSettings {
   deliveryFee: number;
   bankAlias: string | null;
   mpEnabled: boolean;
+  cashEnabled: boolean;
+  bankTransferEnabled: boolean;
   storeOpen: boolean;
   deliveryEnabled: boolean;
   pickupEnabled: boolean;
@@ -227,6 +229,26 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automatic.itemsTotal]);
 
+  // El default es "CASH". Si Efectivo está apagado, se pasa solo a
+  // Transferencia apenas llega settings (y viceversa, por si algún día el
+  // default cambiara) — sin esto, un cliente que nunca toca el selector de
+  // medio de pago terminaría intentando pagar con algo que el local apagó.
+  // Deliberadamente solo depende de `settings` (no de `paymentMethod`): así
+  // corrige el default una vez al cargar, sin pelearse con un click manual
+  // del cliente después.
+  useEffect(() => {
+    if (!settings) return;
+    if (paymentMethod === "CASH" && !settings.cashEnabled) {
+      setPaymentMethod("TRANSFER");
+    } else if (
+      paymentMethod === "TRANSFER" &&
+      !settings.mpEnabled &&
+      !settings.bankTransferEnabled
+    ) {
+      setPaymentMethod("CASH");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
   // Pedir queda bloqueado si el local está cerrado o el canal elegido pausado.
   const storeClosed = !!settings && !settings.storeOpen;
@@ -236,12 +258,20 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
     (orderType === "DELIVERY"
       ? !settings.deliveryEnabled
       : !settings.pickupEnabled);
-  const orderBlocked = storeClosed || channelPaused;
+  // "Transferencia" (la pill) solo sirve si alguna de las dos formas que
+  // puede tomar (MP real, o transferencia manual con alias) está prendida.
+  const showCashPill = !settings || settings.cashEnabled;
+  const showTransferPill = !settings || settings.mpEnabled || settings.bankTransferEnabled;
+  const noPaymentMethods = !!settings && !showCashPill && !showTransferPill;
+
+  const orderBlocked = storeClosed || channelPaused || noPaymentMethods;
   const orderBlockedReason = storeClosed
     ? settings?.closedTitle || "El local está cerrado en este momento"
-    : orderType === "DELIVERY"
-      ? "El envío a domicilio está pausado en este momento"
-      : "El retiro en el local está pausado en este momento";
+    : channelPaused
+      ? orderType === "DELIVERY"
+        ? "El envío a domicilio está pausado en este momento"
+        : "El retiro en el local está pausado en este momento"
+      : "No hay medios de pago disponibles en este momento";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -449,20 +479,24 @@ export default function CheckoutClient({ tenantSlug }: { tenantSlug: string }) {
           <section className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-6 shadow-sm">
             <h2 className="font-semibold text-fg">Método de pago</h2>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("CASH")}
-                className={pillClass(paymentMethod === "CASH")}
-              >
-                Efectivo
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("TRANSFER")}
-                className={pillClass(paymentMethod === "TRANSFER")}
-              >
-                Transferencia
-              </button>
+              {showCashPill && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("CASH")}
+                  className={pillClass(paymentMethod === "CASH")}
+                >
+                  Efectivo
+                </button>
+              )}
+              {showTransferPill && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("TRANSFER")}
+                  className={pillClass(paymentMethod === "TRANSFER")}
+                >
+                  Transferencia
+                </button>
+              )}
             </div>
             {paymentMethod === "CASH" && (
               <input

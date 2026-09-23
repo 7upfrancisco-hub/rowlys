@@ -16,7 +16,21 @@ export async function GET(request: Request) {
   // tenantSlug: para armar links a la carta pública (/<slug>/menu,
   // /<slug>/pedido/<id>) desde /comanda y /admin sin tener que resolverlo de
   // nuevo en cada pantalla.
-  if (settings) return NextResponse.json({ ...settings, tenantSlug: tenant?.slug ?? null });
+  if (settings) {
+    // mpAccessToken/mpRefreshToken nunca deberían salir del server (están
+    // encriptados en reposo, pero no hay motivo para mandar ni el texto
+    // cifrado al navegador) — se sacan del spread y se reemplazan por
+    // mpOwnConnected, el único dato que la sección "Métodos de pago"
+    // necesita mostrar (conectado / no conectado).
+    const { mpAccessToken, mpRefreshToken, ...rest } = settings;
+    void mpAccessToken;
+    void mpRefreshToken;
+    return NextResponse.json({
+      ...rest,
+      tenantSlug: tenant?.slug ?? null,
+      mpOwnConnected: !!settings.mpConnectedAt,
+    });
+  }
 
   return NextResponse.json({
     tenantId,
@@ -32,6 +46,9 @@ export async function GET(request: Request) {
     deliveryEnabled: true,
     pickupEnabled: true,
     mpEnabled: true,
+    cashEnabled: true,
+    bankTransferEnabled: true,
+    mpOwnConnected: false,
     closedTitle: null,
     closedMessage: null,
     closedImageUrl: null,
@@ -63,6 +80,8 @@ const settingsSchema = z.object({
   deliveryEnabled: z.boolean().optional(),
   pickupEnabled: z.boolean().optional(),
   mpEnabled: z.boolean().optional(),
+  cashEnabled: z.boolean().optional(),
+  bankTransferEnabled: z.boolean().optional(),
   closedTitle: z.string().trim().optional(),
   closedMessage: z.string().trim().optional(),
   closedImageUrl: z.string().trim().nullable().optional(),
@@ -116,5 +135,9 @@ export async function PATCH(request: Request) {
     update: body,
   });
 
-  return NextResponse.json(settings);
+  // Mismo criterio que el GET: nunca devolver los tokens de MP al navegador.
+  const { mpAccessToken, mpRefreshToken, ...rest } = settings;
+  void mpAccessToken;
+  void mpRefreshToken;
+  return NextResponse.json({ ...rest, mpOwnConnected: !!settings.mpConnectedAt });
 }

@@ -441,6 +441,25 @@ export async function createOrder(
         error: "El retiro en el local está pausado en este momento.",
       };
     }
+    // Mismo criterio que deliveryEnabled/pickupEnabled: una pausa de canal
+    // que el staff SÍ puede pasar por alto cargando el pedido a mano desde
+    // /comanda (por eso va adentro de enforceStoreStatus, a diferencia del
+    // chequeo de MP de abajo — ahí no hay forma técnica de cobrar, acá es
+    // una decisión del local que el propio local puede saltear).
+    if (body.paymentMethod === "CASH" && !settings.cashEnabled) {
+      return {
+        ok: false,
+        status: 409,
+        error: "Efectivo no está disponible como medio de pago en este momento.",
+      };
+    }
+    if (body.paymentMethod === "BANK_TRANSFER" && !settings.bankTransferEnabled) {
+      return {
+        ok: false,
+        status: 409,
+        error: "La transferencia bancaria no está disponible en este momento.",
+      };
+    }
   }
 
   // Rechazo siempre (no solo cuando enforceStoreStatus), incluso en la carga
