@@ -129,11 +129,23 @@ export async function PATCH(request: Request) {
   // si todavía no existe Settings para este tenant y el PATCH no lo manda
   // (ej. el toggle suelto del header de /comanda), usamos "Mi local" en vez
   // de fallar — se corrige después desde /admin/configuracion.
-  const settings = await prisma.settings.upsert({
-    where: { tenantId },
-    create: { tenantId, storeName: "Mi local", ...body },
-    update: body,
-  });
+  const [settings] = await prisma.$transaction([
+    prisma.settings.upsert({
+      where: { tenantId },
+      create: { tenantId, storeName: "Mi local", ...body },
+      update: body,
+    }),
+    // Tenant.name y Settings.storeName son dos campos separados: el primero
+    // lo carga el super-admin al dar de alta el local (Fase 26c), el segundo
+    // lo edita cada local desde acá. Sin este update quedaban
+    // desincronizados — el local cambiaba su nombre y /blend-admin (la tabla
+    // y la ficha de detalle) seguía mostrando el nombre viejo. Se sincroniza
+    // en el mismo `$transaction` que el upsert de Settings para que las dos
+    // escrituras salgan o entren juntas.
+    ...(body.storeName
+      ? [prisma.tenant.update({ where: { id: tenantId }, data: { name: body.storeName } })]
+      : []),
+  ]);
 
   // Mismo criterio que el GET: nunca devolver los tokens de MP al navegador.
   const { mpAccessToken, mpRefreshToken, ...rest } = settings;
