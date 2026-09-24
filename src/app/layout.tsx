@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+// Título de respaldo para cualquier página sin el suyo propio (/admin,
+// /comanda, /login, /blend-admin, /) — Blend es la marca de la plataforma,
+// no la de ningún local. Las páginas públicas de cada tenant (menú,
+// checkout, pedido) pisan esto con el nombre real del local en su propio
+// generateMetadata; acá abajo, "Blend" es lo correcto siempre.
 export const metadata: Metadata = {
-  title: "Rowlys | Pedidos online",
+  title: "Blend",
   description: "Menú digital y comanda para locales gastronómicos",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default" },
