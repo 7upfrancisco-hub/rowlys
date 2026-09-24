@@ -2847,3 +2847,9 @@ Se agregó una pestaña "Reportes" en `/admin/metricas` (al lado de "Resumen"), 
 - **Ventas por plataforma**: no aplica, Rowlys no vende por PedidosYa/Rappi ni similares.
 
 De paso se corrigió un bug real: "Ventas por categoría" no sumaba el precio de los adicionales pagos al calcular la venta (solo el precio base del producto) — ya corregido, mismo criterio que `/api/admin/metrics/products`.
+
+## Aclaración de marca: Blend ≠ Rowlys (2026-09-23)
+
+El usuario aclaró explícitamente: **Blend es la marca/SaaS** (lo que vende), **Rowlys es un cliente/tenant** — el primero, usado para probar. **Esta semana (semana del 2026-09-23) arranca la producción real de Blend en Rowlys**, deja de ser un tenant de prueba.
+
+Se hizo un barrido de textos "Rowlys" fijos que podían aparecer en el storefront/panel de CUALQUIER local nuevo (ver commits del 2026-09-23: título de pestaña, header del menú, comanda, íconos PWA, defaults de Settings.storeName). Quedó pendiente, a propósito, un caso: **la home del sitio (`/`, `src/app/page.tsx`) sigue mostrando "Rowlys" a mano** como si fuera la marca del sitio entero — decisión deliberada de una fase anterior ("single-tenant a propósito, sin listar locales"), documentada en el código, pendiente de resolver junto con el rediseño de portada/login de Blend que se había empezado a discutir (logo sin elegir, estilo de portada sin definir, ver "Blend rebrand UI" en memoria de Claude).
