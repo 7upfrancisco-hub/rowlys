@@ -7,13 +7,19 @@ import { resolveTenantBySlug } from "@/lib/public-tenant";
 export const dynamic = "force-dynamic";
 
 // Ver la nota en src/app/[tenant]/menu/page.tsx sobre por qué esto se enlaza
-// a mano en vez de usar el archivo especial `manifest.ts`.
-export function generateMetadata({
+// a mano en vez de usar el archivo especial `manifest.ts` — y sobre por qué
+// el título también se resuelve acá (nombre del local, no el fallback fijo
+// "Rowlys" del layout raíz).
+export async function generateMetadata({
   params,
 }: {
   params: { tenant: string; id: string };
-}): Metadata {
-  return { manifest: `/${params.tenant}/manifest.webmanifest` };
+}): Promise<Metadata> {
+  const tenant = await resolveTenantBySlug(params.tenant);
+  return {
+    title: tenant ? `${tenant.name} | Pedidos online` : undefined,
+    manifest: `/${params.tenant}/manifest.webmanifest`,
+  };
 }
 
 export default async function PedidoPage({
