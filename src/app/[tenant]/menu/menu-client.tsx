@@ -186,7 +186,7 @@ export default function MenuClient({ tenantSlug }: { tenantSlug: string }) {
 
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted">
-              {storeInfo?.storeName ?? "Rowlys"}
+              {storeInfo?.storeName ?? ""}
             </p>
             <h1 className="mt-1 text-2xl font-bold text-accent">
               {storeInfo?.closedTitle || "Estamos cerrados"}
@@ -237,7 +237,7 @@ export default function MenuClient({ tenantSlug }: { tenantSlug: string }) {
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
           <div className="relative flex h-full flex-col justify-end px-6 py-4">
             <h1 className="text-xl font-bold text-white drop-shadow-sm sm:text-2xl">
-              {storeInfo?.storeName || "Rowlys"}
+              {storeInfo?.storeName || ""}
             </h1>
             {!readOnly && (
               <ChannelToggle
@@ -252,7 +252,7 @@ export default function MenuClient({ tenantSlug }: { tenantSlug: string }) {
       ) : (
         <header className="border-b border-line bg-surface px-6 py-4">
           <h1 className="text-xl font-bold text-accent">
-            {storeInfo?.storeName || "Rowlys"}
+            {storeInfo?.storeName || ""}
           </h1>
           {!readOnly && (
             <ChannelToggle
@@ -377,7 +377,7 @@ function StoreFooter({ storeInfo }: { storeInfo: StoreInfo | null }) {
         />
       )}
       <div className="relative order-2 mx-auto flex max-w-3xl flex-col items-center gap-3 text-center sm:order-none">
-        <p className="text-lg font-bold">{storeInfo?.storeName ?? "Rowlys"}</p>
+        <p className="text-lg font-bold">{storeInfo?.storeName ?? ""}</p>
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           {storeInfo?.storeAddress && (
             <a

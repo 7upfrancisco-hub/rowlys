@@ -36,7 +36,12 @@ export async function GET(request: Request) {
     tenantId,
     tenantSlug: tenant?.slug ?? null,
     deliveryFee: 0,
-    storeName: "Rowlys",
+    // Mismo neutro que usa el PATCH de acá abajo al crear la fila por
+    // primera vez — este tenant todavía no tiene Settings (no debería pasar
+    // para uno creado por el flujo normal de alta, que siempre la crea con
+    // el nombre real, pero por las dudas no hay que mostrarle "Rowlys" al
+    // dueño de OTRO local en su propio panel).
+    storeName: "Mi local",
     storePhone: null,
     storeAddress: null,
     instagramHandle: null,

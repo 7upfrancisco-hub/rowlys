@@ -185,8 +185,13 @@ function Stat({
 
 export default function ComandaClient() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
-  const [storeName, setStoreName] = useState("Rowlys");
-  const [tenantSlug, setTenantSlug] = useState("rowlys");
+  // Vacío hasta que responda /api/admin/settings (fetchStoreStatus, abajo):
+  // un valor fijo tipo "Rowlys"/"rowlys" acá se veía brevemente en CUALQUIER
+  // local nuevo antes de que cargue el de verdad — nombre incorrecto en el
+  // header, y el link de seguimiento armado con el slug viejo si alguien
+  // llegaba a copiarlo en esa ventana.
+  const [storeName, setStoreName] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
   const [storeStatus, setStoreStatus] = useState<{
     storeOpen: boolean;
     deliveryEnabled: boolean;

@@ -30,7 +30,7 @@ export default async function AppleIcon({
 
   return renderPwaIcon(
     180,
-    settings?.storeName ?? tenant?.name ?? "Rowlys",
+    settings?.storeName ?? tenant?.name ?? "Blend",
     settings?.themeColor ?? "#c92a2a",
     settings?.themeOnAccent ?? "white"
   );

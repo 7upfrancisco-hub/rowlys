@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   return renderPwaIcon(
     size,
-    settings?.storeName ?? tenant?.name ?? "Rowlys",
+    settings?.storeName ?? tenant?.name ?? "Blend",
     settings?.themeColor ?? "#c92a2a",
     settings?.themeOnAccent ?? "white"
   );

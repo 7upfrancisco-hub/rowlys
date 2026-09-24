@@ -480,7 +480,11 @@ model Settings {
   // no choque intentando reusar el mismo id "singleton".
   id                      String   @id @default(cuid())
   deliveryFee             Float    @default(0)
-  storeName               String   @default("Rowlys")
+  // "Mi local" y no "Rowlys": este default solo se usa si algún día una fila
+  // se crea sin pasar storeName explícito (el código de la app siempre lo
+  // pasa) — que sea neutro evita mostrarle el nombre de otro local a un
+  // tenant nuevo en ese caso límite.
+  storeName               String   @default("Mi local")
   storePhone              String?
   storeAddress            String?
   instagramHandle         String?
